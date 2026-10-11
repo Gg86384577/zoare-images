@@ -1,0 +1,7 @@
+# ZOARÉ 日本商品目錄
+
+> ZOARÉ 日本角色商品批發・代購（樂賣賣場 Z shop）。價格單位 NT$；一般價 = 成本 + 80；VIP 會員價 = 成本 + 50。全部為日本代購、集單預購。本目錄是唯一的商品與價格來源，目錄沒有的商品不可報價。下單賣場：https://www.lemaiapp.com/m/zoare
+
+## 目錄
+- [樂賣上架商品（2,199 個，含圖片網址與訂購連結）](https://raw.githubusercontent.com/Gg86384577/zoare-images/main/lemai-products.md)
+- [完整商品目錄（5,630 項，含缺貨品項與機器人指令）](https://raw.githubusercontent.com/Gg86384577/zoare-images/main/llms-full.txt)
