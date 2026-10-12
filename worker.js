@@ -66,7 +66,20 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 【其他】
 - 訂單查詢：請客人進入樂賣商城查詢：${SHOP}
 - 付款方式、運費細節、退換貨、改單、取消、客訴、你不確定的問題：說「我幫您轉給專人確認喔！」，handoff 設為 true。
-- 用繁體中文，親切、簡短、專業。客人用日文問可以用日文回。稱呼客人時用 {客人名稱}。
+- 會員取消：下個月不繼續繳費就等於取消，不用另外申請。已下的訂單一律以下單當時的金額、數量為準。
+- 不能挑款的原因：貿易商那邊也沒辦法挑款，盲盒也不確定會出哪一款，可以老實跟客人說明。
+
+【說話風格（模仿老闆本人）】
+- 像老闆本人在 LINE 上聊天：口語、簡短、直接，一則通常一兩句就好，不要長篇大論、不要官腔。
+- 不要每則都打招呼。只有對話的第一則可以用「{客人名稱} 您好」，之後直接回答問題。
+- 句子常用空格代替逗號，例如「好的👌 您可以比看看價格 合適的話再跟我說」。
+- 句尾常用「喔」「囉」「～」；常用表情 👌 😂，偶爾用就好，不要每句都加。
+- 回應客人時先順著他的話，例如「好的」「好👌沒事」「原來」，再說明原因或下一步。
+- 說明原因要老實、具體，例如「因為我們貿易商那邊也沒辦法挑款給我」。
+- 結尾常給客人一個簡單的下一步，例如「如果要加購可以再跟我們說喔」「合適的話再跟我說」。
+- 先理解客人真正想問什麼（例如「繼續跟取消都可以再更動嗎」是在問會員可不可以隨時停），能從規則回答的就直接回答，真的不知道才轉專人。
+- 不要說「我沒有確定的資料」「不想給您不正確的說明」這種客套話，直接說「這個我幫您跟專人確認一下喔」。
+- 客人用日文問可以用日文回。
 - 不要使用 Markdown（不要用 **、#、表格），LINE 不會顯示。
 
 【輸出格式】
@@ -199,7 +212,12 @@ async function lineApi(env, path, payload, host = "api.line.me") {
 }
 async function reply(env, token, messages) {
   const r = await lineApi(env, "/v2/bot/message/reply", { replyToken: token, messages: messages.slice(0, 5) });
-  if (!r.ok) console.log("reply failed", r.status, await r.text());
+  if (!r.ok) { console.log("reply failed", r.status, await r.text()); return; }
+  // 記住機器人自己傳出的訊息 ID，用來分辨客人引用的是機器人還是老闆的訊息
+  try {
+    const j = await r.json();
+    if (env.SESSIONS) for (const m of j.sentMessages || []) await env.SESSIONS.put("b:" + m.id, "1", { expirationTtl: 7 * 86400 });
+  } catch (e) {}
 }
 async function displayName(env, userId) {
   try {
@@ -284,6 +302,10 @@ async function handleEvent(env, ev) {
     await setHandoff(env, uid);
     return reply(env, ev.replyToken, [{ type: "text", text: "好的，已為您通知客服人員，馬上就會有人員與您聯絡囉！" }]);
   }
+  // 客人「回覆／引用」了一則不是機器人傳的訊息 → 代表老闆正在親自回 → 機器人暫停
+  if (uid && env.SESSIONS && msg.quotedMessageId && !(await env.SESSIONS.get("b:" + msg.quotedMessageId))) {
+    await setHandoff(env, uid); return;
+  }
   // 真人處理中：機器人不插話，並把 15 分鐘重新計時
   if (uid && (await inHandoff(env, uid))) { await setHandoff(env, uid); return; }
   if (msg.type !== "text" && msg.type !== "image") {
@@ -313,7 +335,7 @@ async function handleEvent(env, ev) {
     const candText = cands.length ? cands.map((it, i) => itemLine(i + 1, it)).join("\n") : "（目錄裡沒有找到相關商品）";
     const lastText = session.last.length
       ? session.last.map((j, i) => (items[j] ? `${i + 1}. ${items[j].n}` : "")).join("\n") : "（無）";
-    const prompt = `客人名稱：${name}\n客人${img ? "傳了一張照片（照片辨識結果：" + query + "）" : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
+    const prompt = `客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n客人${img ? "傳了一張照片（照片辨識結果：" + query + "）" : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
     userContent = img
       ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt }]
       : prompt;
