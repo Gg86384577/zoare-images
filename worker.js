@@ -315,6 +315,40 @@ async function notifyOwner(env, uid, lastText) {
       text: `🔔 有客人要轉真人\n客人：${name}\n最後訊息：${(lastText || "").slice(0, 200)}\n\n機器人已暫停回覆這位客人，客人 15 分鐘沒訊息後才會恢復。` }] });
   } catch (e) { console.log("notify failed", e); }
 }
+
+// 記住客人的 LINE 名稱 → userId，讓老闆可以用名字下指令
+async function rememberName(env, uid) {
+  const name = await displayName(env, uid);
+  if (env.SESSIONS && name && name !== "老闆") {
+    const key = "n:" + name;
+    if ((await env.SESSIONS.get(key)) !== uid) await env.SESSIONS.put(key, uid);
+  }
+  return name;
+}
+async function ownerCommand(env, text) {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (/^(暫停名單|停止名單|名單)$/.test(t)) {
+    const list = (await env.SESSIONS.list({ prefix: "m:" })).keys;
+    if (!list.length) return "目前沒有停止回覆的客人👌";
+    const names = await Promise.all(list.map(async (k) => (await env.SESSIONS.get(k.name)) || k.name.slice(2)));
+    return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
+  }
+  const m = t.match(/^(.+?)\s*(停止回覆|開始回覆)$/) || t.match(/^(停止回覆|開始回覆)\s*(.+)$/);
+  if (!m) return null;
+  const [action, who] = m[2] === "停止回覆" || m[2] === "開始回覆" ? [m[2], m[1]] : [m[1], m[2]];
+  const target = who.replace(/[「」"']/g, "").trim();
+  let uid = await env.SESSIONS.get("n:" + target);
+  if (!uid) {
+    const keys = (await env.SESSIONS.list({ prefix: "n:" })).keys.map((k) => k.name.slice(2));
+    const hits = keys.filter((k) => k.includes(target) || target.includes(k));
+    if (hits.length === 1) uid = await env.SESSIONS.get("n:" + hits[0]);
+    else if (hits.length > 1) return `有好幾位名字很像：${hits.join("、")}\n請打完整的名字喔`;
+    else return `找不到「${target}」這位客人😂 要對方先傳過訊息給官方帳號，我才認得喔`;
+  }
+  if (action === "停止回覆") { await env.SESSIONS.put("m:" + uid, target); return `好👌 已停止回覆「${target}」，等你說「${target} 開始回覆」我再回`; }
+  await env.SESSIONS.delete("m:" + uid); await env.SESSIONS.delete("h:" + uid);
+  return `好👌 「${target}」我開始回覆囉`;
+}
 // ---------- 主流程 ----------
 async function handleEvent(env, ev) {
   if (ev.type !== "message" || !ev.replyToken) return;
@@ -330,6 +364,13 @@ async function handleEvent(env, ev) {
       return reply(env, ev.replyToken, [{ type: "text", text: "綁定完成👌 之後有客人要轉真人，我會傳通知到這裡給你" }]);
     }
   }
+  // 老闆指令：「小美 停止回覆」「小美 開始回覆」「暫停名單」
+  if (uid && env.SESSIONS && text && uid === (await env.SESSIONS.get("owner"))) {
+    const r = await ownerCommand(env, text);
+    if (r) return reply(env, ev.replyToken, [{ type: "text", text: r }]);
+  }
+  // 老闆手動設定「停止回覆」的客人：機器人完全不回，直到老闆說「開始回覆」
+  if (uid && env.SESSIONS && (await env.SESSIONS.get("m:" + uid))) { await rememberName(env, uid); return; }
   if (HUMAN_WORDS.some((w) => text === w || text.includes("真人客服"))) {
     await notifyOwner(env, uid, text);
     await setHandoff(env, uid);
@@ -345,7 +386,7 @@ async function handleEvent(env, ev) {
     return reply(env, ev.replyToken, [{ type: "text", text: "請傳文字或商品照片給我，我幫您查詢喔！" }]);
   }
 
-  const name = uid ? await displayName(env, uid) : "老闆";
+  const name = uid ? await rememberName(env, uid) : "老闆";
   if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name) }]);
 
   if (uid) lineApi(env, "/v2/bot/chat/loading/start", { chatId: uid, loadingSeconds: 20 }).catch(() => {});
