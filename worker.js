@@ -13,7 +13,7 @@ const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261012-2206";
+const CATALOG_VERSION = "20261012-2325";
 const HANDOFF_HOURS = 2;
 
 // ---------- 圖文選單：固定回覆（不經過 AI） ----------
@@ -41,6 +41,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號相同 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
 - 客人傳照片：最多列 3 款；打字查詢：最多列 5 款。只有一款完全符合時直接報那一款。
 - 狀態是「缺貨/停售」的不要列成選項，可以在最後備註「○○ 目前缺貨」。
+- 狀態是「已截止（不可下單）」的不要報價、不要列成選項，告訴客人「這款已經截止收單囉，下次開團會再通知您！」，有其他同系列還沒截止的可以推薦。
 - 沒把握是哪一款時，請客人確認，不要硬報價。
 - 每一款格式：
 {編號}️⃣ {中文名}（{日文名}）
@@ -150,20 +151,29 @@ function search(items, query, limit = 8) {
     for (const g of groups) if (g.some((w) => it._t.includes(w))) { sc += 10; groupHits++; }
     if (groups.length && !groupHits) continue;
     for (const gr of grams) if (it._t.includes(gr)) sc += gr.length === 1 ? 0.5 : 2;
-    if (sc > 0) scored.push([sc - (it.st && it.st.includes("缺貨") ? 3 : 0), it]);
+    if (sc > 0) scored.push([sc - ((it.st && it.st.includes("缺貨")) || isExpired(it) ? 3 : 0), it]);
   }
   scored.sort((a, b) => b[0] - a[0]);
   const best = scored.length ? scored[0][0] : 0;
   return scored.filter((x) => x[0] >= best * 0.45).slice(0, limit).map((x) => x[1]);
 }
 
+
+// 截止判斷：dl 格式「2026-10-12 23:59（…）」，以台灣時間計算
+function isExpired(it) {
+  const m = (it.dl || "").match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!m) return false;
+  const end = Date.UTC(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 23, m[5] ? +m[5] : 59) - 8 * 3600 * 1000;
+  return Date.now() > end;
+}
 function itemLine(i, it) {
   const f = [`[${i}] ${it.n}`, `日文：${it.ja || ""}`, `品牌：${it.b || ""}`];
   if (it.s) f.push(`款式：${it.s}`);
   f.push(`價格：一般 NT$${it.g}｜VIP NT$${it.v}`);
   if (it.spec) f.push(`規格：${it.spec}`);
   if (it.moq) f.push(`最低訂購量：${it.moq}`);
-  if (it.st) f.push(`狀態：${it.st}`);
+  if (isExpired(it)) f.push(`狀態：已截止（不可下單）`);
+  else if (it.st) f.push(`狀態：${it.st}`);
   if (it.ship) f.push(`發售出貨：${it.ship}`);
   if (it.dl) f.push(`截止：${it.dl}`);
   if (it.jan) f.push(`JAN：${it.jan}`);
@@ -353,4 +363,4 @@ export default {
 };
 
 // 測試用
-export { search, norm, itemLine, RULES, MENU, verifySignature, handleEvent };
+export { isExpired, search, norm, itemLine, RULES, MENU, verifySignature, handleEvent };
