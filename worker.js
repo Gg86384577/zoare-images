@@ -65,7 +65,8 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 
 【其他】
 - 訂單查詢：請客人進入樂賣商城查詢：${SHOP}
-- 付款方式、運費細節、退換貨、改單、取消、客訴、你不確定的問題：說「我幫您轉給專人確認喔！」，handoff 設為 true。
+- 付款方式、運費細節、退換貨、改單、取消訂單、客訴，或任何從上面規則和候選商品裡找不到答案的問題：不要硬回答，直接加上 #HANDOFF（系統會自動跟客人說請專人回覆，你的文字不會送出）。
+- 客人一直問同一件事、你只能重複前面講過的話時，也加上 #HANDOFF。
 - 會員取消：下個月不繼續繳費就等於取消，不用另外申請。已下的訂單一律以下單當時的金額、數量為準。
 - 不能挑款的原因：貿易商那邊也沒辦法挑款，盲盒也不確定會出哪一款，可以老實跟客人說明。
 
@@ -78,7 +79,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 說明原因要老實、具體，例如「因為我們貿易商那邊也沒辦法挑款給我」。
 - 結尾常給客人一個簡單的下一步，例如「如果要加購可以再跟我們說喔」「合適的話再跟我說」。
 - 先理解客人真正想問什麼（例如「繼續跟取消都可以再更動嗎」是在問會員可不可以隨時停），能從規則回答的就直接回答，真的不知道才轉專人。
-- 不要說「我沒有確定的資料」「不想給您不正確的說明」這種客套話，直接說「這個我幫您跟專人確認一下喔」。
+- 不要說「我沒有確定的資料」「不想給您不正確的說明」這種客套話；不知道就加 #HANDOFF。
 - 客人用日文問可以用日文回。
 - 不要使用 Markdown（不要用 **、#、表格），LINE 不會顯示。
 
@@ -291,6 +292,17 @@ async function setHandoff(env, uid) {
   if (env.SESSIONS) await env.SESSIONS.put("h:" + uid, "1", { expirationTtl: HANDOFF_MINUTES * 60 });
 }
 
+
+// 判斷兩段回覆是不是差不多（用來抓「一直回同樣的話」）
+function similar(a, b) {
+  const x = norm(a), y = norm(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const grams = (t) => { const g = new Set(); for (let i = 0; i + 1 < t.length; i++) g.add(t.slice(i, i + 2)); return g; };
+  const A = grams(x), B = grams(y); let inter = 0;
+  for (const g of A) if (B.has(g)) inter++;
+  return inter / Math.max(1, Math.min(A.size, B.size)) > 0.75;
+}
 // ---------- 主流程 ----------
 async function handleEvent(env, ev) {
   if (ev.type !== "message" || !ev.replyToken) return;
@@ -300,7 +312,7 @@ async function handleEvent(env, ev) {
 
   if (HUMAN_WORDS.some((w) => text === w || text.includes("真人客服"))) {
     await setHandoff(env, uid);
-    return reply(env, ev.replyToken, [{ type: "text", text: "好的，已為您通知客服人員，馬上就會有人員與您聯絡囉！" }]);
+    return reply(env, ev.replyToken, [{ type: "text", text: "好的 我請專人來回覆您喔 請稍等一下～" }]);
   }
   // 客人「回覆／引用」了一則不是機器人傳的訊息 → 代表老闆正在親自回 → 機器人暫停
   if (uid && env.SESSIONS && msg.quotedMessageId && !(await env.SESSIONS.get("b:" + msg.quotedMessageId))) {
@@ -343,6 +355,17 @@ async function handleEvent(env, ev) {
     const messages = [...session.history, { role: "user", content: userContent }];
     const out = parseJson(await claude(env, RULES.replaceAll("{客人名稱}", name), messages));
 
+    // 回答不出來、或跟前兩次回覆差不多（一直鬼打牆）→ 轉真人，機器人先不回
+    const prevBot = session.history.filter((h) => h.role === "assistant").slice(-2).map((h) => h.content);
+    if (!pickedNumber && prevBot.some((t) => similar(t, out.reply))) out.handoff = true;
+    if (out.handoff) {
+      await reply(env, ev.replyToken, [{ type: "text", text: "這個我請專人來回覆您喔 請稍等一下～" }]);
+      session.history.push({ role: "user", content: img ? "（傳了一張照片：" + query + "）" : text });
+      session.history.push({ role: "assistant", content: "（已轉給專人）" });
+      await saveSession(env, uid, session);
+      await setHandoff(env, uid);
+      return;
+    }
     const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 3);
     const lineMsgs = shown.map((it) => ({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img }));
     lineMsgs.push({ type: "text", text: (out.reply || "我幫您轉給專人確認喔！").slice(0, 4900) });
@@ -352,7 +375,6 @@ async function handleEvent(env, ev) {
     session.history.push({ role: "assistant", content: out.reply || "" });
     if (!pickedNumber && cands.length) session.last = cands.map((it) => items.indexOf(it));
     await saveSession(env, uid, session);
-    if (out.handoff) await setHandoff(env, uid);
   } catch (e) {
     console.log("error", e && e.stack || e);
     await reply(env, ev.replyToken, [{ type: "text", text: "系統忙碌中，我先幫您轉給專人，請稍候～" }]);
