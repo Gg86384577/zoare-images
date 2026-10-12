@@ -1,0 +1,11 @@
+{
+  // ZOARÉ LINE 機器人設定（Cloudflare Workers Builds 部署時會讀這個檔）
+  "name": "shiny-mud-319f",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "keep_vars": true,
+  // 對話記憶與「真人接手暫停」用的 KV；沒有填 id，部署時由 Cloudflare 自動建立
+  "kv_namespaces": [
+    { "binding": "SESSIONS" }
+  ]
+}

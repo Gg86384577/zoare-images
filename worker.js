@@ -14,7 +14,8 @@ const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIe
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const CATALOG_VERSION = "20261012-2325";
-const HANDOFF_HOURS = 2;
+// 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
+const HANDOFF_MINUTES = 15;
 
 // ---------- 圖文選單：固定回覆（不經過 AI） ----------
 const askIp = (flag, name, ex) =>
@@ -269,7 +270,7 @@ async function saveSession(env, uid, s) {
 }
 async function inHandoff(env, uid) { return env.SESSIONS ? !!(await env.SESSIONS.get("h:" + uid)) : false; }
 async function setHandoff(env, uid) {
-  if (env.SESSIONS) await env.SESSIONS.put("h:" + uid, "1", { expirationTtl: HANDOFF_HOURS * 3600 });
+  if (env.SESSIONS) await env.SESSIONS.put("h:" + uid, "1", { expirationTtl: HANDOFF_MINUTES * 60 });
 }
 
 // ---------- 主流程 ----------
@@ -283,7 +284,8 @@ async function handleEvent(env, ev) {
     await setHandoff(env, uid);
     return reply(env, ev.replyToken, [{ type: "text", text: "好的，已為您通知客服人員，馬上就會有人員與您聯絡囉！" }]);
   }
-  if (uid && (await inHandoff(env, uid))) return; // 真人處理中，機器人不插話
+  // 真人處理中：機器人不插話，並把 15 分鐘重新計時
+  if (uid && (await inHandoff(env, uid))) { await setHandoff(env, uid); return; }
   if (msg.type !== "text" && msg.type !== "image") {
     return reply(env, ev.replyToken, [{ type: "text", text: "請傳文字或商品照片給我，我幫您查詢喔！" }]);
   }
