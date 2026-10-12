@@ -16,6 +16,9 @@ const DEFAULT_MODEL = "claude-haiku-5-5";
 const CATALOG_VERSION = "20261012-2325";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
+// 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
+const FOLLOWUP_MINUTES = 30;
+const FOLLOWUP_TEXT = "請問有興趣嗎～";
 
 // ---------- 圖文選單：固定回覆（不經過 AI） ----------
 const askIp = (flag, name, ex) =>
@@ -357,6 +360,8 @@ async function handleEvent(env, ev) {
   const uid = ev.source && ev.source.userId;
   const msg = ev.message;
   const text = msg.type === "text" ? msg.text.trim() : "";
+  // 客人有再傳訊息 → 取消之前排好的「請問有興趣嗎」
+  if (uid && env.SESSIONS) await env.SESSIONS.delete("f:" + uid);
 
   // 老闆綁定通知：第一個傳「#我是老闆」的帳號會被記成老闆（只能綁一次）
   if (text === "#我是老闆" && uid && env.SESSIONS) {
@@ -433,6 +438,11 @@ async function handleEvent(env, ev) {
     const lineMsgs = shown.map((it) => ({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img }));
     lineMsgs.push({ type: "text", text: (out.reply || "我幫您轉給專人確認喔！").slice(0, 4900) });
     await reply(env, ev.replyToken, lineMsgs);
+    // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
+    const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
+    const ordered = /下單了|已下單|訂好了|已訂|買了|付款了|匯款了/.test(text);
+    if (uid && env.SESSIONS && quoted && !ordered)
+      await env.SESSIONS.put("f:" + uid, String(Date.now() + FOLLOWUP_MINUTES * 60000), { expirationTtl: 86400 });
 
     session.history.push({ role: "user", content: img ? "（傳了一張照片：" + query + "）" : text });
     session.history.push({ role: "assistant", content: out.reply || "" });
@@ -444,7 +454,27 @@ async function handleEvent(env, ev) {
   }
 }
 
+
+// 每 5 分鐘檢查一次要追蹤的客人
+async function runFollowups(env) {
+  if (!env.SESSIONS) return;
+  const hourTW = (new Date().getUTCHours() + 8) % 24;
+  if (hourTW < 9 || hourTW >= 22) return; // 晚上 10 點到早上 9 點不打擾，早上 9 點後再補傳
+  const keys = (await env.SESSIONS.list({ prefix: "f:" })).keys;
+  for (const k of keys) {
+    const uid = k.name.slice(2);
+    const due = Number(await env.SESSIONS.get(k.name));
+    if (!due || Date.now() < due) continue;
+    await env.SESSIONS.delete(k.name);
+    if (await env.SESSIONS.get("h:" + uid)) continue; // 真人處理中就不傳
+    const r = await lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text: FOLLOWUP_TEXT }] });
+    if (!r.ok) console.log("followup failed", r.status, await r.text());
+  }
+}
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runFollowups(env));
+  },
   async fetch(request, env, ctx) {
     // 去掉金鑰前後不小心多貼的空白或換行
     for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL"])
@@ -472,4 +502,4 @@ export default {
 };
 
 // 測試用
-export { isExpired, search, norm, itemLine, RULES, MENU, verifySignature, handleEvent };
+export { runFollowups, isExpired, search, norm, itemLine, RULES, MENU, verifySignature, handleEvent };

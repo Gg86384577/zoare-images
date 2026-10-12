@@ -5,6 +5,8 @@
   "compatibility_date": "2026-09-01",
   "keep_vars": true,
   // 對話記憶與「真人接手暫停」用的 KV；沒有填 id，部署時由 Cloudflare 自動建立
+  // 每 5 分鐘跑一次「報價後 30 分鐘追蹤」
+  "triggers": { "crons": ["*/5 * * * *"] },
   "kv_namespaces": [
     { "binding": "SESSIONS" }
   ]
