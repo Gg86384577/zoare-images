@@ -303,6 +303,18 @@ function similar(a, b) {
   for (const g of A) if (B.has(g)) inter++;
   return inter / Math.max(1, Math.min(A.size, B.size)) > 0.75;
 }
+
+// 轉真人時傳 LINE 通知給老闆
+async function notifyOwner(env, uid, lastText) {
+  try {
+    if (!env.SESSIONS) return;
+    const owner = await env.SESSIONS.get("owner");
+    if (!owner || owner === uid) return;
+    const name = await displayName(env, uid);
+    await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text",
+      text: `🔔 有客人要轉真人\n客人：${name}\n最後訊息：${(lastText || "").slice(0, 200)}\n\n機器人已暫停回覆這位客人，客人 15 分鐘沒訊息後才會恢復。` }] });
+  } catch (e) { console.log("notify failed", e); }
+}
 // ---------- 主流程 ----------
 async function handleEvent(env, ev) {
   if (ev.type !== "message" || !ev.replyToken) return;
@@ -310,7 +322,16 @@ async function handleEvent(env, ev) {
   const msg = ev.message;
   const text = msg.type === "text" ? msg.text.trim() : "";
 
+  // 老闆綁定通知：第一個傳「#我是老闆」的帳號會被記成老闆（只能綁一次）
+  if (text === "#我是老闆" && uid && env.SESSIONS) {
+    const owner = await env.SESSIONS.get("owner");
+    if (!owner || owner === uid) {
+      await env.SESSIONS.put("owner", uid);
+      return reply(env, ev.replyToken, [{ type: "text", text: "綁定完成👌 之後有客人要轉真人，我會傳通知到這裡給你" }]);
+    }
+  }
   if (HUMAN_WORDS.some((w) => text === w || text.includes("真人客服"))) {
+    await notifyOwner(env, uid, text);
     await setHandoff(env, uid);
     return reply(env, ev.replyToken, [{ type: "text", text: "好的 我請專人來回覆您喔 請稍等一下～" }]);
   }
@@ -364,6 +385,7 @@ async function handleEvent(env, ev) {
       session.history.push({ role: "assistant", content: "（已轉給專人）" });
       await saveSession(env, uid, session);
       await setHandoff(env, uid);
+      await notifyOwner(env, uid, img ? "（傳了一張照片）" : text);
       return;
     }
     const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 3);
