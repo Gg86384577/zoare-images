@@ -13,6 +13,7 @@ const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
+const CATALOG_VERSION = "20261012-2206";
 const HANDOFF_HOURS = 2;
 
 // ---------- 圖文選單：固定回覆（不經過 AI） ----------
@@ -111,7 +112,9 @@ function norm(s) {
 let CATALOG = null;
 async function loadCatalog(env) {
   if (CATALOG) return CATALOG;
-  const res = await fetch(env.CATALOG_URL, { cf: { cacheTtl: 3600 } });
+  // 每次更新商品目錄就改 CATALOG_VERSION，讓新價格馬上生效
+  const u = env.CATALOG_URL + (env.CATALOG_URL.includes("?") ? "&" : "?") + "v=" + CATALOG_VERSION;
+  const res = await fetch(u, { cf: { cacheTtl: 300 } });
   if (!res.ok) throw new Error("catalog " + res.status);
   const items = await res.json();
   for (const it of items) it._t = it.t || norm([it.n, it.ja, it.b, it.s, it.code, it.jan].join(" "));
