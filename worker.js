@@ -13,7 +13,7 @@ const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261013-1612";
+const CATALOG_VERSION = "20261013-1705";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -43,7 +43,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 韓國、中國商品沒有目錄，不可以報價：請客人提供商品圖片或連結、型號、數量，告知會由專人報價，handoff 設為 true。
 
 【相同／相似商品】
-- 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號相同 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
+- 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號／樂賣商品編號（例如 272655-S，客人常從樂賣複製這個）相同；樂賣商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
 - 客人傳照片：最多列 3 款；打字查詢：最多列 5 款。只有一款完全符合時直接報那一款。
 - 狀態是「缺貨/停售」的不要列成選項，可以在最後備註「○○ 目前缺貨」。
 - 狀態是「已截止（不可下單）」的不要報價、不要列成選項，告訴客人「這款已經截止收單囉，下次開團會再通知您！」，有其他同系列還沒截止的可以推薦。
@@ -56,7 +56,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 　截止：{截止}（有才寫）
 　下單：{下單網址}
 - 下單網址是「準備中」時，下單那一行寫「下單：樂賣商城 ${SHOP}」，不可自己編其他網址。
-- 列完後說「請回覆編號告訴我您要哪一款，以及需要的數量～」，最後加「※ 日本代購、集單預購」和「💡 VIP 會員每件便宜 NT$30：${VIP}」。
+- 列完後說「請回覆編號告訴我您要哪一款，以及需要的數量～」，最後加「※ 日本批發、集單預購」和「💡 VIP 會員每件便宜 NT$30：${VIP}」。
 - 客人回覆編號（例如「2號」）時，從「上一次列給客人的商品」找到那一款，報出完整資料並詢問數量。
 
 【批發規則】
@@ -148,9 +148,14 @@ const ALIAS_NORM = ALIASES.map((g) => g.map(norm));
 function search(items, query, limit = 8) {
   const q = norm(query);
   if (!q) return [];
-  const digits = (query.match(/[0-9A-Za-z]{5,}(?:-[0-9]{2})?/g) || []).map((d) => d.toLowerCase());
+  // 編號／JAN／樂賣商品編號（例如 272655-S、K-9416-S）完全符合 → 直接回傳
+  const words = (query.match(/[0-9A-Za-z]+(?:-[0-9A-Za-z]+)*/g) || []).filter((d) => d.length >= 4).map((d) => d.toLowerCase());
+  const lmHits = words.length ? items.filter((it) => it.lm && words.includes(it.lm.toLowerCase())) : [];
+  if (lmHits.length) return lmHits.slice(0, Math.max(limit, 12));
+  const digits = words.filter((d) => /\d{3,}/.test(d));
   if (digits.length) {
-    const exact = items.filter((it) => digits.some((d) => d === (it.jan || "").toLowerCase() || d === (it.code || "").toLowerCase()));
+    const keys = new Set(digits.flatMap((d) => [d, d.replace(/-s$/, "")]));
+    const exact = items.filter((it) => keys.has((it.jan || "").toLowerCase()) || keys.has((it.code || "").toLowerCase()));
     if (exact.length) return exact.slice(0, limit);
   }
   // 命中的中日文詞組
@@ -197,8 +202,9 @@ function itemLine(i, it) {
   else if (it.st) f.push(`狀態：${it.st}`);
   if (it.ship) f.push(`發售出貨：${it.ship}`);
   if (it.dl) f.push(`截止：${it.dl}`);
-  if (it.jan) f.push(`JAN：${it.jan}`);
-  else if (it.code) f.push(`原廠編號：${it.code}`);
+  if (it.code) f.push(`編號：${it.code}`);
+  if (it.lm) f.push(`樂賣商品編號：${it.lm}`);
+  if (it.jan && it.jan !== it.code) f.push(`JAN：${it.jan}`);
   f.push(`下單網址：${it.url || "準備中"}`);
   return f.join("｜");
 }
