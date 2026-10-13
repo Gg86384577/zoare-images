@@ -18,6 +18,7 @@ const CATALOG_VERSION = "20261013-1600b";
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
 const FOLLOWUP_MINUTES = 30;
+const BURST_WAIT_MS = 6000; // 連續訊息合併等待時間
 const FOLLOWUP_TEXT = "請問有興趣嗎～";
 
 // ---------- 圖文選單：固定回覆（不經過 AI） ----------
@@ -389,8 +390,24 @@ async function handleEvent(env, ev) {
   }
   // 真人處理中：機器人不插話，並把 15 分鐘重新計時
   if (uid && (await inHandoff(env, uid))) { await setHandoff(env, uid); return; }
-  if (msg.type !== "text" && msg.type !== "image") {
-    return reply(env, ev.replyToken, [{ type: "text", text: "請傳文字或商品照片給我，我幫您查詢喔！" }]);
+  // 貼圖、語音等不是文字／照片的訊息：不回（避免客人傳「收到」貼圖也被回）
+  if (msg.type !== "text" && msg.type !== "image") return;
+
+  // 客人連續傳好幾則（例如一次傳很多照片＋一句話）→ 等幾秒，只由「最後一則」統一回一次
+  let burst = [];
+  if (uid && env.SESSIONS && !MENU[text]) {
+    await env.SESSIONS.put(`pm:${uid}:${Date.now()}-${msg.id}`, JSON.stringify({ id: msg.id, type: msg.type, text }), { expirationTtl: 120 });
+    await env.SESSIONS.put("last:" + uid, msg.id, { expirationTtl: 120 });
+    await new Promise((r) => setTimeout(r, BURST_WAIT_MS));
+    if ((await env.SESSIONS.get("last:" + uid)) !== msg.id) return; // 後面還有新訊息，交給最後一則回
+    const keys = (await env.SESSIONS.list({ prefix: `pm:${uid}:` })).keys;
+    for (const k of keys) {
+      const v = await env.SESSIONS.get(k.name);
+      if (v) burst.push(JSON.parse(v));
+      await env.SESSIONS.delete(k.name);
+    }
+    burst = burst.filter((b) => b.id !== msg.id);
+    if (await inHandoff(env, uid)) return; // 等待期間已轉真人 → 不插話
   }
 
   const name = uid ? await rememberName(env, uid) : "老闆";
@@ -402,6 +419,14 @@ async function handleEvent(env, ev) {
     const items = await loadCatalog(env);
     const session = await getSession(env, uid);
     let userContent, query = text, img = null;
+    // 同一波連續訊息：把前面的文字一起考慮；照片只取最後一張辨識
+    const earlierText = burst.filter((b) => b.type === "text" && b.text).map((b) => b.text).join("\n");
+    const earlierImgs = burst.filter((b) => b.type === "image");
+    if (msg.type === "text" && !text.match(/^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$/) && earlierImgs.length) {
+      img = await imageBase64(env, earlierImgs[earlierImgs.length - 1].id);
+      const d = await describePhoto(env, img);
+      query = [d.jan, d.query, text].filter(Boolean).join(" ");
+    }
 
     if (msg.type === "image") {
       img = await imageBase64(env, msg.id);
@@ -416,7 +441,8 @@ async function handleEvent(env, ev) {
     const candText = cands.length ? cands.map((it, i) => itemLine(i + 1, it)).join("\n") : "（目錄裡沒有找到相關商品）";
     const lastText = session.last.length
       ? session.last.map((j, i) => (items[j] ? `${i + 1}. ${items[j].n}` : "")).join("\n") : "（無）";
-    const prompt = `客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n客人${img ? "傳了一張照片（照片辨識結果：" + query + "）" : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
+    const burstNote = burst.length ? `（客人剛剛連續傳了 ${burst.length + 1} 則訊息${earlierImgs.length ? `，其中 ${earlierImgs.length + (msg.type === "image" ? 1 : 0)} 張照片` : ""}${earlierText ? "，前面的文字：" + earlierText : ""}；請合併成一則回覆）\n` : "";
+    const prompt = `客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n${burstNote}客人${img ? (text ? "傳了照片並說：" + text + "（照片辨識結果：" + query + "）" : "傳了一張照片（照片辨識結果：" + query + "）") : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
     userContent = img
       ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt }]
       : prompt;
@@ -427,9 +453,10 @@ async function handleEvent(env, ev) {
     // 回答不出來、或跟前兩次回覆差不多（一直鬼打牆）→ 轉真人，機器人先不回
     const prevBot = session.history.filter((h) => h.role === "assistant").slice(-2).map((h) => h.content);
     if (!pickedNumber && prevBot.some((t) => similar(t, out.reply))) out.handoff = true;
+    if (uid && (await inHandoff(env, uid))) return; // 回覆前再確認一次：已轉真人就不插話
     if (out.handoff) {
       await reply(env, ev.replyToken, [{ type: "text", text: "這個我請專人來回覆您喔 請稍等一下～" }]);
-      session.history.push({ role: "user", content: img ? "（傳了一張照片：" + query + "）" : text });
+      session.history.push({ role: "user", content: (earlierText ? earlierText + "\n" : "") + (img ? "（傳了照片：" + query + "）" + (msg.type === "text" ? text : "") : text) });
       session.history.push({ role: "assistant", content: "（已轉給專人）" });
       await saveSession(env, uid, session);
       await setHandoff(env, uid);
@@ -446,7 +473,7 @@ async function handleEvent(env, ev) {
     if (uid && env.SESSIONS && quoted && !ordered)
       await env.SESSIONS.put("f:" + uid, String(Date.now() + FOLLOWUP_MINUTES * 60000), { expirationTtl: 86400 });
 
-    session.history.push({ role: "user", content: img ? "（傳了一張照片：" + query + "）" : text });
+    session.history.push({ role: "user", content: (earlierText ? earlierText + "\n" : "") + (img ? "（傳了照片：" + query + "）" + (msg.type === "text" ? text : "") : text) });
     session.history.push({ role: "assistant", content: out.reply || "" });
     if (!pickedNumber && cands.length) session.last = cands.map((it) => items.indexOf(it));
     await saveSession(env, uid, session);
@@ -498,7 +525,7 @@ export default {
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");
     if (!ok) { console.log("bad signature: check LINE_CHANNEL_SECRET"); return new Response("bad signature", { status: 401 }); }
     const events = (JSON.parse(body).events) || [];
-    ctx.waitUntil(Promise.all(events.map((ev) => handleEvent(env, ev))));
+    ctx.waitUntil(Promise.all(events.map((ev) => handleEvent(env, ev).catch((e) => console.log("event error", e)))));
     return new Response("ok");
   },
 };
