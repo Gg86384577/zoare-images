@@ -13,7 +13,7 @@ const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261013-1600";
+const CATALOG_VERSION = "20261013-1600b";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -61,6 +61,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 【批發規則】
 - 非會員：單款 21 件起批。
 - 會員（NT$100／NT$1,000）：可不同款混批 21 件（每款 3 件起），但需依貿易商最低起批數（目錄的最低訂購量）為準。不可以說「加入會員後全部一件起」。
+- 商品資料若有「訂購方式：整箱…不拆箱不混款」，這款不論是否會員都只能單款整箱訂（每款 1 箱起），報價時要講清楚每箱幾個、整箱價（單價×每箱數量），以及截單時間。
 
 【會員】
 - 預設只推薦 VIP 會員：NT$1,000／月，國際＋國內運費全免、更優惠的批發價、部分商品 VIP 專屬價、新品優先通知。入會：${VIP}
@@ -190,6 +191,7 @@ function itemLine(i, it) {
   f.push(`價格：一般 NT$${it.g}｜VIP NT$${it.v}`);
   if (it.spec) f.push(`規格：${it.spec}`);
   if (it.moq) f.push(`最低訂購量：${it.moq}`);
+  if (it.pack && it.pack.includes("整箱")) f.push(`訂購方式：${it.pack}`);
   if (isExpired(it)) f.push(`狀態：已截止（不可下單）`);
   else if (it.st) f.push(`狀態：${it.st}`);
   if (it.ship) f.push(`發售出貨：${it.ship}`);
