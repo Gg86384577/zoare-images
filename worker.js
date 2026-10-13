@@ -13,7 +13,7 @@ const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261013-1600b";
+const CATALOG_VERSION = "20261013-1620";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
