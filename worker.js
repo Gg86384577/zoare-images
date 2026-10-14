@@ -389,7 +389,7 @@ async function ownerCommand(env, text) {
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
   if (/^#?更新選單$/.test(text.trim())) return await setupRichMenu(env);
-  const shopR = await shopOwnerCommand(env, text.trim(), { lineApi });
+  const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
   // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
   const tm = t.match(/^(.+?)\s*(VIP|vip|VIP會員|會員|一般會員|非會員|一般)$/);
@@ -430,7 +430,7 @@ async function handleEvent(env, ev) {
   // 老闆指令：「小美 停止回覆」（客人 15 分鐘沒訊息自動恢復）、「小美 開始回覆」（馬上恢復）、「名單」
   if (uid && env.SESSIONS && text && uid === (await env.SESSIONS.get("owner"))) {
     const r = await ownerCommand(env, text);
-    if (r) return reply(env, ev.replyToken, [{ type: "text", text: r }]);
+    if (r) return reply(env, ev.replyToken, (Array.isArray(r) ? r : [r]).map((x) => ({ type: "text", text: x })));
   }
   // 匯款後五碼回報
   if (uid && env.SESSIONS && text) {

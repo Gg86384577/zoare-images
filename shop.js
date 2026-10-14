@@ -160,7 +160,7 @@ export async function handleShop(request, env, ctx, deps) {
       const q = Math.floor(Number(r.q));
       if (!it || !(q > 0) || q > 100000) continue;
       const price = tier === "vip" ? it.v : it.g;
-      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "" });
+      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "" });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
     const f = body.form || {};
@@ -329,6 +329,8 @@ async function payStats(env) {
 // 老闆指令：訂單列表／單筆查詢／匯款資料
 export async function shopOwnerCommand(env, text, deps = {}) {
   const t = text.trim();
+  const om2 = await ownerOrders(env, t, deps);
+  if (om2) return om2;
   if (/^(收款統計|統計|營收|收款)$/.test(t)) return await payStats(env);
   const lpm = t.match(/^(?:LINE\s?Pay|linepay|LinePay)資料[\s:：]*([\s\S]*)$/i);
   if (lpm) {
@@ -714,4 +716,183 @@ export async function catalogMenu(env, deps, uid, text) {
     { type: "flex", altText: `${title}商品目錄（共 ${total} 款）`, contents: { type: "carousel", contents: bubbles } },
     { type: "text", text: `以上是${title}的熱門商品（共 ${total} 款）👆\n左右滑動看更多，點「我要訂購」可以直接下單喔～\n${tier === "vip" ? "已套用您的 VIP 價" : "VIP 會員每件再便宜 NT$30"}`, quickReply: qr(back) },
   ];
+}
+
+
+// ---------- 老闆：客人訂單追蹤、刪除／修改、銷售狀況 ----------
+const OPEN = ["待付款", "已回報匯款", "待確認", "已付款"];
+const nowTW = () => new Date(Date.now() + 8 * 3600e3);
+const lineCost = (o, l) => (l.mem ? 0 : l.cost != null ? l.cost : l.price - (o.tier === "vip" ? 50 : 80));
+async function allOrders(env, n = 200) {
+  const ids = JSON.parse((await env.SESSIONS.get("orders")) || "[]").slice(0, n);
+  const out = [];
+  for (const id of ids) { const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null"); if (o) out.push(o); }
+  return out;
+}
+async function saveOrder(env, o) { await env.SESSIONS.put("o:" + o.id, JSON.stringify(o), { expirationTtl: 180 * 86400 }); }
+function situation(o) {
+  const days = Math.floor((nowTW() - new Date(o.at.replace(" ", "T") + ":00Z")) / 864e5);
+  const s = { 待付款: `等客人付款${days >= 1 ? `（已 ${days} 天，可以催一下）` : ""}`, 已回報匯款: `客人回報後五碼 ${o.paid5 || ""}，等截圖`,
+    待確認: "付款截圖對不上，要人工確認", 已付款: "已付款，等出貨", 已出貨: `已出貨${o.track ? "（" + o.track + "）" : ""}`, 已取消: "已取消" }[o.status] || o.status;
+  return s + (o.memo ? `\n　📝 ${o.memo}` : "");
+}
+function orderCard(o, full = true) {
+  const items = o.lines.map((l) => `　・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
+  return `【${o.id}】${o.lineName}（${o.at.slice(5)}）\n${full ? items + "\n" : ""}　合計 NT$${o.total.toLocaleString()}｜${o.form.pay || "轉帳"}\n　狀況：${situation(o)}`;
+}
+function chunk(texts, head) {
+  const out = []; let cur = head;
+  for (const t of texts) { if ((cur + "\n\n" + t).length > 4500) { out.push(cur); cur = t; } else cur = cur ? cur + "\n\n" + t : t; }
+  if (cur) out.push(cur);
+  return out.slice(0, 5);
+}
+function recalc(o) {
+  for (const l of o.lines) l.sub = l.price * l.q;
+  o.total = o.lines.reduce((a, l) => a + l.sub, 0);
+  o.qty = o.lines.reduce((a, l) => a + l.q, 0);
+  o.notes = ruleNotes(o.lines, o.tier);
+}
+function payDiff(o) {
+  if (!["已付款", "已出貨"].includes(o.status)) return "";
+  const paid = (o.payInfo && o.payInfo.amount) || 0;
+  if (!paid || paid === o.total) return "";
+  return o.total > paid ? `\n⚠️ 已付 NT$${paid.toLocaleString()}，還需補 NT$${(o.total - paid).toLocaleString()}` : `\n⚠️ 已付 NT$${paid.toLocaleString()}，需退 NT$${(paid - o.total).toLocaleString()}`;
+}
+async function notifyCustomer(env, deps, o, msg) {
+  msg += payDiff(o);
+  if (deps.lineApi) await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: msg }] });
+}
+async function findOrdersByName(env, name) {
+  const all = await allOrders(env);
+  return all.filter((o) => o.lineName.includes(name) || (o.form && o.form.name && o.form.name.includes(name)));
+}
+async function deleteOrder(env, id) {
+  await env.SESSIONS.delete("o:" + id);
+  const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]").filter((x) => x !== id);
+  await env.SESSIONS.put("orders", JSON.stringify(idx));
+}
+async function salesReport(env, range) {
+  const now = nowTW(), today = now.toISOString().slice(0, 10);
+  let from = today.slice(0, 7) + "-01", label = `${Number(today.slice(5, 7))} 月`;
+  if (/今天|今日/.test(range)) { from = today; label = "今天"; }
+  else if (/本週|這週|本周|這周/.test(range)) { const d = new Date(now); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); from = d.toISOString().slice(0, 10); label = "本週"; }
+  else if (/全部|累計|總/.test(range)) { from = "2000-01-01"; label = "累計"; }
+  else { const m = range.match(/(\d{1,2})\s*月/); if (m) { from = `${today.slice(0, 4)}-${String(m[1]).padStart(2, "0")}-01`; label = `${Number(m[1])} 月`; } }
+  const to = label.endsWith("月") && label !== `${Number(today.slice(5, 7))} 月` ? from.slice(0, 7) : null;
+  const all = await allOrders(env);
+  const items = {}; let rev = 0, profit = 0, n = 0, pcs = 0, pend = 0, pendAmt = 0;
+  for (const o of all) {
+    const d = (o.paidAt || o.at).slice(0, 10);
+    const inRange = to ? d.startsWith(to) : d >= from;
+    if (!inRange) continue;
+    if (o.status === "已付款" || o.status === "已出貨") {
+      n++; rev += o.total;
+      for (const l of o.lines) {
+        const c = lineCost(o, l); profit += (l.price - c) * l.q; pcs += l.q;
+        const k = l.n; items[k] = items[k] || { q: 0, amt: 0 }; items[k].q += l.q; items[k].amt += l.sub;
+      }
+    } else if (OPEN.includes(o.status)) { pend++; pendAmt += o.total; }
+  }
+  const top = Object.entries(items).sort((a, b) => b[1].q - a[1].q).slice(0, 15).map(([k, v], i) => `${i + 1}. ${k}　×${v.q}　NT$${v.amt.toLocaleString()}`);
+  return `📈 銷售狀況｜${label}\n\n已付款訂單：${n} 筆\n銷售件數：${pcs} 件（${Object.keys(items).length} 個品項）\n銷售額：NT$${rev.toLocaleString()}\n淨利：NT$${profit.toLocaleString()}${rev ? `（毛利率 ${Math.round((profit / rev) * 100)}%）` : ""}\n\n🏆 品項銷量${top.length ? "\n" + top.join("\n") : "：還沒有"}\n\n⏳ 未付款訂單：${pend} 筆 NT$${pendAmt.toLocaleString()}（不算進銷售額）\n\n※ 淨利＝售價－成本（成本用報價公式算），還沒扣運費、匯款手續費等其他支出；會員費全額算淨利\n可以傳「銷售狀況 今天／本週／9月／累計」`;
+}
+
+async function ownerOrders(env, t, deps) {
+  // 銷售狀況
+  const sm = t.match(/^(銷售狀況|銷售|業績|銷售報表)\s*(.*)$/);
+  if (sm) return await salesReport(env, sm[2] || "");
+  // 客人訂單總覽
+  if (/^(客人訂單|所有訂單|訂單追蹤|未完成訂單|追蹤訂單)$/.test(t)) {
+    const open = (await allOrders(env)).filter((o) => OPEN.includes(o.status));
+    if (!open.length) return "目前沒有進行中的訂單👌";
+    const byC = {};
+    for (const o of open) (byC[o.lineName] = byC[o.lineName] || []).push(o);
+    const cards = Object.entries(byC).map(([c, os]) => `👤 ${c}（${os.length} 筆）\n` + os.map((o) => orderCard(o)).join("\n"));
+    const sum = open.reduce((a, o) => a + o.total, 0);
+    return chunk(cards, `📋 進行中訂單 ${open.length} 筆　NT$${sum.toLocaleString()}\n（傳「ZO… 備註 內容」可以加備註）`);
+  }
+  // 某位客人的訂單：「小美 訂單」「小美的訂單」
+  let m = t.match(/^(.+?)\s*的?\s*訂單$/);
+  if (m && !/^(客人|所有|最新|未完成|我的)$/.test(m[1]) && !/^刪除|刪除$/.test(m[1]) && !/^ZO\w{10}/i.test(m[1])) {
+    const os = await findOrdersByName(env, m[1].trim());
+    if (!os.length) return `找不到「${m[1]}」的訂單`;
+    return chunk(os.slice(0, 10).map((o) => orderCard(o)), `👤 ${m[1]} 的訂單（${os.length} 筆）`);
+  }
+  // 刪除某位客人的訂單：「刪除 小美 的訂單」「小美 訂單刪除」
+  m = t.match(/^刪除\s*(.+?)\s*的?\s*訂單$/) || t.match(/^(.+?)\s*的?\s*訂單\s*刪除$/);
+  if (m && !/^ZO/i.test(m[1])) {
+    const os = (await findOrdersByName(env, m[1].trim())).filter((o) => o.status !== "已出貨");
+    if (!os.length) return `找不到「${m[1]}」可以刪除的訂單`;
+    if (os.length > 1) return `「${m[1]}」有 ${os.length} 筆訂單，請指定要刪哪一筆：\n` + os.map((o) => `・${o.id}　NT$${o.total.toLocaleString()}　${o.status}`).join("\n") + `\n\n傳「刪除 ZO…」`;
+    await deleteOrder(env, os[0].id);
+    return `🗑️ 已刪除「${os[0].lineName}」的訂單 ${os[0].id}（NT$${os[0].total.toLocaleString()}）`;
+  }
+  // 訂單編號相關
+  m = t.match(/^(?:刪除\s*(ZO\w{10})|(ZO\w{10})\s*刪除)$/i);
+  if (m) {
+    const id = (m[1] || m[2]).toUpperCase();
+    const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+    if (!o) return `找不到訂單 ${id}`;
+    await deleteOrder(env, id);
+    return `🗑️ 已刪除訂單 ${id}（${o.lineName}　NT$${o.total.toLocaleString()}）`;
+  }
+  m = t.match(/^(ZO\w{10})\s+([\s\S]+)$/i);
+  if (!m) return null;
+  const id = m[1].toUpperCase(), cmd = m[2].trim();
+  if (/^(已付款|已出貨|取消)(\s|$)/.test(cmd)) return null; // 交給狀態指令
+  const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+  if (!o) return `找不到訂單 ${id}`;
+  // 備註
+  let x = cmd.match(/^(?:備註|狀況|註記)[\s:：]*([\s\S]*)$/);
+  if (x) { o.memo = x[1].trim().slice(0, 200); await saveOrder(env, o); return `📝 ${id} 備註已更新：${o.memo || "（已清除）"}`; }
+  // 收件資料
+  x = cmd.match(/^(?:地址|門市|收件地址)[\s:：]*(.+)$/);
+  if (x) { o.form.addr = x[1].trim().slice(0, 150); await saveOrder(env, o); return `好👌 ${id} 地址改成：${o.form.addr}`; }
+  x = cmd.match(/^(?:電話|手機)[\s:：]*(.+)$/);
+  if (x) { o.form.phone = x[1].trim().slice(0, 20); await saveOrder(env, o); return `好👌 ${id} 電話改成：${o.form.phone}`; }
+  x = cmd.match(/^(?:收件人|姓名)[\s:：]*(.+)$/);
+  if (x) { o.form.name = x[1].trim().slice(0, 40); await saveOrder(env, o); return `好👌 ${id} 收件人改成：${o.form.name}`; }
+  const find = (kw) => o.lines.filter((l) => l.n.includes(kw) || l.jan === kw);
+  // 刪除品項：「ZO… 刪 小八」
+  x = cmd.match(/^(?:刪除?|拿掉|移除)\s*(.+)$/);
+  if (x) {
+    const hit = find(x[1].trim());
+    if (!hit.length) return `${id} 裡找不到「${x[1]}」`;
+    if (hit.length > 1) return `「${x[1]}」對到好幾款，請打更完整的名稱：\n` + hit.map((l) => "・" + l.n).join("\n");
+    o.lines = o.lines.filter((l) => l !== hit[0]);
+    if (!o.lines.length) { await deleteOrder(env, id); return `🗑️ ${id} 品項都刪完了，整張訂單已刪除`; }
+    recalc(o); await saveOrder(env, o);
+    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：移除「${hit[0].n}」\n新的合計 NT$${o.total.toLocaleString()}`);
+    return `好👌 ${id} 已移除「${hit[0].n}」\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${payDiff(o)}`;
+  }
+  // 加品項：「ZO… 加 4970381929411 3」
+  x = cmd.match(/^(?:加|新增|加入)\s*(.+?)\s+(\d+)\s*(?:個|件|盒)?$/);
+  if (x && deps.loadCatalog) {
+    const kw = x[1].trim(), q = Number(x[2]);
+    const pool = slim(await deps.loadCatalog(env), deps.isExpired || (() => false));
+    const hits = pool.filter((p) => p.jan === kw || p.n.includes(kw));
+    if (!hits.length) return `目錄裡找不到「${kw}」`;
+    if (hits.length > 1 && !hits.find((h) => h.jan === kw)) return `「${kw}」對到 ${hits.length} 款，請用 JAN 碼或更完整的名稱：\n` + hits.slice(0, 8).map((h) => `・${h.n}（${h.jan}）`).join("\n");
+    const it = hits.find((h) => h.jan === kw) || hits[0];
+    const price = o.tier === "vip" ? it.v : it.g;
+    const ex = o.lines.find((l) => l.k === it.k);
+    if (ex) ex.q += q; else o.lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: 0, box: it.box, moq: it.moq, mem: it.mem || "" });
+    recalc(o); await saveOrder(env, o);
+    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：加入「${it.n}」×${q}\n新的合計 NT$${o.total.toLocaleString()}`);
+    return `好👌 ${id} 已加入「${it.n}」×${q}\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${payDiff(o)}`;
+  }
+  // 改數量：「ZO… 小八 改 24」「ZO… 小八 24個」
+  x = cmd.match(/^(.+?)\s*(?:改成?|改為|數量|→|=)?\s*(\d+)\s*(?:個|件|盒)?$/);
+  if (x) {
+    const hit = find(x[1].replace(/(改成?|改為|數量)$/, "").trim());
+    if (!hit.length) return `${id} 裡找不到「${x[1]}」`;
+    if (hit.length > 1) return `「${x[1]}」對到好幾款，請打更完整的名稱：\n` + hit.map((l) => "・" + l.n).join("\n");
+    const q = Number(x[2]);
+    if (q === 0) o.lines = o.lines.filter((l) => l !== hit[0]); else hit[0].q = q;
+    if (!o.lines.length) { await deleteOrder(env, id); return `🗑️ ${id} 品項都刪完了，整張訂單已刪除`; }
+    recalc(o); await saveOrder(env, o);
+    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：「${hit[0].n}」數量改為 ${q}\n新的合計 NT$${o.total.toLocaleString()}`);
+    return `好👌 ${id}「${hit[0].n}」改成 ${q} 個\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${payDiff(o)}`;
+  }
+  return `看不懂這個訂單指令😂 可以用：\n・${id} 備註 內容\n・${id} 小八 改 24\n・${id} 刪 小八\n・${id} 加 JAN碼 3\n・${id} 地址 新地址\n・刪除 ${id}\n・${id} 已付款／已出貨／取消`;
 }
