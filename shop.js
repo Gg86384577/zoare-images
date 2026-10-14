@@ -30,6 +30,18 @@ function packN(it) {
   return m ? Number(m[1]) : 0;
 }
 let SLIM = null, SLIM_SRC = null;
+// 網站多加的分類（LINE 選單按鈕有上限，不放這些）
+const WEB_CATS = [
+  { k: "蠟筆小新", w: ["蠟筆小新", "小新", "クレヨンしんちゃん"] }, { k: "Pickles 小青蛙", w: ["pickle", "ピクルス"] },
+  { k: "夢奇奇", w: ["夢奇奇", "モンチッチ", "monchhichi"] }, { k: "Smiski", w: ["smiski", "スミスキー"] },
+  { k: "好奇猴喬治", w: ["喬治", "おさるのジョージ"] }, { k: "好餓的毛毛蟲", w: ["毛毛蟲", "はらぺこあおむし"] },
+  { k: "彼得兔", w: ["彼得兔", "ピーターラビット"] }, { k: "什麼都是生物", w: ["什麼都是生物"] },
+];
+function catsOf(it) {
+  const h = ((it.n || "") + " " + (it.ja || "") + " " + (it.b || "") + " " + (it.s || "")).toLowerCase();
+  const out = CATS.concat(WEB_CATS).filter((c) => c.w.some((w) => h.includes(w.toLowerCase()))).map((c) => c.k);
+  return out.length ? out : ["其他"];
+}
 function slim(items, isExpired) {
   if (SLIM && SLIM_SRC === items) return SLIM;
   const out = [];
@@ -37,7 +49,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "" });
+      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
   }
   SLIM = out; SLIM_SRC = items;
   return out;
@@ -385,8 +397,9 @@ async function init(){
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
   $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span><br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
-  const counts={};ALL.forEach(x=>counts[x.b]=(counts[x.b]||0)+1);
-  const brands=["全部"].concat(Object.keys(counts).sort((a,b)=>counts[b]-counts[a]));
+  const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
+  const CO=["吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
+  const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
   $("#chips").innerHTML='<button class="chip news" id="newsBtn">🆕 商品動態</button>'+brands.map(b=>'<button class="chip'+(b==="全部"?" on":"")+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
   $("#newsBtn").onclick=openNews;
   $("#chips").onclick=e=>{const b=e.target.dataset.b;if(!b)return;brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
@@ -399,7 +412,7 @@ const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）�
 let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
 function filter(){
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
-  VIEW=ALL.filter(x=>(brand==="全部"||x.b===brand)&&(!q||words.every(w=>(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.box?"盲盒box整盒":"")))).includes(w))));
+  VIEW=ALL.filter(x=>(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.box?"盲盒box整盒":"")))).includes(w))));
   shown=0;$("#grid").innerHTML="";page();
   $("#info").textContent="共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+brand:"");
 }
@@ -510,17 +523,17 @@ const CATS = [
     ["Hello Kitty", ["hello kitty", "凱蒂貓", "キティ", "kt"]], ["美樂蒂", ["美樂蒂", "マイメロ"]], ["酷洛米", ["酷洛米", "クロミ"]],
     ["大耳狗", ["大耳狗", "シナモ"]], ["布丁狗", ["布丁狗", "ポムポムプリン"]], ["帕恰狗", ["帕恰狗", "ポチャッコ"]],
     ["酷企鵝", ["酷企鵝", "ばつ丸"]], ["雙子星", ["雙子星", "キキララ", "リトルツインスターズ"]], ["人魚漢頓", ["人魚漢頓", "漢頓", "ハンギョドン"]]] },
-  { k: "史努比", w: ["史努比", "スヌーピー", "peanuts", "snoopy"], subs: [["史努比", ["史努比", "スヌーピー", "snoopy"]], ["糊塗塔克", ["糊塗塔克", "糊塗塌客", "塔克", "ウッドストック", "woodstock"]]] },
-  { k: "拉拉熊", w: ["拉拉熊", "懶懶熊", "リラックマ", "rilakkuma"] },
-  { k: "角落生物", w: ["角落生物", "すみっコ"] },
-  { k: "mofusand", w: ["mofusand"] },
-  { k: "塔麻可吉", w: ["塔麻可吉", "たまごっち", "tamagotchi"] },
-  { k: "嚕嚕米", w: ["嚕嚕米", "ムーミン", "moomin"] },
   { k: "寶可夢", w: ["寶可夢", "ポケモン", "皮卡丘", "pokemon"] },
+  { k: "史努比", w: ["史努比", "スヌーピー", "peanuts", "snoopy"], subs: [["史努比", ["史努比", "スヌーピー", "snoopy"]], ["糊塗塔克", ["糊塗塔克", "糊塗塌客", "塔克", "ウッドストック", "woodstock"]]] },
+  { k: "角落生物", w: ["角落生物", "すみっコ"] },
+  { k: "拉拉熊", w: ["拉拉熊", "懶懶熊", "リラックマ", "rilakkuma"] },
   { k: "哆啦A夢", w: ["哆啦a夢", "ドラえもん"] },
+  { k: "mofusand", w: ["mofusand"] },
   { k: "動漫角色", w: ["鬼滅", "咒術", "排球", "航海王", "七龍珠", "柯南", "鋼彈", "膽大黨", "火影"], subs: [
     ["鬼滅之刃", ["鬼滅"]], ["咒術回戰", ["咒術"]], ["排球少年", ["排球"]], ["航海王", ["航海王", "ワンピース"]],
     ["七龍珠", ["七龍珠", "ドラゴンボール"]], ["名偵探柯南", ["柯南", "コナン"]], ["鋼彈", ["鋼彈", "ガンダム"]], ["膽大黨", ["膽大黨", "ダンダダン"]]] },
+  { k: "塔麻可吉", w: ["塔麻可吉", "たまごっち", "tamagotchi"] },
+  { k: "嚕嚕米", w: ["嚕嚕米", "ムーミン", "moomin"] },
   { k: "捏捏療癒小物", w: ["捏捏", "スクイーズ", "squeeze", "crux"] },
 ];
 const qr = (labels) => ({ items: labels.slice(0, 13).map(([label, text]) => ({ type: "action", action: { type: "message", label: label.slice(0, 20), text } })) });
