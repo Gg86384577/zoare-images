@@ -546,7 +546,7 @@ function bubble(it, tier, link) {
   ];
   if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
   return { type: "bubble", size: "kilo",
-    hero: { type: "image", url: it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },
+    hero: { type: "image", url: it.th || it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },
     body: { type: "box", layout: "vertical", spacing: "xs", contents: body },
     footer: { type: "box", layout: "vertical", contents: [{ type: "button", style: "primary", color: "#161616", height: "sm",
       action: { type: "uri", label: "我要訂購", uri: `${link}&q=${encodeURIComponent(it.jan || it.code || it.n.slice(0, 30))}` } }] } };
