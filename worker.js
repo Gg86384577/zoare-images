@@ -15,7 +15,7 @@ const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客�
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261015-0300";
+const CATALOG_VERSION = "20261015-0300b";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -272,7 +272,7 @@ function itemLine(i, it) {
   if (it.s) f.push(`款式：${it.s}`);
   f.push(`價格：一般 NT$${it.g}｜VIP NT$${it.v}`);
   if (it.spec) f.push(`規格：${it.spec}`);
-  { const bm = (it.pack || "").match(/(?:整盒|整箱)\s*(\d+)\s*個/), box = bm ? +bm[1] : 0, own = box || Number(it.moq) || 0;
+  { const bm = (it.pack || "").match(/(?:整盒|整箱)\s*(\d+)\s*個/), box = bm ? +bm[1] : 0, own = box || Number(it.moq) || (/盲盒/.test(it.pack || "") ? 0 : Number(((it.pack || "").match(/\d+/) || [0])[0]));
     const nm = Math.max(21, own), non = box ? Math.ceil(nm / box) * box : nm;
     f.push(`起批：會員 ${own || 3} 件、非會員 ${non} 件${box ? `（整盒 ${box} 個倍數）` : ""}`); }
   if (it.pack && it.pack.includes("整箱")) f.push(`訂購方式：${it.pack}`);

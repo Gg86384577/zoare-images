@@ -25,6 +25,12 @@ export async function getTier(env, uid) {
 
 // ---------- 目錄（精簡版給網頁） ----------
 const keyOf = (it) => (it.b || "") + "|" + (it.code || it.jan || it.n);
+// 起批數：型錄的最低訂購量；沒寫的話用入數（例如「入数(インナー) 36 (2)」→ 36，取前面的數字）
+function moqOf(it) {
+  if (Number(it.moq)) return Number(it.moq);
+  const m = /盲盒/.test(it.pack || "") ? null : (it.pack || "").match(/(\d+)/);
+  return m ? Number(m[1]) : 0;
+}
 function packN(it) {
   const m = (it.pack || "").match(/(?:整盒|整箱)\s*(\d+)\s*個/);
   return m ? Number(m[1]) : 0;
@@ -61,7 +67,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
+      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
   }
   out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
@@ -684,8 +690,8 @@ function pickItems(items, words, isExpired, catWords) {
 function bubble(it, tier, link) {
   const price = tier === "vip" ? `VIP NT$${it.v}` : `NT$${it.g}`;
   const sub = tier === "vip" ? `一般 NT$${it.g}` : `VIP 會員 NT$${it.v}`;
-  const mq = minQty({ box: packN(it), moq: it.moq }, tier);
-  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : tier === "none" ? `${mq} 件起（會員 ${minQty({ box: packN(it), moq: it.moq }, "vip")} 件起）` : `會員 ${mq} 件起`, /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
+  const mq = minQty({ box: packN(it), moq: moqOf(it) }, tier);
+  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : tier === "none" ? `${mq} 件起（會員 ${minQty({ box: packN(it), moq: moqOf(it) }, "vip")} 件起）` : `會員 ${mq} 件起`, /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
   const body = [
     { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
     { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },
@@ -1009,9 +1015,39 @@ export async function membershipCards(env, uid) {
 export async function welcomeMessages(env, uid, name) {
   const link = await shopLink(env, uid);
   const hi = name ? `${name} 您好～` : "您好～";
-  const text = `${hi}歡迎加入 ZOARÉ 日本角色批發🎉\n吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購批發價直送台灣\n\n🛒 線上商城（您的專屬連結，價格會自動套用會員價）\n${link}\n\n💬 在這裡直接查報價\n・打角色或品牌：「吉伊卡哇」「酷洛米」\n・加上細項更精準：「吉伊卡哇 相框」「小八 S娃」\n・傳商品照片、JAN 條碼或商品編號，幫您找同款報價\n・點下方選單「商品目錄」照分類看、「商品動態」看新品和即將結單\n\n👑 會員制度\n非會員單款要 21 件起；加入會員可以不同款混批 21 件，每款只要達到商品本身的起批數（很多款 1～3 件就能訂）\nVIP 會員 NT$1,000／月：國際＋國內運費全免，全館每件再便宜 NT$30，新品優先通知\n批發客最划算的是 VIP👇`;
+  const text = `${hi}歡迎加入 ZOARÉ 🎉
+我們是日本角色商品批發，吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購、批發價直送台灣🇯🇵
+
+━━ 怎麼買？3 個步驟 ━━
+① 找商品：直接在這裡打角色名字，例如「吉伊卡哇」「酷洛米」，馬上傳商品卡片給您
+② 看清楚：每張卡片都有價格、起批數、結單日
+③ 下單：按卡片上的「我要訂購」，或打開您的專屬商城👇
+${link}
+（這是您專用的連結，價格會自動套用您的會員價，請不要轉傳）
+付款可以轉帳或 LINE Pay，付完在這裡傳後五碼＋截圖，系統自動對帳
+
+━━ 查報價小技巧 ━━
+・找特定款式：加細項，例如「吉伊卡哇 相框」「小八 S娃」
+・手上有照片或條碼：直接傳照片、JAN 條碼或商品編號
+・慢慢逛：點下方選單「商品目錄」照分類看
+・看新品、快結單的商品：點「商品動態」
+・查訂單：點「訂單查詢」`;
+  const text2 = `━━ 起批數怎麼算？ ━━
+・非會員：每款 21 件起（商品本身起批數更多的照商品）
+・會員：每款只要達到商品自己的起批數，很多款 1～3 件就能訂，不同款合計 21 件就能出單
+👉 想少量多樣進貨，加入會員最划算
+
+━━ 會員方案 ━━
+👑 VIP 會員 NT$1,000／月（推薦）
+・國際＋國內運費全免
+・全館 VIP 價，每件再便宜 NT$30
+・新品優先通知
+🔹 一般會員 NT$100／月：只免國際運費
+
+💡 幫您算：每月進貨 34 件以上，VIP 每件省的 NT$30 就把月費賺回來了，運費還全免！
+點下面卡片就能直接加入，付款完成自動開通👇`;
   const qrs = [["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["商品目錄", "商品目錄"], ["加入 VIP", "會員方案"], ["商品動態", "商品動態"]];
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
-  return [{ type: "text", text }, ...cards];
+  return [{ type: "text", text }, { type: "text", text: text2 }, ...cards];
 }
