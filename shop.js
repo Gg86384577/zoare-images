@@ -174,7 +174,11 @@ export async function handleShop(request, env, ctx, deps) {
     try { body = await request.json(); } catch (e) { return Response.json({ ok: false, error: "資料格式錯誤" }, { status: 400 }); }
     const uid = await verifyToken(env, body.t);
     if (!uid) return Response.json({ ok: false, error: "連結無效，請回到 LINE 重新點訂購連結" }, { status: 401 });
-    const tier = await getTier(env, uid);
+    const prevTier = await getTier(env, uid);
+    // 購物車有會員方案 → 下單當下自動升級（只升不降），這張訂單直接用新等級的價格
+    const its = body.items || [];
+    const wantMem = its.some((r) => r.k === "MEMBER|VIP" && r.q > 0) ? "vip" : its.some((r) => r.k === "MEMBER|GEN" && r.q > 0) ? "member" : "";
+    const tier = wantMem === "vip" || (wantMem === "member" && prevTier === "none") ? wantMem : prevTier;
     const map = new Map(slim(await deps.loadCatalog(env), deps.isExpired).map((x) => [x.k, x]));
     const lines = [];
     for (const r of (body.items || []).slice(0, 300)) {
@@ -196,6 +200,7 @@ export async function handleShop(request, env, ctx, deps) {
     const notes = ruleNotes(lines, tier);
     const lineName = await deps.displayName(env, uid);
     const order = { id, uid, lineName, tier, lines, total, qty, form, notes, status: "待付款", at: d.toISOString().slice(0, 16).replace("T", " ") };
+    if (wantMem) { order.memGranted = wantMem; order.prevTier = prevTier; await env.SESSIONS.put("tier:" + uid, tier, { expirationTtl: 35 * 86400 }); }
     const bank = await payInfo(env, form.pay);
     await env.SESSIONS.put("o:" + id, JSON.stringify(order), { expirationTtl: 180 * 86400 });
     await env.SESSIONS.put("ol:" + uid, id, { expirationTtl: 30 * 86400 });
@@ -205,7 +210,7 @@ export async function handleShop(request, env, ctx, deps) {
     const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]");
     idx.unshift(id); await env.SESSIONS.put("orders", JSON.stringify(idx.slice(0, 200)));
     ctx.waitUntil(notifyOrder(env, deps, order, bank));
-    return Response.json({ ok: true, id, total, qty, notes, bank, tierName: TIER_NAME[tier] });
+    return Response.json({ ok: true, id, total, qty, notes, bank, tierName: TIER_NAME[tier], upgraded: tier !== prevTier });
   }
   return new Response("Not found", { status: 404 });
 }
@@ -244,11 +249,12 @@ async function notifyOrder(env, deps, o, bank) {
     const owner = await env.SESSIONS.get("owner");
     if (owner) {
       await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text:
-        `🛒 新訂單！\n客人：${o.lineName}（${TIER_NAME[o.tier]}）\n${orderText(o)}\n\n收件人：${o.form.name}\n電話：${o.form.phone}\n寄送：${o.form.ship}　${o.form.addr}` +
+        `🛒 新訂單！\n客人：${o.lineName}（${TIER_NAME[o.tier]}${o.memGranted && o.prevTier !== o.tier ? `，下單會員方案已自動從${TIER_NAME[o.prevTier]}升級` : ""}）\n${orderText(o)}\n\n收件人：${o.form.name}\n電話：${o.form.phone}\n寄送：${o.form.ship}　${o.form.addr}` +
         (o.form.note ? `\n備註：${o.form.note}` : "") }] });
     }
     await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text:
       `謝謝您的訂購🙏 我們已收到訂單囉\n\n${orderText(o, false)}\n\n` +
+      (o.memGranted && o.prevTier !== o.tier ? `🎉 您已升級為${TIER_NAME[o.tier]}！這張訂單已套用會員價，之後下單也會自動用會員價（請在 3 天內完成付款，取消訂單會恢復原本等級）\n\n` : "") +
       (bank ? `💳 ${o.form.pay === "LINE Pay" ? "LINE Pay 付款資料" : "轉帳資料"}：\n${bank}\n\n${payHow(o.form.pay)}，系統會自動幫您對帳喔～` : "我們確認庫存後會再傳付款資料給您～") }] });
   } catch (e) { console.log("order notify failed", e); }
 }
@@ -402,7 +408,9 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
     if (!o) return `找不到訂單 ${id}`;
     if (om[2]) {
+      o.statusBefore = o.status;
       o.status = om[2] === "取消" ? "已取消" : om[2];
+      if (o.status === "已取消") await revertMem(env, o);
       if (om[3]) o.track = om[3].trim().slice(0, 60);
       if (o.status === "已付款") {
         o.paidAt = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
@@ -520,7 +528,9 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"
 let ME=null,ALL=[],VIEW=[],shown=0,brand="全部",cart={};
 try{cart=JSON.parse(localStorage.getItem("zo_cart")||"{}")}catch(e){}
 const save=()=>{try{localStorage.setItem("zo_cart",JSON.stringify(cart))}catch(e){}};
-const price=x=>ME&&ME.tier==="vip"?x.v:x.g;
+const TN={vip:"VIP 會員",member:"一般會員",none:"非會員"};
+function TIER(){if(!ME)return"none";if(cart["MEMBER|VIP"]||ME.tier==="vip")return"vip";if(cart["MEMBER|GEN"]||ME.tier==="member")return"member";return"none"}
+const price=x=>TIER()==="vip"?x.v:x.g;
 const fmt=n=>"NT$"+n.toLocaleString();
 const QR="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/linepay_qr.png";
 function payHTML(t,isLP){let h=esc(t).replace(/(https?:\\/\\/[^\\s<]+)/g,u=>/qrcodepay\\.line\\.me/.test(u)?'</pre><a class="lpbtn" href="'+u+'">💚 開啟 LINE Pay 付款</a><pre>':'<a href="'+u+'">'+u+'</a>');
@@ -559,9 +569,9 @@ function card(x){
   const p=price(x),q=cart[x.k]||0;
   const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
-  '<div class="pr"><b>'+fmt(p)+'</b>'+(ME.tier==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
+  '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-function step(x){if(x.mem)return 1;const own=Number(x.box)||Number(x.moq)||0;if(ME.tier!=="none")return own||3;const m=Math.max(21,own);return x.box?Math.ceil(m/x.box)*x.box:m}
+function step(x){if(x.mem)return 1;const own=Number(x.box)||Number(x.moq)||0;if(TIER()!=="none")return own||3;const m=Math.max(21,own);return x.box?Math.ceil(m/x.box)*x.box:m}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
   const part=VIEW.slice(shown,shown+40);shown+=part.length;
@@ -571,7 +581,8 @@ function page(){
 $("#more").onclick=page;
 window.addEventListener("scroll",()=>{if(!$("#more").hidden&&innerHeight+scrollY>document.body.offsetHeight-600)page()});
 const byK=k=>ALL.find(x=>x.k===k);
-function setQ(k,q){q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();
+function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();
+  if(TIER()!==t0){document.querySelectorAll('#grid .card[data-k]').forEach(el=>{const x=byK(el.dataset.k);if(x)el.outerHTML=card(x)});return}
   document.querySelectorAll('.card[data-k="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(k);el.querySelector(".qty,.add").outerHTML=qtyBox(x,q)})}
 document.addEventListener("click",e=>{
   const a=e.target.dataset.a;if(!a)return;const c=e.target.closest("[data-k]");if(!c)return;const k=c.dataset.k,x=byK(k),q=cart[k]||0,s=x.box||1;
@@ -582,7 +593,7 @@ document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const 
 function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:cart[k],sub:price(x)*cart[k]}}).filter(Boolean)}
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
-function notes(L){const t=ME.tier,out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
+function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="none"?"非會員":"會員")+"這款 "+mq+" 件起")});
   if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
@@ -627,7 +638,7 @@ function renderCart(){
   $("#panel").innerHTML='<h2>購物車<button class="x" id="cx">×</button></h2>'+
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
   (N.length?'<div class="warn"><b>訂購規則提醒</b>（可以照樣送出，客服會再跟你確認）<br>'+N.map(esc).join("<br>")+'</div>':'')+
-  '<div class="tot">共 '+L.length+' 款 '+n+' 件<br>合計 <b>'+fmt(total)+'</b>（'+esc(ME.tierName)+'價）<br><small style="color:#6b6f75">運費：'+(ME.tier==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
+  '<div class="tot">共 '+L.length+' 款 '+n+' 件<br>合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：'+(TIER()==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
   '<form id="of"><label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
   '<label>寄送方式</label><select class="f" name="ship" required>'+["7-11 店到店","全家店到店","萊爾富店到店","宅配","其他"].map(s=>'<option'+(form.ship===s?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
@@ -829,7 +840,16 @@ async function findOrdersByName(env, name) {
   const all = await allOrders(env);
   return all.filter((o) => o.lineName.includes(name) || (o.form && o.form.name && o.form.name.includes(name)));
 }
+// 會員方案訂單被取消／刪除（還沒付款）→ 恢復原本的會員等級
+async function revertMem(env, o) {
+  if (!o || !o.memGranted || o.paidAt || ["已付款", "已出貨"].includes(o.statusBefore || "")) return;
+  const cur = await getTier(env, o.uid);
+  if (cur !== o.tier) return;
+  if (!o.prevTier || o.prevTier === "none") await env.SESSIONS.delete("tier:" + o.uid);
+  else await env.SESSIONS.put("tier:" + o.uid, o.prevTier, { expirationTtl: 35 * 86400 });
+}
 async function deleteOrder(env, id) {
+  try { await revertMem(env, JSON.parse((await env.SESSIONS.get("o:" + id)) || "null")); } catch (e) {}
   await env.SESSIONS.delete("o:" + id);
   const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]").filter((x) => x !== id);
   await env.SESSIONS.put("orders", JSON.stringify(idx));
@@ -1050,4 +1070,19 @@ ${link}
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
   return [{ type: "text", text }, { type: "text", text: text2 }, ...cards];
+}
+
+// 下單會員方案但 3 天內沒付款 → 恢復原本等級並通知老闆（每次排程檢查）
+export async function memExpiry(env, deps) {
+  const ids = JSON.parse((await env.SESSIONS.get("orders")) || "[]");
+  const limit = new Date(Date.now() + 8 * 3600e3 - 3 * 86400e3).toISOString().slice(0, 16).replace("T", " ");
+  const owner = await env.SESSIONS.get("owner");
+  for (const id of ids) {
+    const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+    if (!o || !o.memGranted || o.memReverted || o.paidAt || !OPEN.includes(o.status) || o.status === "已付款" || o.at > limit) continue;
+    await revertMem(env, o);
+    o.memReverted = true;
+    await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+    if (owner) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `⏰ ${o.lineName} 的會員方案訂單 ${o.id} 超過 3 天沒付款，已恢復為${TIER_NAME[o.prevTier || "none"]}\n之後客人付款、你傳「${o.id} 已付款」就會重新開通` }] });
+  }
 }
