@@ -9,10 +9,10 @@
 //   MODEL                      （Text，可不填）預設 claude-haiku-5-5
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu } from "./shop.js";
-const SHOP = "https://www.lemaiapp.com/m/zoare";
-const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
-const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage } from "./shop.js";
+const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
+const VIP = "{會員連結}";
+const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const CATALOG_VERSION = "20261015-0130";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
@@ -29,7 +29,7 @@ const MENU = {
   "韓國批發": askIp("🇰🇷", "韓國批發", "韓國文具、飾品、服飾、生活小物"),
   "日本批發": askIp("🇯🇵", "日本批發", "三麗鷗、吉伊卡哇、史努比、角落生物；娃娃、吊飾、鑰匙圈"),
   "中國批發": askIp("🇨🇳", "中國批發", "IP 周邊、盲盒、生活雜貨、服飾"),
-  "訂單查詢": `{name} 您好，請進入樂賣商城查詢訂單喔！\n🛍️ 樂賣商城：${SHOP}`,
+  "訂單查詢": `{name} 您好，請點這裡查詢訂單喔！\n{shop}&v=orders`,
   "商品查詢": `請給我商品名稱或 JAN 碼供系統查詢喔！\n🛒 線上訂購：{shop}`,
 };
 const ORDER_WORDS = ["訂購", "下單", "我要訂購", "我要下單", "線上訂購", "訂購網站", "訂購連結", "購物車"];
@@ -45,7 +45,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 韓國、中國商品沒有目錄，不可以報價：請客人提供商品圖片或連結、型號、數量，告知會由專人報價，handoff 設為 true。
 
 【相同／相似商品】
-- 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號／樂賣商品編號（例如 272655-S，客人常從樂賣複製這個）相同；樂賣商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
+- 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號／舊商品編號（例如 272655-S）相同；舊商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
 - 客人傳照片：最多列 3 款；打字查詢：最多列 5 款。只有一款完全符合時直接報那一款。
 - 狀態是「缺貨/停售」的不要列成選項，可以在最後備註「○○ 目前缺貨」。
 - 狀態是「已截止（不可下單）」的不要報價、不要列成選項，告訴客人「這款已經截止收單囉，下次開團會再通知您！」，有其他同系列還沒截止的可以推薦。
@@ -72,8 +72,9 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 只有客人問 NT$100、問更便宜的方案、或說 VIP 太貴時，才介紹一般會員：NT$100／月，只免國際運費。入會：${GENERAL}
 
 【其他】
-- 訂單查詢：請客人進入樂賣商城查詢：${SHOP}
-- 付款方式、運費細節、退換貨、改單、取消訂單、客訴，或任何從上面規則和候選商品裡找不到答案的問題：不要硬回答，直接加上 #HANDOFF（系統會自動跟客人說請專人回覆，你的文字不會送出）。
+- 訂單查詢：請客人點選單的「訂單查詢」，或傳「我的訂單」。
+- 付款方式：線上訂購網站結帳時可以選「銀行轉帳」或「LINE Pay」，付款後在 LINE 傳後五碼和付款截圖，系統會自動對帳。
+- 運費細節、退換貨、改單、取消訂單、客訴，或任何從上面規則和候選商品裡找不到答案的問題：不要硬回答，直接加上 #HANDOFF（系統會自動跟客人說請專人回覆，你的文字不會送出）。
 - 客人一直問同一件事、你只能重複前面講過的話時，也加上 #HANDOFF。
 - 會員取消：下個月不繼續繳費就等於取消，不用另外申請。已下的訂單一律以下單當時的金額、數量為準。
 - 不能挑款的原因：貿易商那邊也沒辦法挑款，盲盒也不確定會出哪一款，可以老實跟客人說明。
@@ -206,7 +207,7 @@ function itemLine(i, it) {
   if (it.ship) f.push(`發售出貨：${it.ship}`);
   if (it.dl) f.push(`截止：${it.dl}`);
   if (it.code) f.push(`編號：${it.code}`);
-  if (it.lm) f.push(`樂賣商品編號：${it.lm}`);
+  if (it.lm) f.push(`舊商品編號：${it.lm}`);
   if (it.jan && it.jan !== it.code) f.push(`JAN：${it.jan}`);
   f.push(`下單網址：${it.url || "準備中"}`);
   return f.join("｜");
@@ -453,6 +454,10 @@ async function handleEvent(env, ev) {
   if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {
     return reply(env, ev.replyToken, [{ type: "text", text: await newsReply(env, { loadCatalog, isExpired }, await shopLink(env, uid)) }]);
   }
+  // 加入會員
+  if (uid && /^(加入會員|會員|入會|VIP|加入VIP|會員方案)$/i.test(text)) {
+    return reply(env, ev.replyToken, [{ type: "text", text: `ZOARÉ 批發會員方案👇\n\n👑 VIP 會員 NT$1,000／月\n國際＋國內運費全免・更優惠的批發價・VIP 專屬價・新品優先通知\n\n🔹 一般會員 NT$100／月（只免國際運費）\n\n會員可以不同款混批 21 件（每款 3 件起）\n點這裡加入，付款完成會自動開通：\n${await shopLink(env, uid)}&q=${encodeURIComponent("會員方案")}` }]);
+  }
   // 要訂購連結
   if (uid && ORDER_WORDS.includes(text)) {
     await rememberName(env, uid);
@@ -469,6 +474,14 @@ async function handleEvent(env, ev) {
   }
   // 真人處理中：機器人不插話，並把 15 分鐘重新計時
   if (uid && (await inHandoff(env, uid))) { await setHandoff(env, uid); return; }
+  // 有待付款訂單的客人傳圖片 → 先看是不是付款截圖，是的話自動對帳
+  if (uid && env.SESSIONS && msg.type === "image") {
+    try {
+      const img = await imageBase64(env, msg.id);
+      const pr = await verifyPaymentImage(env, { claude, lineApi }, uid, img);
+      if (pr) return reply(env, ev.replyToken, [{ type: "text", text: pr }]);
+    } catch (e) { console.log("payment check failed", e); }
+  }
   // 貼圖、語音等不是文字／照片的訊息：不回（避免客人傳「收到」貼圖也被回）
   if (msg.type !== "text" && msg.type !== "image") return;
 
@@ -490,7 +503,7 @@ async function handleEvent(env, ev) {
   }
 
   const name = uid ? await rememberName(env, uid) : "老闆";
-  if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name).replaceAll("{shop}", uid ? await shopLink(env, uid) : SHOP) }]);
+  if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name).replaceAll("{shop}", uid ? await shopLink(env, uid) : "") }]);
 
   if (uid) lineApi(env, "/v2/bot/chat/loading/start", { chatId: uid, loadingSeconds: 20 }).catch(() => {});
 
@@ -544,8 +557,8 @@ async function handleEvent(env, ev) {
     }
     const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 3);
     const lineMsgs = shown.map((it) => ({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img }));
-    const myLink = uid ? await shopLink(env, uid) : SHOP;
-    let replyText = (out.reply || "我幫您轉給專人確認喔！").replaceAll("{訂購連結}", myLink).replaceAll("樂賣商城 " + SHOP, myLink);
+    const myLink = uid ? await shopLink(env, uid) : "";
+    let replyText = (out.reply || "我幫您轉給專人確認喔！").replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
     lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     await reply(env, ev.replyToken, lineMsgs);

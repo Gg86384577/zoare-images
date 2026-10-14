@@ -30,6 +30,10 @@ function packN(it) {
   return m ? Number(m[1]) : 0;
 }
 let SLIM = null, SLIM_SRC = null;
+const MEMBER_ITEMS = [
+  { k: "MEMBER|VIP", n: "VIP 會員（月費）國際＋國內運費全免・VIP 專屬價", b: "ZOARÉ 會員方案", s: "", g: 1000, v: 1000, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_vip.jpg", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "vip" },
+  { k: "MEMBER|GEN", n: "一般會員（月費）只免國際運費", b: "ZOARÉ 會員方案", s: "", g: 100, v: 100, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_gen.jpg", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "member" },
+];
 // 網站多加的分類（LINE 選單按鈕有上限，不放這些）
 const WEB_CATS = [
   { k: "蠟筆小新", w: ["蠟筆小新", "小新", "クレヨンしんちゃん"] }, { k: "Pickles 小青蛙", w: ["pickle", "ピクルス"] },
@@ -51,6 +55,7 @@ function slim(items, isExpired) {
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
       moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
   }
+  out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
   return out;
 }
@@ -58,14 +63,15 @@ function slim(items, isExpired) {
 // ---------- 訂購規則（只提醒，不擋） ----------
 export function ruleNotes(lines, tier) {
   const notes = [];
-  const total = lines.reduce((a, l) => a + l.q, 0);
+  const total = lines.filter((l) => !l.mem).reduce((a, l) => a + l.q, 0);
   for (const l of lines) {
+    if (l.mem) continue;
     if (l.box && l.q % l.box) notes.push(`${l.n}：盲盒／整箱商品請以 ${l.box} 的倍數訂購`);
     else if (tier === "none" && l.q < 21) notes.push(`${l.n}：非會員單款需 21 件起`);
     else if (tier !== "none" && l.q < 3) notes.push(`${l.n}：會員每款 3 件起`);
     if (l.moq > 1 && l.q < l.moq && !l.box) notes.push(`${l.n}：貿易商最低訂購量 ${l.moq}`);
   }
-  if (tier !== "none" && total < 21) notes.push(`會員混批合計需 21 件起（目前 ${total} 件）`);
+  if (tier !== "none" && total > 0 && total < 21) notes.push(`會員混批合計需 21 件起（目前 ${total} 件）`);
   return notes;
 }
 
@@ -137,9 +143,9 @@ export async function handleShop(request, env, ctx, deps) {
     const uid = await verifyToken(env, url.searchParams.get("t"));
     if (!uid) return Response.json({ ok: false, error: "連結無效" }, { status: 401 });
     const list = await myOrders(env, uid, 20);
-    return Response.json({ ok: true, orders: list.map((o) => ({ id: o.id, at: o.at, status: o.status, paid5: o.paid5 || "", track: o.track || "",
+    return Response.json({ ok: true, orders: list.map((o) => ({ id: o.id, at: o.at, status: o.status, paid5: o.paid5 || "", track: o.track || "", pay: o.form.pay || "轉帳",
       total: o.total, qty: o.qty, tier: TIER_NAME[o.tier], lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub })), form: o.form })),
-      bank: (await env.SESSIONS.get("bank")) || "" });
+      bank: (await env.SESSIONS.get("bank")) || "", linepay: (await env.SESSIONS.get("linepay")) || "" });
   }
   if (p === "/shop/order" && request.method === "POST") {
     let body;
@@ -154,12 +160,12 @@ export async function handleShop(request, env, ctx, deps) {
       const q = Math.floor(Number(r.q));
       if (!it || !(q > 0) || q > 100000) continue;
       const price = tier === "vip" ? it.v : it.g;
-      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, sub: price * q, box: it.box, moq: it.moq });
+      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "" });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
     const f = body.form || {};
     const clean = (s, n = 100) => String(s || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
-    const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: clean(f.ship, 20), addr: clean(f.addr, 150), note: clean(f.note, 300) };
+    const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: clean(f.ship, 20), addr: clean(f.addr, 150), note: clean(f.note, 300), pay: f.pay === "LINE Pay" ? "LINE Pay" : "轉帳" };
     if (!form.name || !form.phone || !form.ship || !form.addr) return Response.json({ ok: false, error: "請填寫收件人、電話、寄送方式與門市／地址" }, { status: 400 });
     const total = lines.reduce((a, l) => a + l.sub, 0);
     const qty = lines.reduce((a, l) => a + l.q, 0);
@@ -168,7 +174,7 @@ export async function handleShop(request, env, ctx, deps) {
     const notes = ruleNotes(lines, tier);
     const lineName = await deps.displayName(env, uid);
     const order = { id, uid, lineName, tier, lines, total, qty, form, notes, status: "待付款", at: d.toISOString().slice(0, 16).replace("T", " ") };
-    const bank = (await env.SESSIONS.get("bank")) || "";
+    const bank = await payInfo(env, form.pay);
     await env.SESSIONS.put("o:" + id, JSON.stringify(order), { expirationTtl: 180 * 86400 });
     await env.SESSIONS.put("ol:" + uid, id, { expirationTtl: 30 * 86400 });
     const mine = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]");
@@ -191,9 +197,9 @@ async function myOrders(env, uid, n = 5) {
 // 客人在 LINE 查訂單
 export async function customerOrders(env, uid, link) {
   const list = await myOrders(env, uid, 5);
-  const lemai = "\n\n在樂賣商城下的訂單，請到樂賣查詢：https://www.lemaiapp.com/m/zoare";
+  const lemai = "";
   if (!list.length) return `目前沒有線上訂購網站的訂單紀錄喔${lemai}\n\n🛒 線上訂購：${link}`;
-  const rows = list.map((o) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}`);
+  const rows = list.map((o) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　${o.form.pay || "轉帳"}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}`);
   return `您最近的訂單：\n\n${rows.join("\n\n")}\n\n要看完整明細，請點：\n${link}&v=orders\n（或傳訂單編號給我）${lemai}`;
 }
 export async function customerOrderDetail(env, uid, id) {
@@ -201,9 +207,14 @@ export async function customerOrderDetail(env, uid, id) {
   if (!o || o.uid !== uid) return null;
   return `訂單 ${o.id}（${o.at}）\n狀態：${o.status}${o.paid5 ? "　後五碼 " + o.paid5 : ""}${o.track ? "\n物流單號：" + o.track : ""}\n\n${orderText(o, false)}\n\n收件人：${o.form.name}\n寄送：${o.form.ship}　${o.form.addr}`;
 }
+async function payInfo(env, pay) {
+  return (await env.SESSIONS.get(pay === "LINE Pay" ? "linepay" : "bank")) || "";
+}
+const payHow = (pay) => pay === "LINE Pay" ? "付款後請回到 LINE 傳「付款截圖」給我們" : "轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」給我們";
 function orderText(o, withRules = true) {
   const items = o.lines.map((l) => `・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
   return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）\n運費：${o.tier === "vip" ? "VIP 免運" : "由客服確認後通知"}` +
+    `\n付款方式：${o.form.pay || "轉帳"}` +
     (withRules && o.notes.length ? `\n\n⚠️ 訂購規則提醒：\n${o.notes.slice(0, 8).map((n) => "・" + n).join("\n")}` : "");
 }
 async function notifyOrder(env, deps, o, bank) {
@@ -216,7 +227,7 @@ async function notifyOrder(env, deps, o, bank) {
     }
     await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text:
       `謝謝您的訂購🙏 我們已收到訂單囉\n\n${orderText(o, false)}\n\n` +
-      (bank ? `💳 匯款資料：\n${bank}\n\n匯款後請直接在這裡回覆「後五碼 12345」，我們確認後就會幫您安排～` : "我們確認庫存後會再傳匯款資料給您～") }] });
+      (bank ? `💳 ${o.form.pay === "LINE Pay" ? "LINE Pay 付款資料" : "轉帳資料"}：\n${bank}\n\n${payHow(o.form.pay)}，系統會自動幫您對帳喔～` : "我們確認庫存後會再傳付款資料給您～") }] });
   } catch (e) { console.log("order notify failed", e); }
 }
 
@@ -227,26 +238,110 @@ export async function handlePayment(env, deps, uid, text) {
   const id = await env.SESSIONS.get("ol:" + uid);
   if (!id) return null;
   const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
-  if (!o || o.status !== "待付款") return null;
-  o.status = "已回報匯款"; o.paid5 = m[1];
+  if (!o || !["待付款", "已回報匯款", "待確認"].includes(o.status)) return null;
+  if (o.status === "待付款") o.status = "已回報匯款";
+  o.paid5 = m[1];
   await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+  return `收到後五碼 ${m[1]}👌（訂單 ${o.id}）\n${o.payShot ? "截圖也收到了，我們核對後會通知您～" : "請再傳「轉帳截圖」給我，系統核對金額和帳號後就完成囉～"}`;
+}
+
+// ---------- 付款截圖自動對帳 ----------
+const digits = (s) => String(s || "").replace(/[^0-9]/g, "");
+async function pendingOrder(env, uid) {
+  const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, 5);
+  for (const id of ids) {
+    const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+    if (o && ["待付款", "已回報匯款", "待確認"].includes(o.status)) return o;
+  }
+  return null;
+}
+export async function verifyPaymentImage(env, deps, uid, img) {
+  const o = await pendingOrder(env, uid);
+  if (!o) return null;
+  const out = await deps.claude(env,
+    "你是付款截圖辨識助手。判斷圖片是不是銀行轉帳／ATM／網銀／LINE Pay 的付款成功截圖。只輸出 JSON：" +
+    '{"is_payment":true/false,"method":"bank 或 linepay","amount":轉出金額數字(新台幣，沒有就0),"to_account":"轉入帳號（照圖片寫，含*號）","to_bank":"轉入銀行","to_name":"收款人名稱或 LINE Pay 對象","from_last5":"轉出帳號後五碼（看得到才填）","time":"交易時間","success":true/false}',
+    [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: "請辨識這張圖" }] }], 400);
+  let r; try { r = JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { return null; }
+  if (!r.is_payment) return null;
+  const bank = (await env.SESSIONS.get("bank")) || "", lp = (await env.SESSIONS.get("linepay")) || "";
+  const amountOk = Number(r.amount) === o.total;
+  let toOk = false, why = [];
+  if (r.method === "linepay") {
+    const nm = String(r.to_name || "").replace(/\s/g, "");
+    toOk = !!nm && !!lp && (lp.replace(/\s/g, "").includes(nm) || nm.includes(lp.replace(/\s/g, "").slice(0, 4)));
+    if (!toOk) why.push(`收款對象「${r.to_name || "看不到"}」跟你的 LINE Pay 資料對不起來`);
+  } else {
+    const acct = (bank.match(/[0-9][0-9\-\s]{7,}[0-9]/g) || []).map(digits).sort((a, b) => b.length - a.length)[0] || "";
+    const vis = digits(String(r.to_account || "").split(/[*＊xX•●]+/).pop());
+    toOk = !!acct && vis.length >= 3 && acct.endsWith(vis);
+    if (!toOk) why.push(`轉入帳號「${r.to_account || "看不到"}」跟你的帳號對不起來`);
+  }
+  if (r.success === false) why.push("截圖看起來不是交易成功畫面");
+  if (!amountOk) why.push(`金額 NT$${Number(r.amount || 0).toLocaleString()} 跟訂單 NT$${o.total.toLocaleString()} 不一樣`);
+  const ok = amountOk && toOk && r.success !== false;
+  o.payShot = true;
+  o.payInfo = { method: r.method === "linepay" ? "LINE Pay" : "轉帳", amount: Number(r.amount) || 0, to: r.to_account || r.to_name || "", from5: r.from_last5 || o.paid5 || "", time: r.time || "" };
+  if (r.from_last5 && !o.paid5) o.paid5 = digits(r.from_last5).slice(-5);
+  const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+  if (ok) { o.status = "已付款"; o.paidAt = now; } else o.status = "待確認";
+  await env.SESSIONS.put("o:" + o.id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+  // 有買會員方案 → 自動開通（35 天，下個月沒續繳就自動失效）
+  let memMsg = "";
+  if (ok) {
+    const mem = o.lines.find((l) => l.mem === "vip") ? "vip" : o.lines.find((l) => l.mem === "member") ? "member" : "";
+    if (mem) { await env.SESSIONS.put("tier:" + uid, mem, { expirationTtl: 35 * 86400 }); memMsg = `\n🎉 ${TIER_NAME[mem]}已開通，訂購網站會自動套用會員價～`; }
+  }
   const owner = await env.SESSIONS.get("owner");
-  if (owner) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text",
-    text: `💰 客人回報匯款\n客人：${o.lineName}\n訂單：${o.id}　NT$${o.total.toLocaleString()}\n後五碼：${m[1]}` }] });
-  return `收到👌 訂單 ${o.id} 匯款後五碼 ${m[1]}\n我們對帳後會再通知您喔～`;
+  if (owner) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: ok
+    ? `✅ 自動對帳成功\n客人：${o.lineName}\n訂單：${o.id}　NT$${o.total.toLocaleString()}\n${o.payInfo.method}　${o.payInfo.to}${o.paid5 ? "\n後五碼：" + o.paid5 : ""}\n已自動改成「已付款」${memMsg ? "\n（會員已自動開通）" : ""}`
+    : `⚠️ 付款截圖對不上，請人工確認\n客人：${o.lineName}\n訂單：${o.id}　NT$${o.total.toLocaleString()}\n${why.join("\n")}\n\n確認沒問題請傳「${o.id} 已付款」` }] });
+  return ok
+    ? `✅ 付款確認成功！謝謝您🙏\n訂單 ${o.id}　NT$${o.total.toLocaleString()}\n我們會盡快幫您安排出貨～${memMsg}`
+    : `收到您的付款截圖了👌（訂單 ${o.id}）\n系統自動核對時有些地方對不上，已經請專人確認，確認後會馬上通知您～`;
+}
+
+// ---------- 收款統計 ----------
+async function payStats(env) {
+  const ids = JSON.parse((await env.SESSIONS.get("orders")) || "[]");
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), month = today.slice(0, 7);
+  const S = () => ({ n: 0, amt: 0 });
+  const st = { today: { 轉帳: S(), "LINE Pay": S() }, month: { 轉帳: S(), "LINE Pay": S() }, wait: S(), check: S(), ship: S() };
+  for (const id of ids) {
+    const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+    if (!o) continue;
+    const m = (o.payInfo && o.payInfo.method) || o.form.pay || "轉帳";
+    if (o.status === "已付款" || o.status === "已出貨") {
+      const d = o.paidAt || o.at;
+      if (d.startsWith(month)) { st.month[m].n++; st.month[m].amt += o.total; }
+      if (d.startsWith(today)) { st.today[m].n++; st.today[m].amt += o.total; }
+      if (o.status === "已付款") { st.ship.n++; st.ship.amt += o.total; }
+    } else if (o.status === "待付款" || o.status === "已回報匯款") { st.wait.n++; st.wait.amt += o.total; }
+    else if (o.status === "待確認") { st.check.n++; st.check.amt += o.total; }
+  }
+  const f = (x) => `${x.n} 筆　NT$${x.amt.toLocaleString()}`;
+  const sum = (o) => ({ n: o["轉帳"].n + o["LINE Pay"].n, amt: o["轉帳"].amt + o["LINE Pay"].amt });
+  return `📊 收款統計\n\n【今天 ${today.slice(5).replace("-", "/")}】\n轉帳：${f(st.today["轉帳"])}\nLINE Pay：${f(st.today["LINE Pay"])}\n合計：${f(sum(st.today))}\n\n【本月 ${month.slice(5)} 月】\n轉帳：${f(st.month["轉帳"])}\nLINE Pay：${f(st.month["LINE Pay"])}\n合計：${f(sum(st.month))}\n\n⏳ 等待付款：${f(st.wait)}\n⚠️ 截圖待人工確認：${f(st.check)}\n📦 已付款待出貨：${f(st.ship)}`;
 }
 
 // 老闆指令：訂單列表／單筆查詢／匯款資料
 export async function shopOwnerCommand(env, text, deps = {}) {
   const t = text.trim();
-  const bm = t.match(/^匯款資料[\s:：]*([\s\S]*)$/);
+  if (/^(收款統計|統計|營收|收款)$/.test(t)) return await payStats(env);
+  const lpm = t.match(/^(?:LINE\s?Pay|linepay|LinePay)資料[\s:：]*([\s\S]*)$/i);
+  if (lpm) {
+    if (!lpm[1].trim()) { const cur = await env.SESSIONS.get("linepay"); return cur ? `目前的 LINE Pay 資料：\n${cur}` : "還沒設定 LINE Pay 資料喔\n請傳：\nLINE Pay資料\n收款人：○○○（要跟付款截圖上顯示的名字一樣）\nLINE ID 或收款連結：○○○"; }
+    await env.SESSIONS.put("linepay", lpm[1].trim().slice(0, 500));
+    return `好👌 LINE Pay 資料已更新，客人選 LINE Pay 時會看到：\n${lpm[1].trim()}\n\n⚠️ 自動對帳會比對截圖上的「收款人名稱」，請確認上面有寫收款人名字`;
+  }
+  const bm = t.match(/^(?:匯款資料|轉帳資料)[\s:：]*([\s\S]*)$/);
   if (bm) {
     if (!bm[1].trim()) {
       const cur = await env.SESSIONS.get("bank");
       return cur ? `目前的匯款資料：\n${cur}\n\n要修改請傳「匯款資料」加上新內容` : "還沒設定匯款資料喔\n請傳：\n匯款資料\n銀行：○○銀行（代碼 ○○○）\n帳號：○○○○\n戶名：○○○";
     }
     await env.SESSIONS.put("bank", bm[1].trim().slice(0, 500));
-    return `好👌 匯款資料已更新，客人下單後會看到：\n${bm[1].trim()}`;
+    return `好👌 轉帳資料已更新，客人選轉帳時會看到：\n${bm[1].trim()}\n\n⚠️ 自動對帳會比對截圖上的「轉入帳號」，請確認上面有完整帳號`;
   }
   const an = t.match(/^公告[\s:：]*([\s\S]*)$/);
   if (an) {
@@ -271,7 +366,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     const rows = [];
     for (const id of idx) {
       const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
-      if (o) rows.push(`${o.id}｜${o.lineName}｜NT$${o.total.toLocaleString()}｜${o.status}${o.paid5 ? "（" + o.paid5 + "）" : ""}`);
+      if (o) rows.push(`${o.id}｜${o.lineName}｜NT$${o.total.toLocaleString()}｜${o.form.pay || "轉帳"}｜${o.status}${o.paid5 ? "（" + o.paid5 + "）" : ""}`);
     }
     return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」「ZO… 已出貨 物流單號」可以改狀態並通知客人";
   }
@@ -283,6 +378,12 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     if (om[2]) {
       o.status = om[2] === "取消" ? "已取消" : om[2];
       if (om[3]) o.track = om[3].trim().slice(0, 60);
+      if (o.status === "已付款") {
+        o.paidAt = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+        o.payInfo = Object.assign({ method: o.form.pay || "轉帳", amount: o.total }, o.payInfo || {});
+        const mem = o.lines.find((l) => l.mem === "vip") ? "vip" : o.lines.find((l) => l.mem === "member") ? "member" : "";
+        if (mem) await env.SESSIONS.put("tier:" + o.uid, mem, { expirationTtl: 35 * 86400 });
+      }
       await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
       const msg = { 已付款: `💰 已收到您的款項囉 謝謝🙏\n訂單 ${id} 我們會盡快安排出貨～`,
         已出貨: `🚚 您的訂單 ${id} 已出貨囉！${o.track ? "\n物流單號：" + o.track : ""}\n收到貨有任何問題都可以跟我們說～`,
@@ -303,6 +404,7 @@ const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <style>
 :root{--bg:#eceef0;--card:#fff;--ink:#161616;--sub:#6b6f75;--line:#dcdfe3;--red:#9e1b1b;--silver:#c9ccd0}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 body{font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);padding-bottom:90px}
 header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12px 16px 10px}
 .brand{display:flex;align-items:center;justify-content:space-between}
@@ -366,6 +468,8 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 form{margin-top:12px;display:grid;gap:8px}
 label{font-size:12.5px;color:var(--sub)}
 input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit}
+.pays{display:flex;gap:8px}.pay{flex:1}.pay input{display:none}.pay span{display:block;text-align:center;border:1.5px solid var(--line);border-radius:10px;padding:11px;background:#fff;font-size:15px;color:var(--ink)}
+.pay input:checked+span{border-color:var(--ink);background:var(--ink);color:#fff}
 .go{border:0;border-radius:12px;background:var(--ink);color:#fff;font-weight:700;height:48px;font-size:16px;margin-top:6px}
 .go:disabled{opacity:.5}
 .done{text-align:center;padding:10px 4px}.done h3{font-size:20px;margin:8px 0}.done pre{white-space:pre-wrap;text-align:left;background:#fff;border-radius:12px;padding:12px;font-family:inherit;font-size:14px;line-height:1.7;margin-top:10px}
@@ -398,7 +502,7 @@ async function init(){
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
   $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span><br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
-  const CO=["吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
+  const CO=["會員方案","吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
   $("#chips").innerHTML='<button class="chip news" id="newsBtn">🆕 商品動態</button>'+brands.map(b=>'<button class="chip'+(b==="全部"?" on":"")+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
   $("#newsBtn").onclick=openNews;
@@ -422,7 +526,7 @@ function card(x){
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(ME.tier==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-function step(x){return x.box||(ME.tier==="none"?21:3)}
+function step(x){return x.mem?1:(x.box||(ME.tier==="none"?21:3))}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
   const part=VIEW.slice(shown,shown+40);shown+=part.length;
@@ -443,9 +547,9 @@ document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const 
 function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:cart[k],sub:price(x)*cart[k]}}).filter(Boolean)}
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
-function notes(L){const t=ME.tier,out=[],total=L.reduce((a,l)=>a+l.q,0);
-  L.forEach(({x,q})=>{if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(t==="none"&&q<21)out.push(x.n+"：非會員單款需 21 件起");else if(t!=="none"&&q<3)out.push(x.n+"：會員每款 3 件起");if(x.moq>1&&q<x.moq&&!x.box)out.push(x.n+"：貿易商最低訂購量 "+x.moq)});
-  if(t!=="none"&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
+function notes(L){const t=ME.tier,out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
+  L.forEach(({x,q})=>{if(x.mem)return;if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(t==="none"&&q<21)out.push(x.n+"：非會員單款需 21 件起");else if(t!=="none"&&q<3)out.push(x.n+"：會員每款 3 件起");if(x.moq>1&&q<x.moq&&!x.box)out.push(x.n+"：貿易商最低訂購量 "+x.moq)});
+  if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已截單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
@@ -464,14 +568,14 @@ async function openNews(){
     $("#panel").querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{brand="全部";$("#q").value=b.dataset.q;document.querySelectorAll(".chip[data-b]").forEach(c=>c.classList.toggle("on",c.dataset.b==="全部"));filter();$("#sheet").classList.remove("on");scrollTo(0,0)});
   }catch(e){$("#panel").querySelector(".empty").textContent="載入失敗，請稍後再試"}
 }
-const STC={"待付款":"s1","已回報匯款":"s2","已付款":"s2","已出貨":"s3","已取消":"s4"};
+const STC={"待付款":"s1","已回報匯款":"s2","待確認":"s1","已付款":"s2","已出貨":"s3","已取消":"s4"};
 async function openOrders(){
   $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
       '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+
       (o.paid5?'<div style="font-size:12.5px">匯款後五碼：'+esc(o.paid5)+'</div>':'')+(o.track?'<div style="font-size:12.5px">🚚 物流單號：<b>'+esc(o.track)+'</b></div>':'')+
-      (o.status==="待付款"&&r.bank?'<div class="warn" style="margin-top:8px">💳 匯款資料<br>'+esc(r.bank).replace(/\\n/g,"<br>")+'<br>匯款後請在 LINE 回覆「後五碼 12345」</div>':'')+
+      (o.status==="待付款"&&(o.pay==="LINE Pay"?r.linepay:r.bank)?'<div class="warn" style="margin-top:8px">'+(o.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'<br>'+esc(o.pay==="LINE Pay"?r.linepay:r.bank).replace(/\\n/g,"<br>")+'<br>付款後請在 LINE 傳'+(o.pay==="LINE Pay"?"「付款截圖」":"「後五碼」和「轉帳截圖」")+'</div>':'')+
       '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li><span>'+esc(l.n)+' ×'+l.q+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
       '<div style="font-size:12.5px;margin-top:6px;color:#444">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+'</div></details></div>').join("")
       :'<div class="empty">還沒有訂單喔</div>';
@@ -493,20 +597,21 @@ function renderCart(){
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
   '<label>寄送方式</label><select class="f" name="ship" required>'+["7-11 店到店","全家店到店","萊爾富店到店","宅配","其他"].map(s=>'<option'+(form.ship===s?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
   '<label>門市名稱／收件地址</label><input class="f" name="addr" required value="'+esc(form.addr||"")+'">'+
+  '<label>付款方式</label><div class="pays">'+["轉帳","LINE Pay"].map(p=>'<label class="pay"><input type="radio" name="pay" value="'+p+'"'+((form.pay||"轉帳")===p?" checked":"")+'><span>'+(p==="轉帳"?"🏦 銀行轉帳":"💚 LINE Pay")+'</span></label>').join("")+'</div>'+
   '<label>備註（選填）</label><textarea class="f" name="note" rows="2"></textarea>'+
   '<button class="go" id="go">送出訂單</button></form>';
   $("#cx").onclick=()=>$("#sheet").classList.remove("on");
   $("#of").onsubmit=submit;
 }
 async function submit(e){
-  e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));form=fd;try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr}))}catch(_){}
+  e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));form=fd;try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr,pay:fd.pay}))}catch(_){}
   const btn=$("#go");btn.disabled=true;btn.textContent="送出中…";
   try{
     const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,items:lines().map(l=>({k:l.x.k,q:l.q})),form:fd})}).then(r=>r.json());
     if(!r.ok)throw new Error(r.error||"送出失敗");
     cart={};save();bar();document.querySelectorAll(".qty").forEach(el=>{const c=el.closest(".card");if(c)el.outerHTML=qtyBox(byK(c.dataset.k),0)});
     $("#panel").innerHTML='<div class="done"><div style="font-size:44px">✅</div><h3>訂單已送出</h3><div>訂單編號 <b>'+esc(r.id)+'</b><br>共 '+r.qty+' 件　合計 <b>'+fmt(r.total)+'</b></div>'+
-    (r.bank?'<pre>💳 匯款資料\\n'+esc(r.bank)+'\\n\\n匯款後請回到 LINE 回覆「後五碼 12345」</pre>':'<pre>我們確認庫存後，會在 LINE 傳匯款資料給你喔～</pre>')+
+    (r.bank?'<pre>'+(fd.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'\\n'+esc(r.bank)+'\\n\\n'+(fd.pay==="LINE Pay"?"付款後請回到 LINE 傳「付款截圖」":"轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」")+'，系統會自動對帳</pre>':'<pre>我們確認庫存後，會在 LINE 傳付款資料給你喔～</pre>')+
     (r.notes.length?'<div class="warn">'+r.notes.map(esc).join("<br>")+'<br>客服會再跟你確認數量</div>':'')+
     '<p style="margin-top:12px;color:#6b6f75;font-size:13px">訂單明細也已經傳到你的 LINE 囉</p><button class="go" style="width:100%;margin-top:14px" onclick="sheet.classList.remove(\\'on\\')">繼續逛</button></div>';
   }catch(err){btn.disabled=false;btn.textContent="送出訂單";alert(err.message)}
