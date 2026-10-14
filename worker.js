@@ -9,11 +9,12 @@
 //   MODEL                      （Text，可不填）預設 claude-haiku-5-5
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
+import { handleShop, shopLink, shopOwnerCommand, handlePayment } from "./shop.js";
 const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261014-0730";
+const CATALOG_VERSION = "20261015-0100";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -29,8 +30,9 @@ const MENU = {
   "日本批發": askIp("🇯🇵", "日本批發", "三麗鷗、吉伊卡哇、史努比、角落生物；娃娃、吊飾、鑰匙圈"),
   "中國批發": askIp("🇨🇳", "中國批發", "IP 周邊、盲盒、生活雜貨、服飾"),
   "訂單查詢": `{name} 您好，請進入樂賣商城查詢訂單喔！\n🛍️ 樂賣商城：${SHOP}`,
-  "商品查詢": `請給我商品名稱或 JAN 碼供系統查詢喔！\n🛍️ 樂賣商城：${SHOP}`,
+  "商品查詢": `請給我商品名稱或 JAN 碼供系統查詢喔！\n🛒 線上訂購：{shop}`,
 };
+const ORDER_WORDS = ["訂購", "下單", "我要訂購", "我要下單", "線上訂購", "訂購網站", "訂購連結", "購物車"];
 const HUMAN_WORDS = ["真人客服", "真人", "找客服", "轉真人"];
 
 // ---------- 客服規則（給 Claude 的系統指令） ----------
@@ -55,7 +57,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 　最低訂購量：{最低訂購量}
 　截止：{截止}（有才寫）
 　下單：{下單網址}
-- 下單網址是「準備中」時，下單那一行寫「下單：樂賣商城 ${SHOP}」，不可自己編其他網址。
+- 下單網址是「準備中」時，下單那一行寫「下單：{訂購連結}」（系統會自動換成客人的專屬訂購網址），不可自己編其他網址。
 - 列完後說「請回覆編號告訴我您要哪一款，以及需要的數量～」，最後加「※ 日本批發、集單預購」和「💡 VIP 會員每件便宜 NT$30：${VIP}」。
 - 客人回覆編號（例如「2號」）時，從「上一次列給客人的商品」找到那一款，報出完整資料並詢問數量。
 
@@ -338,6 +340,16 @@ async function rememberName(env, uid) {
   }
   return name;
 }
+async function findUid(env, who) {
+  const target = who.replace(/[「」"']/g, "").trim();
+  let uid = await env.SESSIONS.get("n:" + target);
+  if (uid) return { uid, name: target };
+  const keys = (await env.SESSIONS.list({ prefix: "n:" })).keys.map((k) => k.name.slice(2));
+  const hits = keys.filter((k) => k.includes(target) || target.includes(k));
+  if (hits.length === 1) return { uid: await env.SESSIONS.get("n:" + hits[0]), name: hits[0] };
+  if (hits.length > 1) return { error: `有好幾位名字很像：${hits.join("、")}\n請打完整的名字喔` };
+  return { error: `找不到「${target}」這位客人😂 要對方先傳過訊息給官方帳號，我才認得喔` };
+}
 async function ownerCommand(env, text) {
   const t = text.replace(/\s+/g, " ").trim();
   if (/^(暫停名單|停止名單|名單)$/.test(t)) {
@@ -348,18 +360,23 @@ async function ownerCommand(env, text) {
     const names = list.map((u) => byUid[u] || "（未知名稱）");
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
+  const shopR = await shopOwnerCommand(env, text.trim());
+  if (shopR) return shopR;
+  // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
+  const tm = t.match(/^(.+?)\s*(VIP|vip|VIP會員|會員|一般會員|非會員|一般)$/);
+  if (tm) {
+    const r = await findUid(env, tm[1]);
+    if (r.error) return r.error;
+    const tier = /vip/i.test(tm[2]) ? "vip" : /^(會員|一般會員)$/.test(tm[2]) ? "member" : "none";
+    if (tier === "none") await env.SESSIONS.delete("tier:" + r.uid); else await env.SESSIONS.put("tier:" + r.uid, tier);
+    return `好👌 「${r.name}」設定為${{ vip: "VIP 會員", member: "一般會員（NT$100）", none: "非會員" }[tier]}，訂購網站會自動套用對應價格與規則`;
+  }
   const m = t.match(/^(.+?)\s*(停止回覆|開始回覆)$/) || t.match(/^(停止回覆|開始回覆)\s*(.+)$/);
   if (!m) return null;
   const [action, who] = m[2] === "停止回覆" || m[2] === "開始回覆" ? [m[2], m[1]] : [m[1], m[2]];
-  const target = who.replace(/[「」"']/g, "").trim();
-  let uid = await env.SESSIONS.get("n:" + target);
-  if (!uid) {
-    const keys = (await env.SESSIONS.list({ prefix: "n:" })).keys.map((k) => k.name.slice(2));
-    const hits = keys.filter((k) => k.includes(target) || target.includes(k));
-    if (hits.length === 1) uid = await env.SESSIONS.get("n:" + hits[0]);
-    else if (hits.length > 1) return `有好幾位名字很像：${hits.join("、")}\n請打完整的名字喔`;
-    else return `找不到「${target}」這位客人😂 要對方先傳過訊息給官方帳號，我才認得喔`;
-  }
+  const fr = await findUid(env, who);
+  if (fr.error) return fr.error;
+  const uid = fr.uid, target = fr.name;
   if (action === "停止回覆") { await setHandoff(env, uid); return `好👌 已停止回覆「${target}」，對方 15 分鐘沒傳訊息後我會自動恢復`; }
   await env.SESSIONS.delete("h:" + uid);
   return `好👌 「${target}」我開始回覆囉`;
@@ -385,6 +402,16 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && text && uid === (await env.SESSIONS.get("owner"))) {
     const r = await ownerCommand(env, text);
     if (r) return reply(env, ev.replyToken, [{ type: "text", text: r }]);
+  }
+  // 匯款後五碼回報
+  if (uid && env.SESSIONS && text) {
+    const pr = await handlePayment(env, { lineApi }, uid, text);
+    if (pr) return reply(env, ev.replyToken, [{ type: "text", text: pr }]);
+  }
+  // 要訂購連結
+  if (uid && ORDER_WORDS.includes(text)) {
+    await rememberName(env, uid);
+    return reply(env, ev.replyToken, [{ type: "text", text: `這是您的專屬訂購網站🛒\n${await shopLink(env, uid)}\n\n可以直接挑商品、填數量、送出訂單 價格會自動套用您的會員等級喔～\n（這個連結是您專用的 請不要轉傳給別人）` }]);
   }
   if (HUMAN_WORDS.some((w) => text === w || text.includes("真人客服"))) {
     await notifyOwner(env, uid, text);
@@ -418,7 +445,7 @@ async function handleEvent(env, ev) {
   }
 
   const name = uid ? await rememberName(env, uid) : "老闆";
-  if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name) }]);
+  if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name).replaceAll("{shop}", uid ? await shopLink(env, uid) : SHOP) }]);
 
   if (uid) lineApi(env, "/v2/bot/chat/loading/start", { chatId: uid, loadingSeconds: 20 }).catch(() => {});
 
@@ -472,7 +499,10 @@ async function handleEvent(env, ev) {
     }
     const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 3);
     const lineMsgs = shown.map((it) => ({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img }));
-    lineMsgs.push({ type: "text", text: (out.reply || "我幫您轉給專人確認喔！").slice(0, 4900) });
+    const myLink = uid ? await shopLink(env, uid) : SHOP;
+    let replyText = (out.reply || "我幫您轉給專人確認喔！").replaceAll("{訂購連結}", myLink).replaceAll("樂賣商城 " + SHOP, myLink);
+    if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
+    lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     await reply(env, ev.replyToken, lineMsgs);
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
     const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
@@ -527,6 +557,7 @@ export default {
         SESSIONS_KV: env.SESSIONS ? "bound" : "not bound",
       });
     }
+    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi });
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");
