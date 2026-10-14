@@ -9,6 +9,7 @@
 //   MODEL                      （Text，可不填）預設 claude-haiku-5-5
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
+import { handleAdmin, adminLink } from "./admin.js";
 import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
@@ -389,6 +390,7 @@ async function ownerCommand(env, text) {
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
   if (/^#?更新選單$/.test(text.trim())) return await setupRichMenu(env);
+  if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
   // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
@@ -615,6 +617,7 @@ export default {
         SESSIONS_KV: env.SESSIONS ? "bound" : "not bound",
       });
     }
+    if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi });
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();

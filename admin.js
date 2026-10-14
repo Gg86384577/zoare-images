@@ -1,0 +1,181 @@
+// ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
+import { TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE } from "./shop.js";
+
+export async function adminLink(env, uid) {
+  return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
+}
+async function isOwner(env, t) {
+  const [uid, sig] = String(t || "").split(".");
+  if (!uid || !sig) return false;
+  const owner = await env.SESSIONS.get("owner");
+  return uid === owner && sig === (await sign(env, "admin:" + uid));
+}
+const tw = () => new Date(Date.now() + 8 * 3600e3);
+
+async function buildData(env) {
+  const orders = await allOrders(env, 200);
+  const today = tw().toISOString().slice(0, 10), month = today.slice(0, 7);
+  const wk = new Date(tw()); wk.setUTCDate(wk.getUTCDate() - ((wk.getUTCDay() + 6) % 7)); const week = wk.toISOString().slice(0, 10);
+  const Z = () => ({ n: 0, rev: 0, profit: 0, pcs: 0 });
+  const st = { today: Z(), week: Z(), month: Z(), all: Z() };
+  const daily = {}, items = {}, cust = {};
+  for (let i = 13; i >= 0; i--) { const d = new Date(tw()); d.setUTCDate(d.getUTCDate() - i); daily[d.toISOString().slice(0, 10)] = 0; }
+  const counts = { 待付款: 0, 已回報匯款: 0, 待確認: 0, 已付款: 0, 已出貨: 0, 已取消: 0 };
+  for (const o of orders) {
+    counts[o.status] = (counts[o.status] || 0) + 1;
+    const c = (cust[o.uid] = cust[o.uid] || { uid: o.uid, name: o.lineName, orders: 0, spent: 0, last: o.at });
+    c.orders++;
+    if (o.status === "已付款" || o.status === "已出貨") {
+      c.spent += o.total;
+      const d = (o.paidAt || o.at).slice(0, 10);
+      const profit = o.lines.reduce((a, l) => a + (l.price - lineCost(o, l)) * l.q, 0), pcs = o.lines.reduce((a, l) => a + l.q, 0);
+      const add = (x) => { x.n++; x.rev += o.total; x.profit += profit; x.pcs += pcs; };
+      add(st.all); if (d.startsWith(month)) add(st.month); if (d >= week) add(st.week); if (d === today) add(st.today);
+      if (d in daily) daily[d] += o.total;
+      if (d.startsWith(month)) for (const l of o.lines) { const it = (items[l.n] = items[l.n] || { n: l.n, q: 0, amt: 0 }); it.q += l.q; it.amt += l.sub; }
+    }
+  }
+  // 客人名單：下過單的＋傳過訊息的
+  const names = (await env.SESSIONS.list({ prefix: "n:" })).keys;
+  for (const k of names.slice(0, 300)) {
+    const uid = await env.SESSIONS.get(k.name);
+    if (uid && !cust[uid]) cust[uid] = { uid, name: k.name.slice(2), orders: 0, spent: 0, last: "" };
+  }
+  const owner = await env.SESSIONS.get("owner");
+  const custList = [];
+  for (const c of Object.values(cust)) { if (c.uid === owner) continue; c.tier = (await env.SESSIONS.get("tier:" + c.uid)) || "none"; custList.push(c); }
+  custList.sort((a, b) => b.spent - a.spent || (b.last || "").localeCompare(a.last || ""));
+  return {
+    stats: st, daily, counts,
+    top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
+    orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
+      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(),
+      lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan })), form: o.form, notes: o.notes || [] })),
+    customers: custList,
+    settings: { bank: (await env.SESSIONS.get("bank")) || "", linepay: (await env.SESSIONS.get("linepay")) || "", news: JSON.parse((await env.SESSIONS.get("news")) || "[]") },
+  };
+}
+
+export async function handleAdmin(request, env, ctx, deps) {
+  const url = new URL(request.url);
+  if (url.pathname === "/admin" || url.pathname === "/admin/") return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  const t = request.headers.get("x-admin") || url.searchParams.get("t");
+  if (!(await isOwner(env, t))) return Response.json({ ok: false, error: "沒有權限，請在 LINE 傳「後台」重新取得連結" }, { status: 401 });
+  if (url.pathname === "/admin/api/data") return Response.json({ ok: true, ...(await buildData(env)) });
+  if (request.method === "POST" && url.pathname === "/admin/api/cmd") {
+    const { text } = await request.json();
+    const r = await shopOwnerCommand(env, String(text || "").slice(0, 2000), deps);
+    return Response.json({ ok: !!r, result: Array.isArray(r) ? r.join("\n\n") : r || "指令沒有執行" });
+  }
+  if (request.method === "POST" && url.pathname === "/admin/api/tier") {
+    const { uid, tier } = await request.json();
+    if (!/^U[0-9a-f]{32}$/.test(uid || "")) return Response.json({ ok: false });
+    if (tier === "vip" || tier === "member") await env.SESSIONS.put("tier:" + uid, tier); else await env.SESSIONS.delete("tier:" + uid);
+    return Response.json({ ok: true, result: `已設定為 ${TIER_NAME[tier] || "非會員"}` });
+  }
+  return new Response("Not found", { status: 404 });
+}
+
+const PAGE = String.raw`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ZOARÉ 商家後台</title>
+<style>
+:root{--bg:#eceef0;--ink:#161616;--sub:#6b6f75;--line:#dcdfe3;--red:#9e1b1b;--green:#1f6b33}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}[hidden]{display:none!important}
+body{font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink);padding-bottom:84px}
+header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-family:Georgia,serif;letter-spacing:5px;font-size:20px;color:#d5d8dc}.logo small{font-family:inherit;letter-spacing:1px;font-size:12px;color:#9a9da1;margin-left:8px}
+.rf{border:0;background:#2a2c30;color:#fff;border-radius:10px;padding:7px 12px;font-size:13px}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#161616;display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:#8d9096;padding:10px 0 12px;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button b{font-size:19px;font-weight:400}nav button.on{color:#fff}
+main{padding:12px;max-width:900px;margin:0 auto}
+.k{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}@media(min-width:640px){.k{grid-template-columns:repeat(4,1fr)}}
+.kc{background:#fff;border-radius:14px;padding:12px}.kc small{color:var(--sub);font-size:12px}.kc b{display:block;font-size:22px;margin-top:2px}.kc i{font-style:normal;font-size:12px;color:var(--green)}
+.card{background:#fff;border-radius:14px;padding:14px;margin-top:12px}.card h3{font-size:15px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font-size:13px;color:var(--ink)}.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.bars{display:flex;align-items:flex-end;gap:4px;height:120px}.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}.bar div{width:100%;background:#2a2c30;border-radius:4px 4px 0 0;min-height:2px}.bar span{font-size:9px;color:var(--sub);margin-top:3px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #f0f1f2;font-size:13.5px}.row:first-of-type{border-top:0}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font-size:13px}.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+input.f,textarea.f,select.f{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:16px;font-family:inherit;background:#fff;color:var(--ink)}
+.o{background:#fff;border-radius:14px;padding:12px 14px;margin-top:10px}
+.o .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}.o .hd b{font-size:15px}
+.st{border-radius:10px;padding:2px 9px;font-size:12px;font-weight:600;background:#eee;white-space:nowrap}
+.s-待付款,.s-待確認{background:#fff1d6;color:#8a5a00}.s-已回報匯款,.s-已付款{background:#e3effc;color:#1d4f8f}.s-已出貨{background:#e2f4e6;color:#1f6b33}.s-已取消{background:#eee;color:#888}
+.meta{font-size:12.5px;color:var(--sub);margin-top:3px}.sit{font-size:13px;margin-top:6px}.memo{font-size:13px;background:#fff9e6;border-radius:8px;padding:6px 9px;margin-top:6px}
+.diff{font-size:13px;color:var(--red);margin-top:4px}
+.it{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed #eee;font-size:13px}.it .n{flex:1}.it input{width:64px;padding:6px;font-size:15px;border:1px solid var(--line);border-radius:8px;text-align:center}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.btns button,.btn{border:0;border-radius:10px;padding:9px 12px;font-size:13.5px;background:#f0f1f2;color:var(--ink)}
+.btn.dark,.btns .dark{background:var(--ink);color:#fff}.btns .del{background:#fff0f0;color:var(--red)}
+details summary{font-size:13px;color:var(--sub);margin-top:8px}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#161616;color:#fff;padding:10px 16px;border-radius:12px;font-size:13.5px;z-index:20;max-width:90%;white-space:pre-wrap}
+.cu{display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:12px 14px;margin-top:8px}.cu .n{flex:1}.cu .n small{display:block;color:var(--sub);font-size:12px}.cu select{width:auto;padding:6px 8px;font-size:14px}
+.err{padding:60px 20px;text-align:center;color:var(--sub);line-height:1.8}
+label.l{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 4px}
+</style></head><body>
+<header><div class="logo">ZOARÉ<small>商家後台</small></div><button class="rf" id="rf">↻ 更新</button></header>
+<main id="m"><div class="err">載入中…</div></main>
+<nav id="nav"><button data-v="home" class="on"><b>◫</b>總覽</button><button data-v="orders"><b>☰</b>訂單</button><button data-v="cust"><b>☺</b>客人</button><button data-v="sales"><b>↗</b>銷售</button><button data-v="set"><b>⚙</b>設定</button></nav>
+<script>
+const T=new URLSearchParams(location.search).get("t")||"";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=n=>"NT$"+Number(n||0).toLocaleString();
+let D=null,V="home",OF="進行中",OQ="",SP="month";
+async function api(p,body){const r=await fetch(p,{method:body?"POST":"GET",headers:{"x-admin":T,"content-type":"application/json"},body:body?JSON.stringify(body):undefined});return r.json()}
+function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
+async function load(){const r=await api("/admin/api/data");if(!r.ok){$("#m").innerHTML='<div class="err">'+esc(r.error)+'</div>';$("#nav").hidden=true;return}D=r;render()}
+async function cmd(text,reload=true){const r=await api("/admin/api/cmd",{text});toast(r.result||"完成");if(reload)await load();return r}
+$("#rf").onclick=load;
+$("#nav").onclick=e=>{const b=e.target.closest("button");if(!b)return;V=b.dataset.v;document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));render();scrollTo(0,0)};
+function render(){({home,orders,cust,sales,set})[V]()}
+function kc(t,v,s){return '<div class="kc"><small>'+t+'</small><b>'+v+'</b>'+(s?'<i>'+s+'</i>':'')+'</div>'}
+function home(){const s=D.stats,c=D.counts;const max=Math.max(1,...Object.values(D.daily));
+  $("#m").innerHTML='<div class="k">'+kc("今日銷售額",fmt(s.today.rev),"淨利 "+fmt(s.today.profit))+kc("本月銷售額",fmt(s.month.rev),"淨利 "+fmt(s.month.profit))+kc("本月訂單",s.month.n+" 筆",s.month.pcs+" 件")+kc("待處理",(c["待付款"]+c["已回報匯款"]+c["待確認"]+c["已付款"])+" 筆","待出貨 "+c["已付款"]+" 筆")+'</div>'+
+  '<div class="card"><h3>近 14 天銷售額</h3><div class="bars">'+Object.entries(D.daily).map(([d,v])=>'<div class="bar" title="'+d+' '+fmt(v)+'"><div style="height:'+Math.round(v/max*100)+'%"></div><span>'+d.slice(8)+'</span></div>').join("")+'</div></div>'+
+  '<div class="card"><h3>需要處理</h3>'+[["待確認","付款截圖對不上，要人工確認"],["已付款","已付款，等出貨"],["待付款","等客人付款"],["已回報匯款","客人回報後五碼，等截圖"]].map(([k,t])=>'<div class="row" onclick="goOrders(\''+k+'\')"><span>'+t+'</span><b>'+(c[k]||0)+' 筆 ›</b></div>').join("")+'</div>'}
+window.goOrders=f=>{OF=f;V="orders";document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x.dataset.v==="orders"));render()};
+const FILTERS=["進行中","待付款","待確認","已付款","已出貨","已取消","全部"];
+function orders(){
+  const list=D.orders.filter(o=>(OF==="全部"||(OF==="進行中"?["待付款","已回報匯款","待確認","已付款"].includes(o.status):o.status===OF))&&(!OQ||(o.id+o.name+o.form.name+o.form.phone+o.lines.map(l=>l.n).join("")).toLowerCase().includes(OQ.toLowerCase())));
+  $("#m").innerHTML='<input class="f" id="oq" placeholder="搜尋客人、訂單編號、商品" value="'+esc(OQ)+'"><div class="chips" style="margin-top:8px">'+FILTERS.map(f=>'<button class="chip'+(f===OF?" on":"")+'" data-f="'+f+'">'+f+'</button>').join("")+'</div>'+
+  '<div class="meta" style="margin-top:8px">共 '+list.length+' 筆　'+fmt(list.reduce((a,o)=>a+o.total,0))+'</div>'+(list.map(ocard).join("")||'<div class="err">沒有訂單</div>');
+  $("#oq").oninput=e=>{OQ=e.target.value;clearTimeout(window._t);window._t=setTimeout(()=>{orders();const i=$("#oq");i.focus();i.setSelectionRange(i.value.length,i.value.length)},400)};
+  document.querySelectorAll(".chip[data-f]").forEach(b=>b.onclick=()=>{OF=b.dataset.f;orders()});
+}
+function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'+esc(o.name)+'</b><span class="st s-'+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
+  '<div class="meta">'+o.id+'｜'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.pay)+'｜'+esc(o.tier)+'價</div><div style="font-size:18px;font-weight:700;margin-top:4px">'+fmt(o.total)+'</div>'+
+  '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff">'+esc(o.diff)+'</div>':'')+
+  '<details><summary>品項・收件資料・修改</summary>'+o.lines.map((l,i)=>'<div class="it"><span class="n">'+esc(l.n)+'<br><small style="color:#888">'+fmt(l.price)+' × '+l.q+' = '+fmt(l.sub)+'</small></span><input type="number" min="0" value="'+l.q+'" data-i="'+i+'"><button class="btn" onclick="setQ(\''+o.id+'\','+i+',this)">改</button></div>').join("")+
+  '<div class="meta" style="margin-top:8px;color:#333">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+(o.paid5?'<br>後五碼：'+esc(o.paid5):'')+(o.track?'<br>物流單號：'+esc(o.track):'')+'</div>'+
+  (o.notes.length?'<div class="meta" style="color:#8c2a1f;margin-top:6px">'+o.notes.map(esc).join("<br>")+'</div>':'')+
+  '<div class="btns"><button onclick="addItem(\''+o.id+'\')">＋ 加商品</button><button onclick="memo(\''+o.id+'\')">📝 備註</button><button class="del" onclick="delO(\''+o.id+'\')">🗑 刪除訂單</button></div></details>'+
+  '<div class="btns">'+(["待付款","已回報匯款","待確認"].includes(o.status)?'<button class="dark" onclick="st(\''+o.id+'\',\'已付款\')">✓ 確認已付款</button>':'')+(o.status==="已付款"?'<button class="dark" onclick="ship(\''+o.id+'\')">🚚 出貨</button>':'')+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="st(\''+o.id+'\',\'取消\')">取消訂單</button>':'')+'</div></div>'}
+const ord=id=>D.orders.find(o=>o.id===id);
+window.st=async(id,s)=>{if(s==="取消"&&!confirm("確定取消 "+id+"？會通知客人"))return;await cmd(id+" "+s)};
+window.ship=async id=>{const t=prompt("物流單號（可空白）","");if(t===null)return;await cmd(id+" 已出貨"+(t?" "+t:""))};
+window.memo=async id=>{const t=prompt("備註（空白＝清除）",ord(id).memo||"");if(t===null)return;await cmd(id+" 備註 "+t)};
+window.delO=async id=>{if(!confirm("確定刪除訂單 "+id+"？刪除後無法復原"))return;await cmd("刪除 "+id)};
+window.setQ=async(id,i,btn)=>{const q=btn.previousElementSibling.value;const l=ord(id).lines[i];await cmd(id+" "+l.n+" 改 "+q)};
+window.addItem=async id=>{const k=prompt("輸入 JAN 碼或商品名稱");if(!k)return;const q=prompt("數量","1");if(!q)return;await cmd(id+" 加 "+k+" "+q)};
+function cust(){const L=D.customers;
+  $("#m").innerHTML='<input class="f" id="cq" placeholder="搜尋客人">'+'<div id="cl"></div>';
+  const draw=q=>{$("#cl").innerHTML=L.filter(c=>!q||c.name.includes(q)).slice(0,200).map(c=>'<div class="cu"><div class="n"><b>'+esc(c.name)+'</b><small>'+c.orders+' 筆訂單｜消費 '+fmt(c.spent)+(c.last?'｜最近 '+esc(c.last.slice(0,10)):'')+'</small></div><select data-u="'+c.uid+'">'+[["none","非會員"],["member","一般會員"],["vip","VIP 會員"]].map(([v,t])=>'<option value="'+v+'"'+(c.tier===v?" selected":"")+'>'+t+'</option>').join("")+'</select></div>').join("")||'<div class="err">還沒有客人</div>';
+    document.querySelectorAll("select[data-u]").forEach(s=>s.onchange=async()=>{const r=await api("/admin/api/tier",{uid:s.dataset.u,tier:s.value});toast(r.result||"完成");const c=L.find(x=>x.uid===s.dataset.u);if(c)c.tier=s.value})};
+  draw("");$("#cq").oninput=e=>draw(e.target.value.trim())}
+function sales(){const P={today:"今天",week:"本週",month:"本月",all:"累計"};const s=D.stats[SP];
+  $("#m").innerHTML='<div class="seg">'+Object.entries(P).map(([k,t])=>'<button class="'+(k===SP?"on":"")+'" data-p="'+k+'">'+t+'</button>').join("")+'</div>'+
+  '<div class="k" style="margin-top:12px">'+kc("銷售額",fmt(s.rev))+kc("淨利",fmt(s.profit),s.rev?"毛利率 "+Math.round(s.profit/s.rev*100)+"%":"")+kc("已付款訂單",s.n+" 筆")+kc("銷售件數",s.pcs+" 件")+'</div>'+
+  '<div class="card"><h3>本月品項銷量</h3>'+(D.top.map((t,i)=>'<div class="row"><span>'+(i+1)+'. '+esc(t.n)+'</span><b style="white-space:nowrap">×'+t.q+'　'+fmt(t.amt)+'</b></div>').join("")||'<div class="meta">還沒有銷售</div>')+'</div>'+
+  '<p class="meta" style="margin-top:10px">淨利＝售價－成本（報價公式），未扣運費、匯款手續費；會員費全額算淨利。只統計已付款／已出貨的線上訂單。</p>';
+  document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{SP=b.dataset.p;sales()})}
+function set(){const S=D.settings;
+  $("#m").innerHTML='<div class="card"><h3>🏦 轉帳資料</h3><textarea class="f" id="bank" rows="4">'+esc(S.bank)+'</textarea><button class="btn dark" style="margin-top:8px" id="sb">儲存</button></div>'+
+  '<div class="card"><h3>💚 LINE Pay 資料</h3><textarea class="f" id="lp" rows="3">'+esc(S.linepay)+'</textarea><button class="btn dark" style="margin-top:8px" id="sl">儲存</button></div>'+
+  '<div class="card"><h3>📢 公告（客人點「商品動態」會看到）</h3>'+(S.news.map((n,i)=>'<div class="row"><span>'+esc(n.d)+'　'+esc(n.t)+'</span><button class="btn" onclick="delNews('+(i+1)+')">刪</button></div>').join("")||'<div class="meta">目前沒有公告</div>')+
+  '<textarea class="f" id="nw" rows="2" placeholder="新增公告內容" style="margin-top:8px"></textarea><button class="btn dark" style="margin-top:8px" id="sn">發布公告</button></div>';
+  $("#sb").onclick=()=>cmd("轉帳資料\n"+$("#bank").value);$("#sl").onclick=()=>cmd("LINE Pay資料\n"+$("#lp").value);
+  $("#sn").onclick=()=>{const v=$("#nw").value.trim();if(v)cmd("公告 "+v)}}
+window.delNews=n=>{if(confirm("刪除這則公告？"))cmd("刪除公告 "+n)};
+if(!T)$("#m").innerHTML='<div class="err">請在 LINE 傳「後台」取得專屬連結</div>';else load();
+</script></body></html>`;

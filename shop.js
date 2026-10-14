@@ -896,3 +896,6 @@ async function ownerOrders(env, t, deps) {
   }
   return `看不懂這個訂單指令😂 可以用：\n・${id} 備註 內容\n・${id} 小八 改 24\n・${id} 刪 小八\n・${id} 加 JAN碼 3\n・${id} 地址 新地址\n・刪除 ${id}\n・${id} 已付款／已出貨／取消`;
 }
+
+// 給商家後台用
+export { TIER_NAME, sign, allOrders, saveOrder, deleteOrder, lineCost, situation, OPEN, payDiff, slim };
