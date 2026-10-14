@@ -46,6 +46,14 @@ function catsOf(it) {
   const out = CATS.concat(WEB_CATS).filter((c) => c.w.some((w) => h.includes(w.toLowerCase()))).map((c) => c.k);
   return out.length ? out : ["其他"];
 }
+// 結單日顯示：有日期 → 「結單 10/31 23:59」；文字規則（每週日…）照寫；都沒有 → 長期接單
+export function dlLabel(it) {
+  const d = it.dlx || it.dl || "";
+  const m = d.match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}:\d{2}))?/);
+  if (m) return `結單日 ${+m[2]}/${+m[3]}${m[4] && m[4] !== "23:59" ? " " + m[4] : ""}`;
+  if (d) return "結單日 " + d.split("（")[0];
+  return "結單日 長期接單";
+}
 function slim(items, isExpired) {
   if (SLIM && SLIM_SRC === items) return SLIM;
   const out = [];
@@ -53,7 +61,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
+      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
   }
   out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
@@ -105,7 +113,7 @@ export async function newsText(env, items, link) {
   const n = await buildNews(env, items);
   const parts = [];
   if (n.ann.length) parts.push("📢 最新公告\n" + n.ann.slice(0, 3).map((a) => `・${a.d}　${a.t}`).join("\n"));
-  if (n.dlGroups.length) parts.push("⏰ 即將截單\n" + n.dlGroups.slice(0, 5).map((g) => `・${g.b}（${g.items.length} 款）截單 ${g.dl.split("（")[0]}`).join("\n"));
+  if (n.dlGroups.length) parts.push("⏰ 即將結單\n" + n.dlGroups.slice(0, 5).map((g) => `・${g.b}（${g.items.length} 款）結單日 ${g.dl.split("（")[0]}`).join("\n"));
   if (n.newGroups.length) parts.push("🆕 最新上架\n" + n.newGroups.slice(0, 6).map((g) => `・${g.ad.slice(5).replace("-", "/")}　${g.b}　${g.items.length} 款`).join("\n"));
   if (n.restockCount) parts.push(`🔁 再販商品 ${n.restockCount} 款`);
   if (!parts.length) parts.push("目前沒有新的商品動態喔～");
@@ -532,9 +540,10 @@ function filter(){
   $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
   const cq=document.getElementById("clrq");if(cq)cq.onclick=e=>{e.preventDefault();$("#q").value="";filter()};
 }
+function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m)return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"");return"結單日 "+(d?d.split("（")[0]:"長期接單")}
 function card(x){
   const p=price(x),q=cart[x.k]||0;
-  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):"",x.dl?"截單 "+x.dl.split("（")[0]:"",x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
+  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):"",x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(ME.tier==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
@@ -564,14 +573,14 @@ function notes(L){const t=ME.tier,out=[],total=L.filter(l=>!l.x.mem).reduce((a,l
   if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
-function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已截單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
+function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
 async function openNews(){
   $("#panel").innerHTML='<h2>商品動態<button class="x" id="nx">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#nx").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/news").then(r=>r.json());
     const th=ks=>'<div class="th">'+ks.map(k=>byK(k)).filter(x=>x&&x.img).map(x=>'<img loading="lazy" src="'+esc(x.img)+'">').join("")+'</div>';
     let h='';
     if(r.ann.length)h+='<div class="nsec"><h3>📢 最新公告</h3>'+r.ann.map(a=>'<div class="ann"><small>'+esc(a.d)+'</small>'+esc(a.t)+'</div>').join("")+'</div>';
-    if(r.dl.length)h+='<div class="nsec"><h3>⏰ 即將截單</h3>'+r.dl.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'　'+g.n+' 款</span><small class="cd">'+esc(left(g.dl))+'</small></div><div style="font-size:12px;color:#6b6f75">截單 '+esc(g.dl.split("（")[0])+'</div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
+    if(r.dl.length)h+='<div class="nsec"><h3>⏰ 即將結單</h3>'+r.dl.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'　'+g.n+' 款</span><small class="cd">'+esc(left(g.dl))+'</small></div><div style="font-size:12px;color:#6b6f75">結單日 '+esc(g.dl.split("（")[0])+'</div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
     if(r.fresh.length)h+='<div class="nsec"><h3>🆕 最新上架</h3>'+r.fresh.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'</span><small>'+esc(g.ad.slice(5).replace("-","/"))+' 上架・'+g.n+' 款</small></div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
     if(r.restockCount)h+='<div class="nsec"><h3>🔁 再販商品</h3><div class="ng"><div class="t"><span>再販預定 '+r.restockCount+' 款</span></div><button data-q="再販">去看看</button></div></div>';
     $("#panel").innerHTML='<h2>商品動態<button class="x" id="nx">×</button></h2>'+(h||'<div class="empty">目前沒有新的動態喔</div>');
@@ -667,13 +676,14 @@ function pickItems(items, words, isExpired, catWords) {
 function bubble(it, tier, link) {
   const price = tier === "vip" ? `VIP NT$${it.v}` : `NT$${it.g}`;
   const sub = tier === "vip" ? `一般 NT$${it.g}` : `VIP 會員 NT$${it.v}`;
-  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : Number(it.moq) > 1 ? `最低訂購 ${it.moq} 個` : "", it.dl ? `截單 ${it.dl.split("（")[0]}` : "", /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
+  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : Number(it.moq) > 1 ? `最低訂購 ${it.moq} 個` : "", /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
   const body = [
     { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
     { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },
     { type: "text", text: price + (packN(it) ? " ／個" : ""), size: "lg", weight: "bold", color: "#9E1B1B", margin: "sm" },
     { type: "text", text: sub, size: "xxs", color: "#888888" },
   ];
+  body.push({ type: "text", text: "⏰ " + dlLabel(it), size: "xs", weight: "bold", color: "#161616", margin: "sm" });
   if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
   return { type: "bubble", size: "kilo",
     hero: { type: "image", url: it.th || it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },
@@ -809,6 +819,17 @@ async function deleteOrder(env, id) {
   const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]").filter((x) => x !== id);
   await env.SESSIONS.put("orders", JSON.stringify(idx));
 }
+// 目前有效會員人數（tier:<uid>）
+async function memberCounts(env) {
+  const c = { vip: 0, member: 0 };
+  let cursor;
+  do {
+    const r = await env.SESSIONS.list({ prefix: "tier:", cursor });
+    for (const k of r.keys) { const v = await env.SESSIONS.get(k.name); if (c[v] != null) c[v]++; }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  return c;
+}
 async function salesReport(env, range) {
   const now = nowTW(), today = now.toISOString().slice(0, 10);
   let from = today.slice(0, 7) + "-01", label = `${Number(today.slice(5, 7))} 月`;
@@ -819,6 +840,7 @@ async function salesReport(env, range) {
   const to = label.endsWith("月") && label !== `${Number(today.slice(5, 7))} 月` ? from.slice(0, 7) : null;
   const all = await allOrders(env);
   const items = {}; let rev = 0, profit = 0, n = 0, pcs = 0, pend = 0, pendAmt = 0;
+  const mem = { vip: { q: 0, amt: 0 }, member: { q: 0, amt: 0 } };
   for (const o of all) {
     const d = (o.paidAt || o.at).slice(0, 10);
     const inRange = to ? d.startsWith(to) : d >= from;
@@ -826,13 +848,17 @@ async function salesReport(env, range) {
     if (o.status === "已付款" || o.status === "已出貨") {
       n++; rev += o.total;
       for (const l of o.lines) {
-        const c = lineCost(o, l); profit += (l.price - c) * l.q; pcs += l.q;
+        const c = lineCost(o, l); profit += (l.price - c) * l.q;
+        if (l.mem && mem[l.mem]) { mem[l.mem].q += l.q; mem[l.mem].amt += l.sub; continue; }
+        pcs += l.q;
         const k = l.n; items[k] = items[k] || { q: 0, amt: 0 }; items[k].q += l.q; items[k].amt += l.sub;
       }
     } else if (OPEN.includes(o.status)) { pend++; pendAmt += o.total; }
   }
+  const act = await memberCounts(env);
+  const memTxt = `\n\n👑 會員方案\nVIP NT$1,000：賣出 ${mem.vip.q} 份 NT$${mem.vip.amt.toLocaleString()}\n一般 NT$100：賣出 ${mem.member.q} 份 NT$${mem.member.amt.toLocaleString()}\n目前有效會員：VIP ${act.vip} 位｜一般 ${act.member} 位`;
   const top = Object.entries(items).sort((a, b) => b[1].q - a[1].q).slice(0, 15).map(([k, v], i) => `${i + 1}. ${k}　×${v.q}　NT$${v.amt.toLocaleString()}`);
-  return `📈 銷售狀況｜${label}\n\n已付款訂單：${n} 筆\n銷售件數：${pcs} 件（${Object.keys(items).length} 個品項）\n銷售額：NT$${rev.toLocaleString()}\n淨利：NT$${profit.toLocaleString()}${rev ? `（毛利率 ${Math.round((profit / rev) * 100)}%）` : ""}\n\n🏆 品項銷量${top.length ? "\n" + top.join("\n") : "：還沒有"}\n\n⏳ 未付款訂單：${pend} 筆 NT$${pendAmt.toLocaleString()}（不算進銷售額）\n\n※ 淨利＝售價－成本（成本用報價公式算），還沒扣運費、匯款手續費等其他支出；會員費全額算淨利\n可以傳「銷售狀況 今天／本週／9月／累計」`;
+  return `📈 銷售狀況｜${label}\n\n已付款訂單：${n} 筆\n銷售件數：${pcs} 件（${Object.keys(items).length} 個品項）\n銷售額：NT$${rev.toLocaleString()}\n淨利：NT$${profit.toLocaleString()}${rev ? `（毛利率 ${Math.round((profit / rev) * 100)}%）` : ""}\n\n🏆 品項銷量${top.length ? "\n" + top.join("\n") : "：還沒有"}${memTxt}\n\n⏳ 未付款訂單：${pend} 筆 NT$${pendAmt.toLocaleString()}（不算進銷售額）\n\n※ 淨利＝售價－成本（成本用報價公式算），還沒扣運費、匯款手續費等其他支出；會員費全額算淨利\n可以傳「銷售狀況 今天／本週／9月／累計」`;
 }
 
 async function ownerOrders(env, t, deps) {
@@ -945,4 +971,38 @@ export async function productCards(env, uid, items, altText) {
   const bubbles = items.filter((it) => it && it.img).slice(0, 12).map((it) => bubble(it, tier, link));
   if (!bubbles.length) return null;
   return { type: "flex", altText: (altText || "商品報價").slice(0, 300), contents: { type: "carousel", contents: bubbles } };
+}
+
+// ---------- 會員方案卡片（客人打 會員／VIP／$1000／$100…） ----------
+const RAW_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/";
+function memBubble(title, price, perks, img, btn, uri, dark) {
+  const fg = dark ? "#FFFFFF" : "#161616", sub = dark ? "#C9CCD0" : "#6B6F75";
+  return { type: "bubble", size: "kilo",
+    hero: { type: "image", url: img, size: "full", aspectRatio: "1:1", aspectMode: "cover" },
+    body: { type: "box", layout: "vertical", spacing: "sm", backgroundColor: dark ? "#161616" : "#FFFFFF", contents: [
+      { type: "text", text: title, weight: "bold", size: "lg", color: fg },
+      { type: "text", text: price, weight: "bold", size: "xl", color: dark ? "#E9C46A" : "#9E1B1B" },
+      ...perks.map((p) => ({ type: "text", text: "✓ " + p, size: "xs", color: sub, wrap: true })) ] },
+    footer: { type: "box", layout: "vertical", backgroundColor: dark ? "#161616" : "#FFFFFF", contents: [{ type: "button", style: "primary", color: dark ? "#9E1B1B" : "#161616", height: "sm", action: { type: "uri", label: btn, uri } }] } };
+}
+export async function membershipCards(env, uid) {
+  const link = (await shopLink(env, uid)) + "&q=" + encodeURIComponent("會員方案");
+  const tier = await getTier(env, uid);
+  const bubbles = [
+    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "不同款混批 21 件，每款 3 件起", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
+    memBubble("一般會員", "NT$100／月", ["免國際運費", "不同款混批 21 件，每款 3 件起", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
+  ];
+  const head = tier === "vip" ? "您已經是 VIP 會員囉👑 要續約可以點下面直接下單～" : tier === "member" ? "您目前是一般會員，升級 VIP 運費全免、每件再便宜 NT$30👇" : "ZOARÉ 批發會員方案👇 付款完成會自動開通";
+  return [{ type: "flex", altText: head, contents: { type: "carousel", contents: bubbles } }];
+}
+
+// ---------- 新朋友加入的歡迎訊息 ----------
+export async function welcomeMessages(env, uid, name) {
+  const link = await shopLink(env, uid);
+  const hi = name ? `${name} 您好～` : "您好～";
+  const text = `${hi}歡迎加入 ZOARÉ 日本角色批發🎉\n吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購批發價直送台灣\n\n🛒 線上商城（您的專屬連結，價格會自動套用會員價）\n${link}\n\n💬 在這裡直接查報價\n・打角色或品牌：「吉伊卡哇」「酷洛米」\n・加上細項更精準：「吉伊卡哇 相框」「小八 S娃」\n・傳商品照片、JAN 條碼或商品編號，幫您找同款報價\n・點下方選單「商品目錄」照分類看、「商品動態」看新品和即將結單\n\n👑 會員制度\n非會員單款要 21 件起；加入會員可以不同款混批 21 件、每款 3 件起\nVIP 會員 NT$1,000／月：國際＋國內運費全免，全館每件再便宜 NT$30，新品優先通知\n批發客最划算的是 VIP👇`;
+  const qrs = [["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["商品目錄", "商品目錄"], ["加入 VIP", "會員方案"], ["商品動態", "商品動態"]];
+  const cards = await membershipCards(env, uid);
+  cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
+  return [{ type: "text", text }, ...cards];
 }

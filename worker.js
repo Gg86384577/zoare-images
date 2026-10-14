@@ -10,12 +10,12 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261015-0130";
+const CATALOG_VERSION = "20261015-1200";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -136,17 +136,83 @@ function norm(s) {
 }
 
 // ---------- 目錄 ----------
-let CATALOG = null;
+let CATALOG = null, RAW_CATALOG = null, PRICED_WITH = "";
+// ---------- 每日匯率自動計價 ----------
+// 每款商品的 pb 記錄計價基準：日幣商品＝日幣未稅價 y × 1.1 × 折扣 d（或已含稅折扣後金額 a）；人民幣商品＝稅後人民幣 a（盲盒再除以每盒 n 個）
+// 成本＝外幣金額 × 當天台銀匯率（日圓現金賣出、人民幣即期賣出），無條件進位；一般價＝成本＋80、VIP＝成本＋50
+function priceItem(it, r) {
+  const pb = it.pb;
+  if (!pb || !r) return;
+  const a = pb.a != null ? pb.a : pb.y * 1.1 * pb.d;
+  const rate = pb.c === "CNY" ? r.CNY : r.JPY;
+  if (!rate) return;
+  const cost = Math.ceil((a * rate) / (pb.n || 1) - 1e-9);
+  it.g = cost + 80; it.v = cost + 50;
+}
+async function getRates(env) {
+  try { return env.SESSIONS ? JSON.parse((await env.SESSIONS.get("rates")) || "null") : null; } catch (e) { return null; }
+}
+async function fetchBotRates() {
+  const r = await fetch("https://rate.bot.com.tw/xrt/flcsv/0/day", { headers: { "user-agent": "Mozilla/5.0" } });
+  if (!r.ok) throw new Error("台銀匯率 " + r.status);
+  const txt = await r.text();
+  const pick = (cur) => {
+    const row = txt.split(/\r?\n/).find((l) => l.startsWith(cur));
+    if (!row) return null;
+    const c = row.split(",").map((x) => x.trim());
+    const i = c.indexOf("本行賣出");
+    return i > 0 ? { cash: Number(c[i + 1]), spot: Number(c[i + 2]) } : null;
+  };
+  const jp = pick("JPY"), cn = pick("CNY");
+  if (!jp || !(jp.cash > 0)) throw new Error("讀不到日圓匯率");
+  return { JPY: jp.cash, CNY: cn && cn.spot > 0 ? cn.spot : null };
+}
+async function updateRates(env, notify = true) {
+  const old = (await getRates(env)) || {};
+  const nr = await fetchBotRates();
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const rates = { JPY: nr.JPY, CNY: nr.CNY || old.CNY || 4.804, date: today, at: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ") };
+  await env.SESSIONS.put("rates", JSON.stringify(rates));
+  CATALOG = null; // 下次讀目錄時用新匯率重算
+  if (notify) {
+    const owner = await env.SESSIONS.get("owner");
+    const arrow = (n, o) => (o ? (n > o ? `↑（前次 ${o}）` : n < o ? `↓（前次 ${o}）` : "（持平）") : "");
+    if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text",
+      text: `📈 今日匯率已自動更新（台銀 ${rates.at}）\n日圓 現金賣出：${rates.JPY} ${arrow(rates.JPY, old.JPY)}\n人民幣 即期賣出：${rates.CNY} ${arrow(rates.CNY, old.CNY)}\n\n所有商品的一般價／VIP 價已用今天的匯率重新計算（每款折扣照各自型錄），客人看到的都是最新價格👌\n已成立的訂單維持下單時的價格。` }] });
+  }
+  return rates;
+}
+// 結單日規則（老闆用「結單 品牌 日期」設定）：KV dlrules = { "*": 預設, "<品牌或關鍵字>": 日期或文字 }
+async function getDlRules(env) {
+  try { return env.SESSIONS ? JSON.parse((await env.SESSIONS.get("dlrules")) || "{}") : {}; } catch (e) { return {}; }
+}
+function applyDl(it, rules, keys) {
+  if (it.dl && !isExpired(it)) { it.dlx = ""; return; } // 型錄本身有結單日就照型錄
+  const h = (it.b || "") + " " + (it.n || "");
+  const k = keys.find((k) => h.includes(k));
+  const passed = (v) => { const m = (v || "").match(/^(\d{4})-(\d{2})-(\d{2}) (\d{1,2}):(\d{2})/); return m && Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 8, +m[5]) < Date.now(); };
+  let v = k ? rules[k] : "";
+  if (!v || passed(v)) v = rules["*"] || "";
+  it.dlx = passed(v) ? "" : v;
+}
 async function loadCatalog(env) {
-  if (CATALOG) return CATALOG;
+  const rates = await getRates(env), rules = await getDlRules(env);
+  const keys = Object.keys(rules).filter((k) => k !== "*").sort((a, b) => b.length - a.length);
+  const stamp = (rates ? `${rates.JPY}|${rates.CNY}` : "") + "|" + JSON.stringify(rules);
+  if (CATALOG && PRICED_WITH === stamp) return CATALOG;
+  if (RAW_CATALOG) {
+    for (const it of RAW_CATALOG) { if (rates) priceItem(it, rates); applyDl(it, rules, keys); }
+    CATALOG = RAW_CATALOG.slice(); PRICED_WITH = stamp;
+    return CATALOG;
+  }
   // 每次更新商品目錄就改 CATALOG_VERSION，讓新價格馬上生效
   const u = env.CATALOG_URL + (env.CATALOG_URL.includes("?") ? "&" : "?") + "v=" + CATALOG_VERSION;
   const res = await fetch(u, { cf: { cacheTtl: 300 } });
   if (!res.ok) throw new Error("catalog " + res.status);
   const items = await res.json();
-  for (const it of items) it._t = it.t || norm([it.n, it.ja, it.b, it.s, it.code, it.jan].join(" "));
-  CATALOG = items;
-  return items;
+  for (const it of items) { it._t = it.t || norm([it.n, it.ja, it.b, it.s, it.code, it.jan].join(" ")); if (rates) priceItem(it, rates); applyDl(it, rules, keys); }
+  RAW_CATALOG = items; CATALOG = items.slice(); PRICED_WITH = stamp;
+  return CATALOG;
 }
 
 const ALIAS_NORM = ALIASES.map((g) => g.map(norm));
@@ -414,6 +480,35 @@ async function ownerCommand(env, text) {
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
   if (/^#?更新選單$/.test(text.trim())) return await setupRichMenu(env);
+  const dm = text.trim().match(/^#?結單(?:日)?(?:\s+(.+?))?(?:\s+(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2})(?:\s+(\d{1,2}:\d{2}))?|\s+(每.+|長期接單|清除|刪除))?$/);
+  if (dm && env.SESSIONS) {
+    const rules = await getDlRules(env);
+    const who = (dm[1] || "").trim(), key = !who || /^(全部|預設|全館)$/.test(who) ? "*" : who;
+    if (!dm[2] && !dm[4]) {
+      const list = Object.entries(rules).map(([k, v]) => `・${k === "*" ? "全部（預設）" : k}：${v}`);
+      return `⏰ 結單日設定${list.length ? "\n" + list.join("\n") : "：還沒設定（沒寫結單日的商品顯示「長期接單」）"}\n\n設定方式：\n・結單 全部 每週日 23:59\n・結單 309 三麗鷗 10/31\n・結單 吉伊卡哇 2026-11-05 18:00\n・結單 Nakajima 清除\n品牌或商品名稱有包含關鍵字的都會套用；型錄本身有寫結單日的照型錄`;
+    }
+    if (dm[4] && /清除|刪除/.test(dm[4])) { delete rules[key]; }
+    else if (dm[4]) { rules[key] = dm[4] === "長期接單" ? "" : dm[4]; if (!rules[key]) delete rules[key]; }
+    else {
+      const tw = new Date(Date.now() + 8 * 3600e3);
+      const p = dm[2].split(/[-/]/).map(Number);
+      const [y, mo, d] = p.length === 3 ? p : [tw.getUTCFullYear() + (p[0] < tw.getUTCMonth() + 1 - 6 ? 1 : 0), p[0], p[1]];
+      rules[key] = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")} ${dm[3] || "23:59"}`;
+    }
+    await env.SESSIONS.put("dlrules", JSON.stringify(rules));
+    CATALOG = null;
+    const items = await loadCatalog(env);
+    const n = key === "*" ? items.length : items.filter((it) => ((it.b || "") + " " + (it.n || "")).includes(key)).length;
+    return rules[key] ? `好👌 ${key === "*" ? "全部商品（沒另外設定的）" : `「${key}」${n} 款商品`}結單日設為：${rules[key]}\n商品卡片和訂購網站都會顯示，日期過了會自動改回預設` : `好👌 已清除「${key === "*" ? "全部" : key}」的結單日設定`;
+  }
+  if (/^#?(匯率|今日匯率)$/.test(text.trim())) {
+    const r = await getRates(env);
+    return r ? `目前計價匯率（台銀 ${r.at}）\n日圓 現金賣出：${r.JPY}\n人民幣 即期賣出：${r.CNY}\n\n每天早上 9:15 後自動更新，要馬上更新請傳「更新匯率」` : "還沒抓過匯率，傳「更新匯率」可以馬上抓";
+  }
+  if (/^#?(更新匯率|重抓匯率)$/.test(text.trim())) {
+    try { const r = await updateRates(env, false); return `好👌 已更新為台銀最新匯率（${r.at}）\n日圓 ${r.JPY}｜人民幣 ${r.CNY}\n全部商品價格已重新計算`; } catch (e) { return "抓匯率失敗：" + e.message; }
+  }
   if (/^#?(錯誤|錯誤紀錄)$/.test(text.trim())) return (await env.SESSIONS.get("lasterr")) || "最近沒有傳送失敗的紀錄👌";
   if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}\n\n💡 傳「#更新選單」後，你的圖文選單右下角會變成「商家後台」按鈕，之後點一下就能開`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
@@ -439,6 +534,14 @@ async function ownerCommand(env, text) {
 }
 // ---------- 主流程 ----------
 async function handleEvent(env, ev) {
+  // 新朋友加入（或解除封鎖）→ 歡迎訊息：商城連結、LINE 查報價教學、會員制度＋VIP 方案卡片
+  if (ev.type === "follow" && ev.replyToken && ev.source && ev.source.userId) {
+    const uid = ev.source.userId;
+    let name = "";
+    try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
+    try { await rememberName(env, uid); } catch (e) {}
+    return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
+  }
   if (ev.type !== "message" || !ev.replyToken) return;
   const uid = ev.source && ev.source.userId;
   const msg = ev.message;
@@ -485,8 +588,8 @@ async function handleEvent(env, ev) {
     return reply(env, ev.replyToken, [{ type: "text", text: await newsReply(env, { loadCatalog, isExpired }, await shopLink(env, uid)) }]);
   }
   // 加入會員
-  if (uid && /^(加入會員|會員|入會|VIP|加入VIP|會員方案)$/i.test(text)) {
-    return reply(env, ev.replyToken, [{ type: "text", text: `ZOARÉ 批發會員方案👇\n\n👑 VIP 會員 NT$1,000／月\n國際＋國內運費全免・更優惠的批發價・VIP 專屬價・新品優先通知\n\n🔹 一般會員 NT$100／月（只免國際運費）\n\n會員可以不同款混批 21 件（每款 3 件起）\n點這裡加入，付款完成會自動開通：\n${await shopLink(env, uid)}&q=${encodeURIComponent("會員方案")}` }]);
+  if (uid && /^(加入會員|會員|入會|VIP|加入VIP|會員方案|會員制|會員制度|會員費|VIP會員|一般會員|升級VIP|怎麼加入會員|(NT)?\$?1,?000(元)?(方案|會員)?|(NT)?\$?100(元)?(方案|會員)?)$/i.test(text.replace(/\s/g, ""))) {
+    return reply(env, ev.replyToken, await membershipCards(env, uid));
   }
   // 要訂購連結
   if (uid && ORDER_WORDS.includes(text)) {
@@ -595,6 +698,7 @@ async function handleEvent(env, ev) {
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
     // 有商品卡片時只傳卡片，不附文字；沒有卡片才傳文字報價
     if (!cardMsg) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
+    if (!cardMsg && uid && /\{會員連結\}/.test(out.reply || "")) lineMsgs.push(...(await membershipCards(env, uid)));
     await reply(env, ev.replyToken, lineMsgs);
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
     const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
@@ -632,6 +736,13 @@ async function runFollowups(env) {
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runFollowups(env));
+    ctx.waitUntil((async () => {
+      if (!env.SESSIONS) return;
+      const tw = new Date(Date.now() + 8 * 3600e3), today = tw.toISOString().slice(0, 10);
+      const hm = tw.getUTCHours() * 60 + tw.getUTCMinutes();
+      const r = await getRates(env);
+      if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
+    })());
   },
   async fetch(request, env, ctx) {
     // 去掉金鑰前後不小心多貼的空白或換行

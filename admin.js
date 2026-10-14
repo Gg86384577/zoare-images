@@ -19,6 +19,7 @@ async function buildData(env) {
   const Z = () => ({ n: 0, rev: 0, profit: 0, pcs: 0 });
   const st = { today: Z(), week: Z(), month: Z(), all: Z() };
   const daily = {}, items = {}, cust = {};
+  const mem = { vip: { q: 0, amt: 0, m: 0, mamt: 0 }, member: { q: 0, amt: 0, m: 0, mamt: 0 } };
   for (let i = 13; i >= 0; i--) { const d = new Date(tw()); d.setUTCDate(d.getUTCDate() - i); daily[d.toISOString().slice(0, 10)] = 0; }
   const counts = { 待付款: 0, 已回報匯款: 0, 待確認: 0, 已付款: 0, 已出貨: 0, 已取消: 0 };
   for (const o of orders) {
@@ -32,6 +33,7 @@ async function buildData(env) {
       const add = (x) => { x.n++; x.rev += o.total; x.profit += profit; x.pcs += pcs; };
       add(st.all); if (d.startsWith(month)) add(st.month); if (d >= week) add(st.week); if (d === today) add(st.today);
       if (d in daily) daily[d] += o.total;
+      for (const l of o.lines) if (l.mem && mem[l.mem]) { mem[l.mem].q += l.q; mem[l.mem].amt += l.sub; if (d.startsWith(month)) { mem[l.mem].m += l.q; mem[l.mem].mamt += l.sub; } }
       if (d.startsWith(month)) for (const l of o.lines) { const it = (items[l.n] = items[l.n] || { n: l.n, q: 0, amt: 0 }); it.q += l.q; it.amt += l.sub; }
     }
   }
@@ -47,6 +49,7 @@ async function buildData(env) {
   custList.sort((a, b) => b.spent - a.spent || (b.last || "").localeCompare(a.last || ""));
   return {
     stats: st, daily, counts,
+    members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
       total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(),
@@ -166,6 +169,7 @@ function cust(){const L=D.customers;
 function sales(){const P={today:"今天",week:"本週",month:"本月",all:"累計"};const s=D.stats[SP];
   $("#m").innerHTML='<div class="seg">'+Object.entries(P).map(([k,t])=>'<button class="'+(k===SP?"on":"")+'" data-p="'+k+'">'+t+'</button>').join("")+'</div>'+
   '<div class="k" style="margin-top:12px">'+kc("銷售額",fmt(s.rev))+kc("淨利",fmt(s.profit),s.rev?"毛利率 "+Math.round(s.profit/s.rev*100)+"%":"")+kc("已付款訂單",s.n+" 筆")+kc("銷售件數",s.pcs+" 件")+'</div>'+
+  (D.members?'<div class="card"><h3>👑 會員方案</h3><div class="row"><span>VIP NT$1,000｜本月 '+D.members.vip.m+' 份</span><b>'+fmt(D.members.vip.mamt)+'</b></div><div class="row"><span>一般 NT$100｜本月 '+D.members.member.m+' 份</span><b>'+fmt(D.members.member.mamt)+'</b></div><div class="row"><span>累計賣出 VIP '+D.members.vip.q+' 份・一般 '+D.members.member.q+' 份</span><b>'+fmt(D.members.vip.amt+D.members.member.amt)+'</b></div><div class="row"><span>目前有效會員</span><b>VIP '+D.members.active.vip+'｜一般 '+D.members.active.member+'</b></div></div>':'')+
   '<div class="card"><h3>本月品項銷量</h3>'+(D.top.map((t,i)=>'<div class="row"><span>'+(i+1)+'. '+esc(t.n)+'</span><b style="white-space:nowrap">×'+t.q+'　'+fmt(t.amt)+'</b></div>').join("")||'<div class="meta">還沒有銷售</div>')+'</div>'+
   '<p class="meta" style="margin-top:10px">淨利＝售價－成本（報價公式），未扣運費、匯款手續費；會員費全額算淨利。只統計已付款／已出貨的線上訂單。</p>';
   document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{SP=b.dataset.p;sales()})}
