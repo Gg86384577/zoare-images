@@ -667,7 +667,7 @@ function pickItems(items, words, isExpired, catWords) {
 function bubble(it, tier, link) {
   const price = tier === "vip" ? `VIP NT$${it.v}` : `NT$${it.g}`;
   const sub = tier === "vip" ? `一般 NT$${it.g}` : `VIP 會員 NT$${it.v}`;
-  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : "", it.dl ? `截單 ${it.dl.split("（")[0]}` : "", /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
+  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : Number(it.moq) > 1 ? `最低訂購 ${it.moq} 個` : "", it.dl ? `截單 ${it.dl.split("（")[0]}` : "", /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
   const body = [
     { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
     { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },

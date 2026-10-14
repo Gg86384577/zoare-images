@@ -98,6 +98,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 回覆盡量精簡，每款商品只列必要欄位。
 最後另起一行加上控制指令（客人看不到）。只要回覆裡有列出商品，就一定要用 #SHOW 附上那幾款的圖片：
 #SHOW 要附上商品卡片的候選編號，用逗號分隔，回覆裡列出幾款就寫幾款，最多 10 個（例如：#SHOW 1,2,3；不需要就寫 #SHOW 0）
+有 #SHOW 時系統只會傳商品卡片（卡片上已經有圖、名稱、價格、最低訂購量、下單按鈕），所以文字只要一句簡短的話（例如「有的喔 這幾款給您參考👇」），不要再逐款列出名稱、價格、連結。
 需要轉真人客服時，再另起一行寫：#HANDOFF`;
 
 // ---------- 中日文對照與簡繁轉換（搜尋用） ----------
@@ -589,7 +590,9 @@ async function handleEvent(env, ev) {
     const myLink = uid ? await shopLink(env, uid) : "";
     let replyText = (out.reply || "我幫您轉給專人確認喔！").replace(/(樂賣商城\s*)?\{訂購連結[:：]([^}]+)\}/g, (_, __, k) => `${myLink}&q=${encodeURIComponent(k.trim())}`).replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
-    lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
+    // 有商品卡片時只傳卡片；文字只有在是簡短說明（沒有逐款列商品）時才一起送
+    const shortNote = replyText.length <= 120 && !/下單|NT\$|1️⃣/.test(replyText);
+    if (!cardMsg || shortNote) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     await reply(env, ev.replyToken, lineMsgs);
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
     const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
