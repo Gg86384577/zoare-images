@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -97,7 +97,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 直接寫要傳給客人的文字（不要用 JSON、不要用程式碼格式）。
 回覆盡量精簡，每款商品只列必要欄位。
 最後另起一行加上控制指令（客人看不到）。只要回覆裡有列出商品，就一定要用 #SHOW 附上那幾款的圖片：
-#SHOW 要附上商品圖片的候選編號，用逗號分隔，最多 3 個（例如：#SHOW 1,2,3；不需要圖片就寫 #SHOW 0）
+#SHOW 要附上商品卡片的候選編號，用逗號分隔，回覆裡列出幾款就寫幾款，最多 10 個（例如：#SHOW 1,2,3；不需要就寫 #SHOW 0）
 需要轉真人客服時，再另起一行寫：#HANDOFF`;
 
 // ---------- 中日文對照與簡繁轉換（搜尋用） ----------
@@ -229,8 +229,17 @@ async function lineApi(env, path, payload, host = "api.line.me") {
   });
 }
 async function reply(env, token, messages) {
-  const r = await lineApi(env, "/v2/bot/message/reply", { replyToken: token, messages: messages.slice(0, 5) });
-  if (!r.ok) { console.log("reply failed", r.status, await r.text()); return; }
+  let r = await lineApi(env, "/v2/bot/message/reply", { replyToken: token, messages: messages.slice(0, 5) });
+  if (!r.ok) {
+    const err = await r.text();
+    console.log("reply failed", r.status, err);
+    if (env.SESSIONS) await env.SESSIONS.put("lasterr", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + " " + r.status + " " + err.slice(0, 600), { expirationTtl: 30 * 86400 });
+    // 卡片格式有問題時，改用純文字再送一次，至少讓客人收到回覆
+    const plain = messages.filter((m) => m.type === "text");
+    if (plain.length === messages.length || !plain.length) return;
+    r = await lineApi(env, "/v2/bot/message/reply", { replyToken: token, messages: plain.slice(0, 5) });
+    if (!r.ok) return;
+  }
   // 記住機器人自己傳出的訊息 ID，用來分辨客人引用的是機器人還是老闆的訊息
   try {
     const j = await r.json();
@@ -404,6 +413,7 @@ async function ownerCommand(env, text) {
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
   if (/^#?更新選單$/.test(text.trim())) return await setupRichMenu(env);
+  if (/^#?(錯誤|錯誤紀錄)$/.test(text.trim())) return (await env.SESSIONS.get("lasterr")) || "最近沒有傳送失敗的紀錄👌";
   if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}\n\n💡 傳「#更新選單」後，你的圖文選單右下角會變成「商家後台」按鈕，之後點一下就能開`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
@@ -571,8 +581,11 @@ async function handleEvent(env, ev) {
       await notifyOwner(env, uid, img ? "（傳了一張照片）" : text);
       return;
     }
-    const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 3);
-    const lineMsgs = shown.map((it) => ({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img }));
+    const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 10);
+    const lineMsgs = [];
+    const cardMsg = uid && shown.length ? await productCards(env, uid, shown, `商品報價（${shown.length} 款）`) : null;
+    if (cardMsg) lineMsgs.push(cardMsg);
+    else for (const it of shown.slice(0, 3)) lineMsgs.push({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img });
     const myLink = uid ? await shopLink(env, uid) : "";
     let replyText = (out.reply || "我幫您轉給專人確認喔！").replace(/(樂賣商城\s*)?\{訂購連結[:：]([^}]+)\}/g, (_, __, k) => `${myLink}&q=${encodeURIComponent(k.trim())}`).replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;

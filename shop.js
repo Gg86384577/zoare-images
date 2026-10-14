@@ -899,3 +899,12 @@ async function ownerOrders(env, t, deps) {
 
 // 給商家後台用
 export { TIER_NAME, sign, allOrders, saveOrder, deleteOrder, lineCost, situation, OPEN, payDiff, slim };
+
+// AI 報價時用的商品卡片
+export async function productCards(env, uid, items, altText) {
+  const tier = await getTier(env, uid);
+  const link = await shopLink(env, uid);
+  const bubbles = items.filter((it) => it && it.img).slice(0, 12).map((it) => bubble(it, tier, link));
+  if (!bubbles.length) return null;
+  return { type: "flex", altText: (altText || "商品報價").slice(0, 300), contents: { type: "carousel", contents: bubbles } };
+}
