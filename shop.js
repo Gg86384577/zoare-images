@@ -526,7 +526,9 @@ function filter(){
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
   VIEW=ALL.filter(x=>(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.box?"盲盒box整盒":"")))).includes(w))));
   shown=0;$("#grid").innerHTML="";page();
-  $("#info").textContent="共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+brand:"");
+  const qv=$("#q").value.trim();
+  $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
+  const cq=document.getElementById("clrq");if(cq)cq.onclick=e=>{e.preventDefault();$("#q").value="";filter()};
 }
 function card(x){
   const p=price(x),q=cart[x.k]||0;

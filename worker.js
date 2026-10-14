@@ -57,7 +57,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 　最低訂購量：{最低訂購量}
 　截止：{截止}（有才寫）
 　下單：{下單網址}
-- 下單網址是「準備中」時，下單那一行寫「下單：{訂購連結}」（系統會自動換成客人的專屬訂購網址），不可自己編其他網址。
+- 下單那一行一定要原封不動照抄候選商品資料裡的「下單網址」（例如 {訂購連結:4970381929411}），系統會自動換成直接打開該商品的專屬網址；不可以改寫、不可自己編其他網址。
 - 列完後說「請回覆編號告訴我您要哪一款，以及需要的數量～」，最後加「※ 日本批發、集單預購」和「💡 VIP 會員每件便宜 NT$30：${VIP}」。
 - 客人回覆編號（例如「2號」）時，從「上一次列給客人的商品」找到那一款，報出完整資料並詢問數量。
 
@@ -209,7 +209,7 @@ function itemLine(i, it) {
   if (it.code) f.push(`編號：${it.code}`);
   if (it.lm) f.push(`舊商品編號：${it.lm}`);
   if (it.jan && it.jan !== it.code) f.push(`JAN：${it.jan}`);
-  f.push(`下單網址：${it.url || "準備中"}`);
+  f.push(`下單網址：{訂購連結:${it.jan || it.code || it.n.slice(0, 30)}}`);
   return f.join("｜");
 }
 
@@ -558,7 +558,7 @@ async function handleEvent(env, ev) {
     const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 3);
     const lineMsgs = shown.map((it) => ({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img }));
     const myLink = uid ? await shopLink(env, uid) : "";
-    let replyText = (out.reply || "我幫您轉給專人確認喔！").replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
+    let replyText = (out.reply || "我幫您轉給專人確認喔！").replace(/(樂賣商城\s*)?\{訂購連結[:：]([^}]+)\}/g, (_, __, k) => `${myLink}&q=${encodeURIComponent(k.trim())}`).replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
     lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     await reply(env, ev.replyToken, lineMsgs);
