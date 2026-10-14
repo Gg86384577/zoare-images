@@ -712,10 +712,7 @@ export async function catalogMenu(env, deps, uid, text) {
   if (!list.length) return [{ type: "text", text: `${title}目前沒有可以訂購的商品喔😂\n可以看看其他系列～`, quickReply: qr(back) }];
   const bubbles = list.slice(0, 11).map((it) => bubble(it, tier, link));
   bubbles.push(moreBubble(title, total, link, sub ? sub[0] : cat.k));
-  return [
-    { type: "flex", altText: `${title}商品目錄（共 ${total} 款）`, contents: { type: "carousel", contents: bubbles } },
-    { type: "text", text: `以上是${title}的熱門商品（共 ${total} 款）👆\n左右滑動看更多，點「我要訂購」可以直接下單喔～\n${tier === "vip" ? "已套用您的 VIP 價" : "VIP 會員每件再便宜 NT$30"}`, quickReply: qr(back) },
-  ];
+  return [{ type: "flex", altText: `${title}商品目錄（共 ${total} 款）`, contents: { type: "carousel", contents: bubbles }, quickReply: qr(back) }];
 }
 
 

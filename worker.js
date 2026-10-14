@@ -590,9 +590,8 @@ async function handleEvent(env, ev) {
     const myLink = uid ? await shopLink(env, uid) : "";
     let replyText = (out.reply || "我幫您轉給專人確認喔！").replace(/(樂賣商城\s*)?\{訂購連結[:：]([^}]+)\}/g, (_, __, k) => `${myLink}&q=${encodeURIComponent(k.trim())}`).replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
-    // 有商品卡片時只傳卡片；文字只有在是簡短說明（沒有逐款列商品）時才一起送
-    const shortNote = replyText.length <= 120 && !/下單|NT\$|1️⃣/.test(replyText);
-    if (!cardMsg || shortNote) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
+    // 有商品卡片時只傳卡片，不附文字；沒有卡片才傳文字報價
+    if (!cardMsg) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     await reply(env, ev.replyToken, lineMsgs);
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
     const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
