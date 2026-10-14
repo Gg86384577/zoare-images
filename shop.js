@@ -74,6 +74,14 @@ export async function handleShop(request, env, ctx, deps) {
     const tier = await getTier(env, uid);
     return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier] });
   }
+  if (p === "/shop/orders") {
+    const uid = await verifyToken(env, url.searchParams.get("t"));
+    if (!uid) return Response.json({ ok: false, error: "連結無效" }, { status: 401 });
+    const list = await myOrders(env, uid, 20);
+    return Response.json({ ok: true, orders: list.map((o) => ({ id: o.id, at: o.at, status: o.status, paid5: o.paid5 || "", track: o.track || "",
+      total: o.total, qty: o.qty, tier: TIER_NAME[o.tier], lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub })), form: o.form })),
+      bank: (await env.SESSIONS.get("bank")) || "" });
+  }
   if (p === "/shop/order" && request.method === "POST") {
     let body;
     try { body = await request.json(); } catch (e) { return Response.json({ ok: false, error: "資料格式錯誤" }, { status: 400 }); }
@@ -104,6 +112,8 @@ export async function handleShop(request, env, ctx, deps) {
     const bank = (await env.SESSIONS.get("bank")) || "";
     await env.SESSIONS.put("o:" + id, JSON.stringify(order), { expirationTtl: 180 * 86400 });
     await env.SESSIONS.put("ol:" + uid, id, { expirationTtl: 30 * 86400 });
+    const mine = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]");
+    mine.unshift(id); await env.SESSIONS.put("ou:" + uid, JSON.stringify(mine.slice(0, 50)));
     // 訂單索引（老闆查「訂單」用）
     const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]");
     idx.unshift(id); await env.SESSIONS.put("orders", JSON.stringify(idx.slice(0, 200)));
@@ -113,6 +123,25 @@ export async function handleShop(request, env, ctx, deps) {
   return new Response("Not found", { status: 404 });
 }
 
+async function myOrders(env, uid, n = 5) {
+  const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
+  const out = [];
+  for (const id of ids) { const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null"); if (o) out.push(o); }
+  return out;
+}
+// 客人在 LINE 查訂單
+export async function customerOrders(env, uid, link) {
+  const list = await myOrders(env, uid, 5);
+  const lemai = "\n\n在樂賣商城下的訂單，請到樂賣查詢：https://www.lemaiapp.com/m/zoare";
+  if (!list.length) return `目前沒有線上訂購網站的訂單紀錄喔${lemai}\n\n🛒 線上訂購：${link}`;
+  const rows = list.map((o) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}`);
+  return `您最近的訂單：\n\n${rows.join("\n\n")}\n\n要看完整明細，請點：\n${link}&v=orders\n（或傳訂單編號給我）${lemai}`;
+}
+export async function customerOrderDetail(env, uid, id) {
+  const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+  if (!o || o.uid !== uid) return null;
+  return `訂單 ${o.id}（${o.at}）\n狀態：${o.status}${o.paid5 ? "　後五碼 " + o.paid5 : ""}${o.track ? "\n物流單號：" + o.track : ""}\n\n${orderText(o, false)}\n\n收件人：${o.form.name}\n寄送：${o.form.ship}　${o.form.addr}`;
+}
 function orderText(o, withRules = true) {
   const items = o.lines.map((l) => `・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
   return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）\n運費：${o.tier === "vip" ? "VIP 免運" : "由客服確認後通知"}` +
@@ -149,7 +178,7 @@ export async function handlePayment(env, deps, uid, text) {
 }
 
 // 老闆指令：訂單列表／單筆查詢／匯款資料
-export async function shopOwnerCommand(env, text) {
+export async function shopOwnerCommand(env, text, deps = {}) {
   const t = text.trim();
   const bm = t.match(/^匯款資料[\s:：]*([\s\S]*)$/);
   if (bm) {
@@ -168,17 +197,23 @@ export async function shopOwnerCommand(env, text) {
       const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
       if (o) rows.push(`${o.id}｜${o.lineName}｜NT$${o.total.toLocaleString()}｜${o.status}${o.paid5 ? "（" + o.paid5 + "）" : ""}`);
     }
-    return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」可以改狀態";
+    return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」「ZO… 已出貨 物流單號」可以改狀態並通知客人";
   }
-  const om = t.match(/^(ZO\w{10})(?:\s*(已付款|已出貨|取消))?$/i);
+  const om = t.match(/^(ZO\w{10})(?:\s*(已付款|已出貨|取消)(?:\s+(.+))?)?$/i);
   if (om) {
     const id = om[1].toUpperCase();
     const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
     if (!o) return `找不到訂單 ${id}`;
     if (om[2]) {
       o.status = om[2] === "取消" ? "已取消" : om[2];
+      if (om[3]) o.track = om[3].trim().slice(0, 60);
       await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
-      return `好👌 ${id} 已改成「${o.status}」`;
+      const msg = { 已付款: `💰 已收到您的款項囉 謝謝🙏\n訂單 ${id} 我們會盡快安排出貨～`,
+        已出貨: `🚚 您的訂單 ${id} 已出貨囉！${o.track ? "\n物流單號：" + o.track : ""}\n收到貨有任何問題都可以跟我們說～`,
+        已取消: `您的訂單 ${id} 已取消，有問題可以直接跟我們說喔～` }[o.status];
+      let sent = false;
+      if (msg && deps.lineApi) { const r = await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: msg }] }); sent = r.ok; }
+      return `好👌 ${id} 已改成「${o.status}」${o.track ? "（物流單號 " + o.track + "）" : ""}${sent ? "\n已通知客人" : ""}`;
     }
     return `客人：${o.lineName}（${o.at}）\n狀態：${o.status}${o.paid5 ? "　後五碼 " + o.paid5 : ""}\n${orderText(o)}\n\n收件人：${o.form.name}　${o.form.phone}\n寄送：${o.form.ship}　${o.form.addr}${o.form.note ? "\n備註：" + o.form.note : ""}`;
   }
@@ -224,7 +259,14 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .more{display:block;margin:6px auto 20px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:10px 24px;font-size:14px}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#161616;color:#fff;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
 .bar .sum{flex:1;font-size:13px;color:#cfd2d6}.bar .sum b{font-size:18px;color:#fff}
-.bar button{border:0;border-radius:12px;background:#fff;color:var(--ink);font-weight:700;padding:11px 18px;font-size:15px}
+.bar button{border:0;border-radius:12px;background:#fff;color:var(--ink);font-weight:700;padding:11px 16px;font-size:15px}
+.bar .ghost{background:#2a2c30;color:#fff;font-weight:500;padding:11px 12px;font-size:13px}
+.ord{background:#fff;border-radius:12px;padding:12px;margin-top:10px;font-size:13.5px;line-height:1.6}
+.ord .hd{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.st{border-radius:10px;padding:1px 9px;font-size:12px;background:#eceef0;font-weight:600}
+.st.s1{background:#fff1d6;color:#8a5a00}.st.s2{background:#e3effc;color:#1d4f8f}.st.s3{background:#e2f4e6;color:#1f6b33}.st.s4{background:#eee;color:#888}
+.ord details{margin-top:6px}.ord summary{color:var(--sub);font-size:12.5px}
+.ord ul{list-style:none;margin-top:6px;border-top:1px dashed var(--line);padding-top:6px}.ord li{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
 .sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.45);display:none}
 .sheet.on{display:block}
 .panel{position:absolute;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:18px 18px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
@@ -252,7 +294,7 @@ input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);border-radiu
 <div class="info" id="info"></div>
 <div class="grid" id="grid"></div>
 <button class="more" id="more" hidden>載入更多</button>
-<div class="bar"><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
+<div class="bar"><button id="openOrders" class="ghost">我的訂單</button><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
 <script>
 const T=new URLSearchParams(location.search).get("t")||"";
@@ -277,6 +319,7 @@ async function init(){
   $("#chips").onclick=e=>{const b=e.target.dataset.b;if(!b)return;brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   filter();bar();
+  if(new URLSearchParams(location.search).get("v")==="orders")openOrders();
 }
 const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）「」\\-_/|｜]/g,"");
 let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
@@ -317,6 +360,22 @@ function notes(L){const t=ME.tier,out=[],total=L.reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(t==="none"&&q<21)out.push(x.n+"：非會員單款需 21 件起");else if(t!=="none"&&q<3)out.push(x.n+"：會員每款 3 件起");if(x.moq>1&&q<x.moq&&!x.box)out.push(x.n+"：貿易商最低訂購量 "+x.moq)});
   if(t!=="none"&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
+$("#openOrders").onclick=openOrders;
+const STC={"待付款":"s1","已回報匯款":"s2","已付款":"s2","已出貨":"s3","已取消":"s4"};
+async function openOrders(){
+  $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
+  try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
+    const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
+      '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+
+      (o.paid5?'<div style="font-size:12.5px">匯款後五碼：'+esc(o.paid5)+'</div>':'')+(o.track?'<div style="font-size:12.5px">🚚 物流單號：<b>'+esc(o.track)+'</b></div>':'')+
+      (o.status==="待付款"&&r.bank?'<div class="warn" style="margin-top:8px">💳 匯款資料<br>'+esc(r.bank).replace(/\\n/g,"<br>")+'<br>匯款後請在 LINE 回覆「後五碼 12345」</div>':'')+
+      '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li><span>'+esc(l.n)+' ×'+l.q+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
+      '<div style="font-size:12.5px;margin-top:6px;color:#444">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+'</div></details></div>').join("")
+      :'<div class="empty">還沒有訂單喔</div>';
+    $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2>'+body+'<p style="font-size:12px;color:#6b6f75;margin-top:12px;text-align:center">有問題直接在 LINE 跟我們說喔</p>';
+    $("#ox").onclick=()=>$("#sheet").classList.remove("on");
+  }catch(e){$("#panel").innerHTML='<h2>我的訂單<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">載入失敗，請稍後再試</div>'}
+}
 $("#sheet").onclick=e=>{if(e.target.id==="sheet")$("#sheet").classList.remove("on")};
 let form={};try{form=JSON.parse(localStorage.getItem("zo_form")||"{}")}catch(e){}
 function renderCart(){

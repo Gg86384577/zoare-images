@@ -9,7 +9,7 @@
 //   MODEL                      （Text，可不填）預設 claude-haiku-5-5
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
-import { handleShop, shopLink, shopOwnerCommand, handlePayment } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail } from "./shop.js";
 const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
@@ -360,7 +360,7 @@ async function ownerCommand(env, text) {
     const names = list.map((u) => byUid[u] || "（未知名稱）");
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
-  const shopR = await shopOwnerCommand(env, text.trim());
+  const shopR = await shopOwnerCommand(env, text.trim(), { lineApi });
   if (shopR) return shopR;
   // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
   const tm = t.match(/^(.+?)\s*(VIP|vip|VIP會員|會員|一般會員|非會員|一般)$/);
@@ -407,6 +407,14 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && text) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
     if (pr) return reply(env, ev.replyToken, [{ type: "text", text: pr }]);
+  }
+  // 查自己的訂單：「訂單查詢」「我的訂單」或直接傳訂單編號
+  if (uid && env.SESSIONS && /^(訂單查詢|我的訂單|查訂單|訂單)$/.test(text)) {
+    return reply(env, ev.replyToken, [{ type: "text", text: await customerOrders(env, uid, await shopLink(env, uid)) }]);
+  }
+  if (uid && env.SESSIONS && /^ZO\w{10}$/i.test(text)) {
+    const d = await customerOrderDetail(env, uid, text.toUpperCase());
+    if (d) return reply(env, ev.replyToken, [{ type: "text", text: d }]);
   }
   // 要訂購連結
   if (uid && ORDER_WORDS.includes(text)) {
