@@ -565,6 +565,11 @@ async function handleEvent(env, ev) {
   }
   // 老闆指令：「小美 停止回覆」（客人 15 分鐘沒訊息自動恢復）、「小美 開始回覆」（馬上恢復）、「名單」
   if (uid && env.SESSIONS && text && uid === (await env.SESSIONS.get("owner"))) {
+    // 預覽新好友歡迎訊息
+    if (/^#?(歡迎訊息|測試歡迎|歡迎文案)$/.test(text)) {
+      let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
+      return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
+    }
     const r = await ownerCommand(env, text);
     if (r) return reply(env, ev.replyToken, (Array.isArray(r) ? r : [r]).map((x) => ({ type: "text", text: x })));
   }
