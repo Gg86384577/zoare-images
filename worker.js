@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -114,7 +114,7 @@ const ALIASES = [
   ["塔麻可吉", "たまごっち", "tamagotchi", "電子雞"], ["蠟筆小新", "クレヨンしんちゃん", "小新"],
   ["寶可夢", "ポケモン", "pokemon", "皮卡丘", "ピカチュウ"], ["米飛兔", "ミッフィー", "miffy"],
   ["smiski", "スミスキー"], ["mofusand", "貓福珊迪"], ["小熊維尼", "プー", "pooh"],
-  ["娃娃", "玩偶", "絨毛", "ぬいぐるみ", "plush", "蓬鬆", "ほわほわ", "hughug", "fuwakuta", "軟糯", "もちもち"], ["吊飾", "マスコット", "掛飾"],
+  ["娃娃", "玩偶", "絨毛", "ぬいぐるみ", "plush", "s娃", "m娃", "l娃", "蓬鬆", "ほわほわ", "hughug", "fuwakuta", "軟糯", "もちもち"], ["吊飾", "マスコット", "掛飾"],
   ["鑰匙圈", "钥匙圈", "キーホルダー", "キーチェーン"], ["相框", "フォトフレーム"], ["拼圖", "パズル"],
   ["杯", "マグ", "カップ", "タンブラー"], ["便當盒", "ランチボックス", "弁当"], ["包", "バッグ", "ポーチ"],
   ["貼紙", "ステッカー", "シール"], ["盲盒", "扭蛋", "ガチャ", "ブラインド"], ["鏡子", "ミラー"],
@@ -476,6 +476,9 @@ async function handleEvent(env, ev) {
   if (uid && text) {
     const cm = await catalogMenu(env, { loadCatalog, isExpired }, uid, text);
     if (cm) return reply(env, ev.replyToken, cm);
+    // 只打品牌／角色名稱 → 直接傳全部商品卡片
+    const kb = await keywordBrowse(env, { loadCatalog, isExpired }, uid, text);
+    if (kb) return reply(env, ev.replyToken, kb);
   }
   // 商品動態
   if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {

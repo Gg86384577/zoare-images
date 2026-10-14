@@ -716,6 +716,47 @@ export async function catalogMenu(env, deps, uid, text) {
 }
 
 
+// 客人只打品牌／角色名稱（例如「吉伊卡哇」「酷洛米」）→ 直接傳這個系列／角色的全部商品卡片；
+// 有加補充字（相框、S娃…）才交給 AI 依細項推薦
+const kwNorm = (x) => String(x || "").toLowerCase().replace(/[\s・·、,，.。!！?？~～]/g, "");
+function matchKeyword(text) {
+  let t = kwNorm(text).replace(/^(請問|我要|我想要|想找|想要|有沒有|有無|找)/, "").replace(/(有嗎|有沒有|有賣嗎|的商品|商品|系列|全部|周邊|全系列|的|嗎|呢|喔|唷)+$/, "");
+  if (!t || t.length > 20) return null;
+  for (const cat of CATS) {
+    const subW = new Set((cat.subs || []).flatMap(([n, ws]) => [n, ...ws]).map(kwNorm));
+    if ([cat.k, ...cat.w].map(kwNorm).filter((w) => w === kwNorm(cat.k) || !subW.has(w)).includes(t)) return { cat, sub: null };
+  }
+  for (const cat of CATS) {
+    const cw = [cat.k, ...cat.w].map(kwNorm);
+    for (const sub of cat.subs || []) {
+      const sw = [sub[0], ...sub[1].filter((w) => w[0] !== "$")].map(kwNorm).filter((w) => w.length >= 2 && !/^[(（]/.test(w) && !/[)）]$/.test(w));
+      for (const w of sw) for (const c of ["", ...cw]) if (t === c + w || t === w + c) return { cat, sub };
+    }
+  }
+  for (const cat of WEB_CATS) if ([cat.k, ...cat.w].map(kwNorm).includes(t)) return { cat, sub: null };
+  return null;
+}
+export async function keywordBrowse(env, deps, uid, text) {
+  const m = matchKeyword(text);
+  if (!m) return null;
+  const { cat, sub } = m;
+  const items = await deps.loadCatalog(env);
+  const { total, list } = pickItems(items, sub ? sub[1] : cat.w, deps.isExpired, sub ? cat.w : null);
+  if (!list.length) return null;
+  const tier = await getTier(env, uid), link = await shopLink(env, uid);
+  const title = sub ? `${cat.k}・${sub[0]}` : cat.k;
+  const back = cat.subs ? [...cat.subs.filter(([n]) => !sub || n !== sub[0]).map(([n]) => [n, `目錄 ${cat.k} ${n}`]), ["← 其他系列", "商品目錄"]] : CATS.map((c) => [c.k, "目錄 " + c.k]);
+  // 最多 3 組卡片（35 款），超過的用「看全部」連到網站
+  const show = list.slice(0, 35), msgs = [];
+  for (let i = 0; i < show.length; i += 12) {
+    const part = show.slice(i, i + 12).map((it) => bubble(it, tier, link));
+    if (i + 12 >= show.length) { if (part.length === 12) part.pop(); part.push(moreBubble(title, total, link, sub ? sub[0] : cat.k)); }
+    msgs.push({ type: "flex", altText: `${title}商品（共 ${total} 款）`, contents: { type: "carousel", contents: part } });
+  }
+  msgs[msgs.length - 1].quickReply = qr(back);
+  return msgs;
+}
+
 // ---------- 老闆：客人訂單追蹤、刪除／修改、銷售狀況 ----------
 const OPEN = ["待付款", "已回報匯款", "待確認", "已付款"];
 const nowTW = () => new Date(Date.now() + 8 * 3600e3);
