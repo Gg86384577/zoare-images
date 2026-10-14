@@ -344,30 +344,44 @@ async function rememberName(env, uid) {
 }
 // 圖文選單：用 API 建立並設為預設（優先於 LINE 官方帳號後台設定的選單）
 const RICHMENU_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_v2.jpg";
-async function setupRichMenu(env) {
+const RICHMENU_OWNER_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_owner.jpg";
+async function createMenu(env, imgUrl, name, actions) {
   const W = 2500, H = 1686, cw = [0, 833, 1667, 2500], top = 938;
-  const labels = [["韓國批發", "日本批發", "中國批發"], ["商品目錄", "商品動態", "訂單查詢"]];
-  const areas = [];
-  labels.forEach((row, r) => row.forEach((t, c) => areas.push({
-    bounds: { x: cw[c], y: r ? top : 0, width: cw[c + 1] - cw[c], height: r ? H - top : top },
-    action: { type: "message", label: t, text: t } })));
-  const cr = await lineApi(env, "/v2/bot/richmenu", { size: { width: W, height: H }, selected: true, name: "ZOARE v2", chatBarText: "選單", areas });
-  if (!cr.ok) return "建立選單失敗：" + (await cr.text()).slice(0, 200);
+  const areas = actions.map((a, i) => ({ bounds: { x: cw[i % 3], y: i < 3 ? 0 : top, width: cw[i % 3 + 1] - cw[i % 3], height: i < 3 ? top : H - top }, action: a }));
+  const cr = await lineApi(env, "/v2/bot/richmenu", { size: { width: W, height: H }, selected: true, name, chatBarText: "選單", areas });
+  if (!cr.ok) throw new Error("建立選單失敗：" + (await cr.text()).slice(0, 200));
   const { richMenuId } = await cr.json();
-  const img = await fetch(RICHMENU_IMG + "?v=" + Date.now());
-  if (!img.ok) return "讀不到選單圖片：" + img.status;
+  const img = await fetch(imgUrl + "?v=" + Date.now());
+  if (!img.ok) throw new Error("讀不到選單圖片：" + img.status);
   const up = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, { method: "POST",
     headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "image/jpeg" }, body: await img.arrayBuffer() });
-  if (!up.ok) return "上傳選單圖片失敗：" + (await up.text()).slice(0, 200);
-  const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, { method: "POST", headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` } });
-  if (!df.ok) return "設定預設選單失敗：" + (await df.text()).slice(0, 200);
-  // 刪掉舊的 API 選單
+  if (!up.ok) throw new Error("上傳選單圖片失敗：" + (await up.text()).slice(0, 200));
+  return richMenuId;
+}
+async function setupRichMenu(env) {
+  const msg = (t) => ({ type: "message", label: t, text: t });
+  const base = ["韓國批發", "日本批發", "中國批發", "商品目錄", "商品動態"].map(msg);
+  const auth = { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` };
   try {
-    const list = await (await lineApi(env, "/v2/bot/richmenu/list")).json();
-    for (const m of list.richmenus || []) if (m.richMenuId !== richMenuId && /^ZOARE/.test(m.name))
-      await fetch(`https://api.line.me/v2/bot/richmenu/${m.richMenuId}`, { method: "DELETE", headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` } });
-  } catch (e) {}
-  return "好👌 新的圖文選單已經上線囉（韓國／日本／中國批發、商品目錄、商品動態、訂單查詢）\n關掉聊天室再打開就會看到";
+    const id = await createMenu(env, RICHMENU_IMG, "ZOARE v2", [...base, msg("訂單查詢")]);
+    const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${id}`, { method: "POST", headers: auth });
+    if (!df.ok) return "設定預設選單失敗：" + (await df.text()).slice(0, 200);
+    const keep = [id];
+    // 老闆專用選單：右下角換成「商家後台」，直接打開後台
+    const owner = await env.SESSIONS.get("owner");
+    let ownerNote = "";
+    if (owner) {
+      const oid = await createMenu(env, RICHMENU_OWNER_IMG, "ZOARE owner", [...base, { type: "uri", label: "商家後台", uri: await adminLink(env, owner) }]);
+      const lk = await fetch(`https://api.line.me/v2/bot/user/${owner}/richmenu/${oid}`, { method: "POST", headers: auth });
+      if (lk.ok) { keep.push(oid); ownerNote = "\n你的選單右下角是「商家後台」（只有你看得到），點了直接打開後台👌"; }
+    }
+    try {
+      const list = await (await lineApi(env, "/v2/bot/richmenu/list")).json();
+      for (const m of list.richmenus || []) if (!keep.includes(m.richMenuId) && /^ZOARE/.test(m.name))
+        await fetch(`https://api.line.me/v2/bot/richmenu/${m.richMenuId}`, { method: "DELETE", headers: auth });
+    } catch (e) {}
+    return "好👌 圖文選單已經更新囉（客人看到：韓國／日本／中國批發、商品目錄、商品動態、訂單查詢）" + ownerNote + "\n關掉聊天室再打開就會看到";
+  } catch (e) { return String(e.message || e); }
 }
 async function findUid(env, who) {
   const target = who.replace(/[「」"']/g, "").trim();
@@ -390,7 +404,7 @@ async function ownerCommand(env, text) {
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
   if (/^#?更新選單$/.test(text.trim())) return await setupRichMenu(env);
-  if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}`;
+  if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}\n\n💡 傳「#更新選單」後，你的圖文選單右下角會變成「商家後台」按鈕，之後點一下就能開`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
   // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
