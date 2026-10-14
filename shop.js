@@ -269,7 +269,9 @@ export async function verifyPaymentImage(env, deps, uid, img) {
   let toOk = false, why = [];
   if (r.method === "linepay") {
     const nm = String(r.to_name || "").replace(/\s/g, "");
-    toOk = !!nm && !!lp && (lp.replace(/\s/g, "").includes(nm) || nm.includes(lp.replace(/\s/g, "").slice(0, 4)));
+    // 收款人名字可以用 O／○／＊ 遮字，例如「張O森」可以對到「張晉森」
+    const cands = lp.split("\n").filter((ln) => !/https?:|連結|ID/i.test(ln)).join("、").split(/[／、,，|｜]+/).map((x) => x.replace(/^.*[:：]/, "").replace(/\s/g, "")).filter((x) => x.length >= 2);
+    toOk = !!nm && cands.some((c) => { const re = new RegExp("^" + c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*|[O○〇＊xX]/g, ".") + "$"); return re.test(nm) || nm.includes(c) || c.includes(nm); });
     if (!toOk) why.push(`收款對象「${r.to_name || "看不到"}」跟你的 LINE Pay 資料對不起來`);
   } else {
     const acct = (bank.match(/[0-9][0-9\-\s]{7,}[0-9]/g) || []).map(digits).sort((a, b) => b.length - a.length)[0] || "";
