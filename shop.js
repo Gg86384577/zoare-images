@@ -37,7 +37,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dl || "", jan: it.jan || it.code || "" });
+      moq: Number(it.moq) || 0, box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "" });
   }
   SLIM = out; SLIM_SRC = items;
   return out;
@@ -57,6 +57,46 @@ export function ruleNotes(lines, tier) {
   return notes;
 }
 
+// ---------- 商品動態 ----------
+const dlTime = (dl) => { const m = (dl || "").match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], (m[4] ? +m[4] : 23) - 8, m[5] ? +m[5] : 59) : 0; };
+export async function buildNews(env, items) {
+  const now = Date.now();
+  const ann = JSON.parse((await env.SESSIONS.get("news")) || "[]");
+  const deadlines = items.filter((x) => x.dl && dlTime(x.dl) > now && dlTime(x.dl) - now < 21 * 86400e3).sort((a, b) => dlTime(a.dl) - dlTime(b.dl));
+  const dlGroups = [];
+  for (const x of deadlines) {
+    const key = x.b + "|" + x.dl;
+    let g = dlGroups.find((g) => g.key === key);
+    if (!g) dlGroups.push((g = { key, b: x.b, dl: x.dl, at: dlTime(x.dl), items: [] }));
+    g.items.push(x);
+  }
+  const cutoff = new Date(now - 30 * 86400e3 + 8 * 3600e3).toISOString().slice(0, 10);
+  const fresh = items.filter((x) => x.ad && x.ad >= cutoff);
+  const newGroups = [];
+  for (const x of fresh) {
+    const key = x.ad + "|" + x.b;
+    let g = newGroups.find((g) => g.key === key);
+    if (!g) newGroups.push((g = { key, b: x.b, ad: x.ad, items: [] }));
+    g.items.push(x);
+  }
+  newGroups.sort((a, b) => (a.ad < b.ad ? 1 : -1));
+  const restock = items.filter((x) => /再販/.test(x.st) || /再販/.test(x.sh));
+  return { ann, dlGroups, newGroups, restockCount: restock.length };
+}
+export async function newsText(env, items, link) {
+  const n = await buildNews(env, items);
+  const parts = [];
+  if (n.ann.length) parts.push("📢 最新公告\n" + n.ann.slice(0, 3).map((a) => `・${a.d}　${a.t}`).join("\n"));
+  if (n.dlGroups.length) parts.push("⏰ 即將截單\n" + n.dlGroups.slice(0, 5).map((g) => `・${g.b}（${g.items.length} 款）截單 ${g.dl.split("（")[0]}`).join("\n"));
+  if (n.newGroups.length) parts.push("🆕 最新上架\n" + n.newGroups.slice(0, 6).map((g) => `・${g.ad.slice(5).replace("-", "/")}　${g.b}　${g.items.length} 款`).join("\n"));
+  if (n.restockCount) parts.push(`🔁 再販商品 ${n.restockCount} 款`);
+  if (!parts.length) parts.push("目前沒有新的商品動態喔～");
+  return parts.join("\n\n") + `\n\n👉 看完整動態與商品：\n${link}&v=news`;
+}
+
+export async function newsReply(env, deps, link) {
+  return newsText(env, slim(await deps.loadCatalog(env), deps.isExpired), link);
+}
 // ---------- 主處理 ----------
 export async function handleShop(request, env, ctx, deps) {
   const url = new URL(request.url);
@@ -67,6 +107,13 @@ export async function handleShop(request, env, ctx, deps) {
   if (p === "/shop/catalog") {
     const items = slim(await deps.loadCatalog(env), deps.isExpired);
     return new Response(JSON.stringify(items), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
+  }
+  if (p === "/shop/news") {
+    const n = await buildNews(env, slim(await deps.loadCatalog(env), deps.isExpired));
+    const pick = (arr) => arr.slice(0, 8).map((x) => x.k);
+    return Response.json({ ann: n.ann.slice(0, 5), restockCount: n.restockCount,
+      dl: n.dlGroups.slice(0, 10).map((g) => ({ b: g.b, dl: g.dl, n: g.items.length, ks: pick(g.items) })),
+      fresh: n.newGroups.slice(0, 12).map((g) => ({ b: g.b, ad: g.ad, n: g.items.length, ks: pick(g.items) })) });
   }
   if (p === "/shop/me") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
@@ -189,6 +236,23 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     await env.SESSIONS.put("bank", bm[1].trim().slice(0, 500));
     return `好👌 匯款資料已更新，客人下單後會看到：\n${bm[1].trim()}`;
   }
+  const an = t.match(/^公告[\s:：]*([\s\S]*)$/);
+  if (an) {
+    const list = JSON.parse((await env.SESSIONS.get("news")) || "[]");
+    if (!an[1].trim()) return list.length ? "目前的公告：\n" + list.map((a, i) => `${i + 1}. ${a.d} ${a.t}`).join("\n") + "\n\n傳「刪除公告 1」可以刪掉第 1 則" : "目前沒有公告\n傳「公告 內容」就可以新增，客人點「商品動態」會看到";
+    const d = new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 10).replace("-", "/");
+    list.unshift({ d, t: an[1].trim().slice(0, 300) });
+    await env.SESSIONS.put("news", JSON.stringify(list.slice(0, 10)));
+    return `好👌 已新增公告，客人點「商品動態」就會看到：\n${d} ${an[1].trim()}`;
+  }
+  const dn = t.match(/^刪除公告\s*(\d+)$/);
+  if (dn) {
+    const list = JSON.parse((await env.SESSIONS.get("news")) || "[]");
+    const i = Number(dn[1]) - 1;
+    if (!list[i]) return "找不到這則公告，傳「公告」可以看編號";
+    const [x] = list.splice(i, 1); await env.SESSIONS.put("news", JSON.stringify(list));
+    return `好👌 已刪除公告：${x.t}`;
+  }
   if (/^(訂單|訂單列表|最新訂單)$/.test(t)) {
     const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]").slice(0, 10);
     if (!idx.length) return "目前還沒有線上訂單喔";
@@ -240,6 +304,14 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font-size:13px;color:#333}
 .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.news{background:var(--red);color:#fff;border-color:var(--red)}
+.nsec{margin-top:14px}.nsec h3{font-size:15px;margin-bottom:6px}
+.ann{background:#fff;border-radius:12px;padding:10px 12px;margin-top:6px;font-size:13.5px;line-height:1.6}.ann small{color:var(--sub);margin-right:6px}
+.ng{background:#fff;border-radius:12px;padding:10px 12px;margin-top:8px}
+.ng .t{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700}.ng .t small{font-weight:400;color:var(--sub);font-size:12px}
+.ng .th{display:flex;gap:6px;overflow-x:auto;margin-top:8px;scrollbar-width:none}.ng .th img{width:64px;height:64px;object-fit:contain;background:#f6f6f7;border-radius:8px;flex:none}
+.ng button{margin-top:8px;border:0;background:var(--ink);color:#fff;border-radius:10px;padding:8px 12px;font-size:13px;width:100%}
+.cd{color:var(--red);font-weight:700}
 .info{font-size:12px;color:var(--sub);padding:10px 16px 0}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px 12px}
 @media(min-width:640px){.grid{grid-template-columns:repeat(3,1fr)}}@media(min-width:960px){.grid{grid-template-columns:repeat(4,1fr)}}
@@ -315,17 +387,18 @@ async function init(){
   $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span><br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
   const counts={};ALL.forEach(x=>counts[x.b]=(counts[x.b]||0)+1);
   const brands=["全部"].concat(Object.keys(counts).sort((a,b)=>counts[b]-counts[a]));
-  $("#chips").innerHTML=brands.map(b=>'<button class="chip'+(b==="全部"?" on":"")+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
+  $("#chips").innerHTML='<button class="chip news" id="newsBtn">🆕 商品動態</button>'+brands.map(b=>'<button class="chip'+(b==="全部"?" on":"")+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
+  $("#newsBtn").onclick=openNews;
   $("#chips").onclick=e=>{const b=e.target.dataset.b;if(!b)return;brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   filter();bar();
-  if(new URLSearchParams(location.search).get("v")==="orders")openOrders();
+  const V=new URLSearchParams(location.search).get("v");if(V==="orders")openOrders();if(V==="news")openNews();
 }
 const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）「」\\-_/|｜]/g,"");
 let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
 function filter(){
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
-  VIEW=ALL.filter(x=>(brand==="全部"||x.b===brand)&&(!q||words.every(w=>(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+(x.box?"盲盒box整盒":"")))).includes(w))));
+  VIEW=ALL.filter(x=>(brand==="全部"||x.b===brand)&&(!q||words.every(w=>(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.box?"盲盒box整盒":"")))).includes(w))));
   shown=0;$("#grid").innerHTML="";page();
   $("#info").textContent="共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+brand:"");
 }
@@ -361,6 +434,22 @@ function notes(L){const t=ME.tier,out=[],total=L.reduce((a,l)=>a+l.q,0);
   if(t!=="none"&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
+function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已截單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
+async function openNews(){
+  $("#panel").innerHTML='<h2>商品動態<button class="x" id="nx">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#nx").onclick=()=>$("#sheet").classList.remove("on");
+  try{const r=await fetch("/shop/news").then(r=>r.json());
+    const th=ks=>'<div class="th">'+ks.map(k=>byK(k)).filter(x=>x&&x.img).map(x=>'<img loading="lazy" src="'+esc(x.img)+'">').join("")+'</div>';
+    let h='';
+    if(r.ann.length)h+='<div class="nsec"><h3>📢 最新公告</h3>'+r.ann.map(a=>'<div class="ann"><small>'+esc(a.d)+'</small>'+esc(a.t)+'</div>').join("")+'</div>';
+    if(r.dl.length)h+='<div class="nsec"><h3>⏰ 即將截單</h3>'+r.dl.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'　'+g.n+' 款</span><small class="cd">'+esc(left(g.dl))+'</small></div><div style="font-size:12px;color:#6b6f75">截單 '+esc(g.dl.split("（")[0])+'</div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
+    if(r.fresh.length)h+='<div class="nsec"><h3>🆕 最新上架</h3>'+r.fresh.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'</span><small>'+esc(g.ad.slice(5).replace("-","/"))+' 上架・'+g.n+' 款</small></div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
+    if(r.restockCount)h+='<div class="nsec"><h3>🔁 再販商品</h3><div class="ng"><div class="t"><span>再販預定 '+r.restockCount+' 款</span></div><button data-q="再販">去看看</button></div></div>';
+    $("#panel").innerHTML='<h2>商品動態<button class="x" id="nx">×</button></h2>'+(h||'<div class="empty">目前沒有新的動態喔</div>');
+    $("#nx").onclick=()=>$("#sheet").classList.remove("on");
+    $("#panel").querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{brand=b.dataset.go;$("#q").value="";document.querySelectorAll(".chip[data-b]").forEach(c=>c.classList.toggle("on",c.dataset.b===brand));filter();$("#sheet").classList.remove("on");scrollTo(0,0)});
+    $("#panel").querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{brand="全部";$("#q").value=b.dataset.q;document.querySelectorAll(".chip[data-b]").forEach(c=>c.classList.toggle("on",c.dataset.b==="全部"));filter();$("#sheet").classList.remove("on");scrollTo(0,0)});
+  }catch(e){$("#panel").querySelector(".empty").textContent="載入失敗，請稍後再試"}
+}
 const STC={"待付款":"s1","已回報匯款":"s2","已付款":"s2","已出貨":"s3","已取消":"s4"};
 async function openOrders(){
   $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");

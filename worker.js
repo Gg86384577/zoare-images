@@ -9,12 +9,12 @@
 //   MODEL                      （Text，可不填）預設 claude-haiku-5-5
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply } from "./shop.js";
 const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261015-0100";
+const CATALOG_VERSION = "20261015-0100b";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -32,7 +32,7 @@ const MENU = {
   "訂單查詢": `{name} 您好，請進入樂賣商城查詢訂單喔！\n🛍️ 樂賣商城：${SHOP}`,
   "商品查詢": `請給我商品名稱或 JAN 碼供系統查詢喔！\n🛒 線上訂購：{shop}`,
 };
-const ORDER_WORDS = ["訂購", "下單", "我要訂購", "我要下單", "線上訂購", "訂購網站", "訂購連結", "購物車"];
+const ORDER_WORDS = ["商品目錄", "目錄", "訂購", "下單", "我要訂購", "我要下單", "線上訂購", "訂購網站", "訂購連結", "購物車"];
 const HUMAN_WORDS = ["真人客服", "真人", "找客服", "轉真人"];
 
 // ---------- 客服規則（給 Claude 的系統指令） ----------
@@ -340,6 +340,33 @@ async function rememberName(env, uid) {
   }
   return name;
 }
+// 圖文選單：用 API 建立並設為預設（優先於 LINE 官方帳號後台設定的選單）
+const RICHMENU_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_v2.jpg";
+async function setupRichMenu(env) {
+  const W = 2500, H = 1686, cw = [0, 833, 1667, 2500], top = 938;
+  const labels = [["韓國批發", "日本批發", "中國批發"], ["商品目錄", "商品動態", "訂單查詢"]];
+  const areas = [];
+  labels.forEach((row, r) => row.forEach((t, c) => areas.push({
+    bounds: { x: cw[c], y: r ? top : 0, width: cw[c + 1] - cw[c], height: r ? H - top : top },
+    action: { type: "message", label: t, text: t } })));
+  const cr = await lineApi(env, "/v2/bot/richmenu", { size: { width: W, height: H }, selected: true, name: "ZOARE v2", chatBarText: "選單", areas });
+  if (!cr.ok) return "建立選單失敗：" + (await cr.text()).slice(0, 200);
+  const { richMenuId } = await cr.json();
+  const img = await fetch(RICHMENU_IMG + "?v=" + Date.now());
+  if (!img.ok) return "讀不到選單圖片：" + img.status;
+  const up = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, { method: "POST",
+    headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "image/jpeg" }, body: await img.arrayBuffer() });
+  if (!up.ok) return "上傳選單圖片失敗：" + (await up.text()).slice(0, 200);
+  const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, { method: "POST", headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` } });
+  if (!df.ok) return "設定預設選單失敗：" + (await df.text()).slice(0, 200);
+  // 刪掉舊的 API 選單
+  try {
+    const list = await (await lineApi(env, "/v2/bot/richmenu/list")).json();
+    for (const m of list.richmenus || []) if (m.richMenuId !== richMenuId && /^ZOARE/.test(m.name))
+      await fetch(`https://api.line.me/v2/bot/richmenu/${m.richMenuId}`, { method: "DELETE", headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` } });
+  } catch (e) {}
+  return "好👌 新的圖文選單已經上線囉（韓國／日本／中國批發、商品目錄、商品動態、訂單查詢）\n關掉聊天室再打開就會看到";
+}
 async function findUid(env, who) {
   const target = who.replace(/[「」"']/g, "").trim();
   let uid = await env.SESSIONS.get("n:" + target);
@@ -360,6 +387,7 @@ async function ownerCommand(env, text) {
     const names = list.map((u) => byUid[u] || "（未知名稱）");
     return "目前停止回覆的客人：\n" + names.map((n) => "・" + n).join("\n");
   }
+  if (/^#?更新選單$/.test(text.trim())) return await setupRichMenu(env);
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi });
   if (shopR) return shopR;
   // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
@@ -415,6 +443,10 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && /^ZO\w{10}$/i.test(text)) {
     const d = await customerOrderDetail(env, uid, text.toUpperCase());
     if (d) return reply(env, ev.replyToken, [{ type: "text", text: d }]);
+  }
+  // 商品動態
+  if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {
+    return reply(env, ev.replyToken, [{ type: "text", text: await newsReply(env, { loadCatalog, isExpired }, await shopLink(env, uid)) }]);
   }
   // 要訂購連結
   if (uid && ORDER_WORDS.includes(text)) {
