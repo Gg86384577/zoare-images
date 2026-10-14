@@ -69,15 +69,23 @@ function slim(items, isExpired) {
 }
 
 // ---------- 訂購規則（只提醒，不擋） ----------
+// 起批數：會員＝照每款商品的起批數（整盒商品＝整盒數量；型錄沒寫的預設 3 件）；
+// 非會員＝單款 21 件起，商品起批數比 21 大就照商品（整盒商品湊成整盒倍數）
+export function minQty(x, tier) {
+  if (x.mem) return 1;
+  const own = Number(x.box) || Number(x.moq) || 0;
+  if (tier !== "none") return own || 3;
+  const m = Math.max(21, own);
+  return x.box ? Math.ceil(m / x.box) * x.box : m;
+}
 export function ruleNotes(lines, tier) {
   const notes = [];
   const total = lines.filter((l) => !l.mem).reduce((a, l) => a + l.q, 0);
   for (const l of lines) {
     if (l.mem) continue;
+    const mq = minQty(l, tier);
     if (l.box && l.q % l.box) notes.push(`${l.n}：盲盒／整箱商品請以 ${l.box} 的倍數訂購`);
-    else if (tier === "none" && l.q < 21) notes.push(`${l.n}：非會員單款需 21 件起`);
-    else if (tier !== "none" && l.q < 3) notes.push(`${l.n}：會員每款 3 件起`);
-    if (l.moq > 1 && l.q < l.moq && !l.box) notes.push(`${l.n}：貿易商最低訂購量 ${l.moq}`);
+    else if (l.q < mq) notes.push(`${l.n}：${tier === "none" ? "非會員" : "會員"}這款 ${mq} 件起`);
   }
   if (tier !== "none" && total > 0 && total < 21) notes.push(`會員混批合計需 21 件起（目前 ${total} 件）`);
   return notes;
@@ -543,11 +551,11 @@ function filter(){
 function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m)return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"");return"結單日 "+(d?d.split("（")[0]:"長期接單")}
 function card(x){
   const p=price(x),q=cart[x.k]||0;
-  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):"",x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
+  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(ME.tier==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-function step(x){return x.mem?1:(x.box||(ME.tier==="none"?21:3))}
+function step(x){if(x.mem)return 1;const own=Number(x.box)||Number(x.moq)||0;if(ME.tier!=="none")return own||3;const m=Math.max(21,own);return x.box?Math.ceil(m/x.box)*x.box:m}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
   const part=VIEW.slice(shown,shown+40);shown+=part.length;
@@ -569,7 +577,7 @@ function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
 function notes(L){const t=ME.tier,out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
-  L.forEach(({x,q})=>{if(x.mem)return;if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(t==="none"&&q<21)out.push(x.n+"：非會員單款需 21 件起");else if(t!=="none"&&q<3)out.push(x.n+"：會員每款 3 件起");if(x.moq>1&&q<x.moq&&!x.box)out.push(x.n+"：貿易商最低訂購量 "+x.moq)});
+  L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="none"?"非會員":"會員")+"這款 "+mq+" 件起")});
   if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
@@ -676,7 +684,8 @@ function pickItems(items, words, isExpired, catWords) {
 function bubble(it, tier, link) {
   const price = tier === "vip" ? `VIP NT$${it.v}` : `NT$${it.g}`;
   const sub = tier === "vip" ? `一般 NT$${it.g}` : `VIP 會員 NT$${it.v}`;
-  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : Number(it.moq) > 1 ? `最低訂購 ${it.moq} 個` : "", /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
+  const mq = minQty({ box: packN(it), moq: it.moq }, tier);
+  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : tier === "none" ? `${mq} 件起（會員 ${minQty({ box: packN(it), moq: it.moq }, "vip")} 件起）` : `會員 ${mq} 件起`, /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
   const body = [
     { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
     { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },
@@ -989,8 +998,8 @@ export async function membershipCards(env, uid) {
   const link = (await shopLink(env, uid)) + "&q=" + encodeURIComponent("會員方案");
   const tier = await getTier(env, uid);
   const bubbles = [
-    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "不同款混批 21 件，每款 3 件起", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
-    memBubble("一般會員", "NT$100／月", ["免國際運費", "不同款混批 21 件，每款 3 件起", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
+    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "不同款混批 21 件，每款照商品起批數", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
+    memBubble("一般會員", "NT$100／月", ["免國際運費", "不同款混批 21 件，每款照商品起批數", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
   ];
   const head = tier === "vip" ? "您已經是 VIP 會員囉👑 要續約可以點下面直接下單～" : tier === "member" ? "您目前是一般會員，升級 VIP 運費全免、每件再便宜 NT$30👇" : "ZOARÉ 批發會員方案👇 付款完成會自動開通";
   return [{ type: "flex", altText: head, contents: { type: "carousel", contents: bubbles } }];
@@ -1000,7 +1009,7 @@ export async function membershipCards(env, uid) {
 export async function welcomeMessages(env, uid, name) {
   const link = await shopLink(env, uid);
   const hi = name ? `${name} 您好～` : "您好～";
-  const text = `${hi}歡迎加入 ZOARÉ 日本角色批發🎉\n吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購批發價直送台灣\n\n🛒 線上商城（您的專屬連結，價格會自動套用會員價）\n${link}\n\n💬 在這裡直接查報價\n・打角色或品牌：「吉伊卡哇」「酷洛米」\n・加上細項更精準：「吉伊卡哇 相框」「小八 S娃」\n・傳商品照片、JAN 條碼或商品編號，幫您找同款報價\n・點下方選單「商品目錄」照分類看、「商品動態」看新品和即將結單\n\n👑 會員制度\n非會員單款要 21 件起；加入會員可以不同款混批 21 件、每款 3 件起\nVIP 會員 NT$1,000／月：國際＋國內運費全免，全館每件再便宜 NT$30，新品優先通知\n批發客最划算的是 VIP👇`;
+  const text = `${hi}歡迎加入 ZOARÉ 日本角色批發🎉\n吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購批發價直送台灣\n\n🛒 線上商城（您的專屬連結，價格會自動套用會員價）\n${link}\n\n💬 在這裡直接查報價\n・打角色或品牌：「吉伊卡哇」「酷洛米」\n・加上細項更精準：「吉伊卡哇 相框」「小八 S娃」\n・傳商品照片、JAN 條碼或商品編號，幫您找同款報價\n・點下方選單「商品目錄」照分類看、「商品動態」看新品和即將結單\n\n👑 會員制度\n非會員單款要 21 件起；加入會員可以不同款混批 21 件，每款只要達到商品本身的起批數（很多款 1～3 件就能訂）\nVIP 會員 NT$1,000／月：國際＋國內運費全免，全館每件再便宜 NT$30，新品優先通知\n批發客最划算的是 VIP👇`;
   const qrs = [["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["商品目錄", "商品目錄"], ["加入 VIP", "會員方案"], ["商品動態", "商品動態"]];
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
