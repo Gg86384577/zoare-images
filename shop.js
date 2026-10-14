@@ -392,6 +392,7 @@ async function init(){
   $("#chips").onclick=e=>{const b=e.target.dataset.b;if(!b)return;brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   filter();bar();
+  const Q0=new URLSearchParams(location.search).get("q");if(Q0){$("#q").value=Q0;filter()}
   const V=new URLSearchParams(location.search).get("v");if(V==="orders")openOrders();if(V==="news")openNews();
 }
 const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）「」\\-_/|｜]/g,"");
@@ -499,3 +500,90 @@ async function submit(e){
 }
 init();
 </script></body></html>`;
+
+// ---------- LINE 商品目錄：先選系列 → 再選角色 → 傳商品圖片卡 ----------
+const CATS = [
+  { k: "吉伊卡哇", w: ["吉伊卡哇", "ちいかわ", "chiikawa"], subs: [
+    ["吉伊", ["(吉伊)", "（吉伊）", "ちいかわ）", "ちいかわ)", "$ 吉伊卡哇", "$ 吉伊"]], ["小八", ["小八", "ハチワレ"]], ["烏薩奇", ["烏薩奇", "兔兔", "うさぎ"]],
+    ["飛鼠小桃", ["飛鼠", "小桃", "モモンガ"]], ["栗子饅頭", ["栗子饅頭", "くりまんじゅう"]], ["海獺", ["海獺", "ラッコ"]]] },
+  { k: "三麗鷗", w: ["三麗鷗", "サンリオ", "sanrio", "hello kitty", "凱蒂貓", "美樂蒂", "酷洛米", "大耳狗", "布丁狗", "帕恰狗", "酷企鵝", "雙子星", "人魚漢頓"], subs: [
+    ["Hello Kitty", ["hello kitty", "凱蒂貓", "キティ", "kt"]], ["美樂蒂", ["美樂蒂", "マイメロ"]], ["酷洛米", ["酷洛米", "クロミ"]],
+    ["大耳狗", ["大耳狗", "シナモ"]], ["布丁狗", ["布丁狗", "ポムポムプリン"]], ["帕恰狗", ["帕恰狗", "ポチャッコ"]],
+    ["酷企鵝", ["酷企鵝", "ばつ丸"]], ["雙子星", ["雙子星", "キキララ", "リトルツインスターズ"]], ["人魚漢頓", ["人魚漢頓", "漢頓", "ハンギョドン"]]] },
+  { k: "史努比", w: ["史努比", "スヌーピー", "peanuts", "snoopy"], subs: [["史努比", ["史努比", "スヌーピー", "snoopy"]], ["糊塗塔克", ["糊塗塔克", "糊塗塌客", "塔克", "ウッドストック", "woodstock"]]] },
+  { k: "拉拉熊", w: ["拉拉熊", "懶懶熊", "リラックマ", "rilakkuma"] },
+  { k: "角落生物", w: ["角落生物", "すみっコ"] },
+  { k: "mofusand", w: ["mofusand"] },
+  { k: "塔麻可吉", w: ["塔麻可吉", "たまごっち", "tamagotchi"] },
+  { k: "嚕嚕米", w: ["嚕嚕米", "ムーミン", "moomin"] },
+  { k: "寶可夢", w: ["寶可夢", "ポケモン", "皮卡丘", "pokemon"] },
+  { k: "哆啦A夢", w: ["哆啦a夢", "ドラえもん"] },
+  { k: "動漫角色", w: ["鬼滅", "咒術", "排球", "航海王", "七龍珠", "柯南", "鋼彈", "膽大黨", "火影"], subs: [
+    ["鬼滅之刃", ["鬼滅"]], ["咒術回戰", ["咒術"]], ["排球少年", ["排球"]], ["航海王", ["航海王", "ワンピース"]],
+    ["七龍珠", ["七龍珠", "ドラゴンボール"]], ["名偵探柯南", ["柯南", "コナン"]], ["鋼彈", ["鋼彈", "ガンダム"]], ["膽大黨", ["膽大黨", "ダンダダン"]]] },
+  { k: "捏捏療癒小物", w: ["捏捏", "スクイーズ", "squeeze", "crux"] },
+];
+const qr = (labels) => ({ items: labels.slice(0, 13).map(([label, text]) => ({ type: "action", action: { type: "message", label: label.slice(0, 20), text } })) });
+const hay = (it) => ((it.n || "") + " " + (it.ja || "") + " " + (it.b || "") + " " + (it.s || "")).toLowerCase();
+function pickItems(items, words, isExpired, catWords) {
+  const ws = words.map((w) => w.toLowerCase()), cs = (catWords || []).map((w) => w.toLowerCase());
+  const hits = items.filter((it) => { if (!it.g || !it.img || isExpired(it) || /缺貨|停售/.test(it.st || "")) return false;
+    const h = hay(it), nm = (it.n || "").toLowerCase(); return ws.some((w) => (w[0] === "$" ? nm.endsWith(w.slice(1)) : h.includes(w))) && (!cs.length || cs.some((w) => h.includes(w))); });
+  hits.sort((a, b) => (b.ad || "").localeCompare(a.ad || "") || (/有貨|◎/.test(b.st || "") - /有貨|◎/.test(a.st || "")));
+  const seen = new Set(), out = [];
+  for (const it of hits) { if (seen.has(it.img)) continue; seen.add(it.img); out.push(it); }
+  return { total: hits.length, list: out };
+}
+function bubble(it, tier, link) {
+  const price = tier === "vip" ? `VIP NT$${it.v}` : `NT$${it.g}`;
+  const sub = tier === "vip" ? `一般 NT$${it.g}` : `VIP 會員 NT$${it.v}`;
+  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : "", it.dl ? `截單 ${it.dl.split("（")[0]}` : "", /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
+  const body = [
+    { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
+    { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },
+    { type: "text", text: price + (packN(it) ? " ／個" : ""), size: "lg", weight: "bold", color: "#9E1B1B", margin: "sm" },
+    { type: "text", text: sub, size: "xxs", color: "#888888" },
+  ];
+  if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
+  return { type: "bubble", size: "kilo",
+    hero: { type: "image", url: it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },
+    body: { type: "box", layout: "vertical", spacing: "xs", contents: body },
+    footer: { type: "box", layout: "vertical", contents: [{ type: "button", style: "primary", color: "#161616", height: "sm",
+      action: { type: "uri", label: "我要訂購", uri: `${link}&q=${encodeURIComponent(it.jan || it.code || it.n.slice(0, 30))}` } }] } };
+}
+function moreBubble(title, total, link, q) {
+  return { type: "bubble", size: "kilo", body: { type: "box", layout: "vertical", justifyContent: "center", spacing: "md", backgroundColor: "#161616", contents: [
+    { type: "text", text: title, color: "#FFFFFF", weight: "bold", size: "lg", wrap: true, align: "center" },
+    { type: "text", text: `共 ${total} 款`, color: "#C9CCD0", size: "sm", align: "center" },
+    { type: "button", style: "secondary", color: "#FFFFFF", height: "sm", action: { type: "uri", label: "看全部商品", uri: `${link}&q=${encodeURIComponent(q)}` } }] } };
+}
+export async function catalogMenu(env, deps, uid, text) {
+  const t = text.trim();
+  if (!/^(商品目錄|目錄)(\s.*)?$/.test(t)) return null;
+  const parts = t.split(/\s+/).slice(1);
+  const link = await shopLink(env, uid);
+  if (!parts.length) {
+    return [{ type: "text", text: "請問想找哪個系列的商品呢？👇\n點下面的按鈕選擇，我會把商品圖片傳給您～\n\n想直接看全部商品：\n" + link,
+      quickReply: qr(CATS.map((c) => [c.k, "目錄 " + c.k])) }];
+  }
+  const cat = CATS.find((c) => c.k === parts[0]);
+  if (!cat) return [{ type: "text", text: "找不到這個系列耶😂 請點下面的按鈕選擇～", quickReply: qr(CATS.map((c) => [c.k, "目錄 " + c.k])) }];
+  const subName = parts.slice(1).join(" ");
+  if (cat.subs && !subName) {
+    return [{ type: "text", text: `${cat.k}想看哪個角色呢？👇`, quickReply: qr([...cat.subs.map(([n]) => [n, `目錄 ${cat.k} ${n}`]), [`全部${cat.k}`.slice(0, 20), `目錄 ${cat.k} 全部`], ["← 其他系列", "商品目錄"]]) }];
+  }
+  const sub = cat.subs && subName !== "全部" ? cat.subs.find(([n]) => n === subName) : null;
+  const words = sub ? sub[1] : cat.w;
+  const title = sub ? `${cat.k}・${sub[0]}` : cat.k;
+  const items = await deps.loadCatalog(env);
+  const { total, list } = pickItems(items, words, deps.isExpired, sub ? cat.w : null);
+  const tier = await getTier(env, uid);
+  const back = cat.subs ? [...cat.subs.filter(([n]) => n !== subName).map(([n]) => [n, `目錄 ${cat.k} ${n}`]), ["← 其他系列", "商品目錄"]] : CATS.map((c) => [c.k, "目錄 " + c.k]);
+  if (!list.length) return [{ type: "text", text: `${title}目前沒有可以訂購的商品喔😂\n可以看看其他系列～`, quickReply: qr(back) }];
+  const bubbles = list.slice(0, 11).map((it) => bubble(it, tier, link));
+  bubbles.push(moreBubble(title, total, link, sub ? sub[0] : cat.k));
+  return [
+    { type: "flex", altText: `${title}商品目錄（共 ${total} 款）`, contents: { type: "carousel", contents: bubbles } },
+    { type: "text", text: `以上是${title}的熱門商品（共 ${total} 款）👆\n左右滑動看更多，點「我要訂購」可以直接下單喔～\n${tier === "vip" ? "已套用您的 VIP 價" : "VIP 會員每件再便宜 NT$30"}`, quickReply: qr(back) },
+  ];
+}

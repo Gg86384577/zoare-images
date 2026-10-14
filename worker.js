@@ -9,7 +9,7 @@
 //   MODEL                      （Text，可不填）預設 claude-haiku-5-5
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu } from "./shop.js";
 const SHOP = "https://www.lemaiapp.com/m/zoare";
 const VIP = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/qYiJGiQIeyY0yYg5i0dz";
 const GENERAL = "https://www.lemaiapp.com/m/KqNHSrqDUFbRsjgvqKM4qjkFDCI2/p/ETKae1hYHQDfheT9EYci";
@@ -32,7 +32,7 @@ const MENU = {
   "訂單查詢": `{name} 您好，請進入樂賣商城查詢訂單喔！\n🛍️ 樂賣商城：${SHOP}`,
   "商品查詢": `請給我商品名稱或 JAN 碼供系統查詢喔！\n🛒 線上訂購：{shop}`,
 };
-const ORDER_WORDS = ["商品目錄", "目錄", "訂購", "下單", "我要訂購", "我要下單", "線上訂購", "訂購網站", "訂購連結", "購物車"];
+const ORDER_WORDS = ["訂購", "下單", "我要訂購", "我要下單", "線上訂購", "訂購網站", "訂購連結", "購物車"];
 const HUMAN_WORDS = ["真人客服", "真人", "找客服", "轉真人"];
 
 // ---------- 客服規則（給 Claude 的系統指令） ----------
@@ -443,6 +443,11 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && /^ZO\w{10}$/i.test(text)) {
     const d = await customerOrderDetail(env, uid, text.toUpperCase());
     if (d) return reply(env, ev.replyToken, [{ type: "text", text: d }]);
+  }
+  // 商品目錄：選系列 → 選角色 → 傳商品圖片卡
+  if (uid && text) {
+    const cm = await catalogMenu(env, { loadCatalog, isExpired }, uid, text);
+    if (cm) return reply(env, ev.replyToken, cm);
   }
   // 商品動態
   if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {
