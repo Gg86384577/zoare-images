@@ -472,6 +472,9 @@ input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);border-radiu
 .pay input:checked+span{border-color:var(--ink);background:var(--ink);color:#fff}
 .go{border:0;border-radius:12px;background:var(--ink);color:#fff;font-weight:700;height:48px;font-size:16px;margin-top:6px}
 .go:disabled{opacity:.5}
+.lpbtn{display:block;margin:10px 0;background:#06c755;color:#fff;text-decoration:none;font-weight:700;border-radius:12px;padding:12px;text-align:center;font-size:16px}
+.lpqr{display:block;width:180px;margin:6px auto;border-radius:8px}
+.done pre:empty{display:none}
 .done{text-align:center;padding:10px 4px}.done h3{font-size:20px;margin:8px 0}.done pre{white-space:pre-wrap;text-align:left;background:#fff;border-radius:12px;padding:12px;font-family:inherit;font-size:14px;line-height:1.7;margin-top:10px}
 .err{padding:40px 20px;text-align:center;color:var(--sub);line-height:1.8}
 .empty{padding:30px;text-align:center;color:var(--sub);grid-column:1/-1}
@@ -493,6 +496,9 @@ try{cart=JSON.parse(localStorage.getItem("zo_cart")||"{}")}catch(e){}
 const save=()=>{try{localStorage.setItem("zo_cart",JSON.stringify(cart))}catch(e){}};
 const price=x=>ME&&ME.tier==="vip"?x.v:x.g;
 const fmt=n=>"NT$"+n.toLocaleString();
+const QR="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/linepay_qr.png";
+function payHTML(t,isLP){let h=esc(t).replace(/(https?:\\/\\/[^\\s<]+)/g,u=>/qrcodepay\\.line\\.me/.test(u)?'</pre><a class="lpbtn" href="'+u+'">💚 開啟 LINE Pay 付款</a><pre>':'<a href="'+u+'">'+u+'</a>');
+  if(isLP&&/qrcodepay\\.line\\.me/.test(t))h+='</pre><img class="lpqr" src="'+QR+'" alt="LINE Pay QR"><pre>';return h}
 async function init(){
   if(!T){$("#grid").innerHTML='<div class="err">請從 ZOARÉ 的 LINE 官方帳號點「訂購連結」進來喔<br>（在 LINE 傳「訂購」就會收到專屬連結）</div>';$("#who").textContent="";return}
   try{
@@ -575,7 +581,7 @@ async function openOrders(){
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
       '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+
       (o.paid5?'<div style="font-size:12.5px">匯款後五碼：'+esc(o.paid5)+'</div>':'')+(o.track?'<div style="font-size:12.5px">🚚 物流單號：<b>'+esc(o.track)+'</b></div>':'')+
-      (o.status==="待付款"&&(o.pay==="LINE Pay"?r.linepay:r.bank)?'<div class="warn" style="margin-top:8px">'+(o.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'<br>'+esc(o.pay==="LINE Pay"?r.linepay:r.bank).replace(/\\n/g,"<br>")+'<br>付款後請在 LINE 傳'+(o.pay==="LINE Pay"?"「付款截圖」":"「後五碼」和「轉帳截圖」")+'</div>':'')+
+      (o.status==="待付款"&&(o.pay==="LINE Pay"?r.linepay:r.bank)?'<div class="warn" style="margin-top:8px">'+(o.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'<br>'+payHTML(o.pay==="LINE Pay"?r.linepay:r.bank,o.pay==="LINE Pay").replace(/\\n/g,"<br>").replace(/<\\/?pre>/g,"")+'<br>付款後請在 LINE 傳'+(o.pay==="LINE Pay"?"「付款截圖」":"「後五碼」和「轉帳截圖」")+'</div>':'')+
       '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li><span>'+esc(l.n)+' ×'+l.q+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
       '<div style="font-size:12.5px;margin-top:6px;color:#444">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+'</div></details></div>').join("")
       :'<div class="empty">還沒有訂單喔</div>';
@@ -611,7 +617,7 @@ async function submit(e){
     if(!r.ok)throw new Error(r.error||"送出失敗");
     cart={};save();bar();document.querySelectorAll(".qty").forEach(el=>{const c=el.closest(".card");if(c)el.outerHTML=qtyBox(byK(c.dataset.k),0)});
     $("#panel").innerHTML='<div class="done"><div style="font-size:44px">✅</div><h3>訂單已送出</h3><div>訂單編號 <b>'+esc(r.id)+'</b><br>共 '+r.qty+' 件　合計 <b>'+fmt(r.total)+'</b></div>'+
-    (r.bank?'<pre>'+(fd.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'\\n'+esc(r.bank)+'\\n\\n'+(fd.pay==="LINE Pay"?"付款後請回到 LINE 傳「付款截圖」":"轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」")+'，系統會自動對帳</pre>':'<pre>我們確認庫存後，會在 LINE 傳付款資料給你喔～</pre>')+
+    (r.bank?'<pre>'+(fd.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'\\n'+payHTML(r.bank,fd.pay==="LINE Pay")+'\\n\\n'+(fd.pay==="LINE Pay"?"付款後請回到 LINE 傳「付款截圖」":"轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」")+'，系統會自動對帳</pre>':'<pre>我們確認庫存後，會在 LINE 傳付款資料給你喔～</pre>')+
     (r.notes.length?'<div class="warn">'+r.notes.map(esc).join("<br>")+'<br>客服會再跟你確認數量</div>':'')+
     '<p style="margin-top:12px;color:#6b6f75;font-size:13px">訂單明細也已經傳到你的 LINE 囉</p><button class="go" style="width:100%;margin-top:14px" onclick="sheet.classList.remove(\\'on\\')">繼續逛</button></div>';
   }catch(err){btn.disabled=false;btn.textContent="送出訂單";alert(err.message)}
