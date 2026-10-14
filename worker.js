@@ -15,7 +15,7 @@ const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客�
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261015-0245";
+const CATALOG_VERSION = "20261015-0250";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -136,7 +136,7 @@ function norm(s) {
 }
 
 // ---------- 目錄 ----------
-let CATALOG = null, RAW_CATALOG = null, PRICED_WITH = "";
+let CATALOG = null, RAW_CATALOG = null, PRICED_WITH = "", LIVE_DAY = "";
 // ---------- 每日匯率自動計價 ----------
 // 每款商品的 pb 記錄計價基準：日幣商品＝日幣未稅價 y × 1.1 × 折扣 d（或已含稅折扣後金額 a）；人民幣商品＝稅後人民幣 a（盲盒再除以每盒 n 個）
 // 成本＝外幣金額 × 當天台銀匯率（日圓現金賣出、人民幣即期賣出），無條件進位；一般價＝成本＋80、VIP＝成本＋50
@@ -199,10 +199,12 @@ async function loadCatalog(env) {
   const rates = await getRates(env), rules = await getDlRules(env);
   const keys = Object.keys(rules).filter((k) => k !== "*").sort((a, b) => b.length - a.length);
   const stamp = (rates ? `${rates.JPY}|${rates.CNY}` : "") + "|" + JSON.stringify(rules);
-  if (CATALOG && PRICED_WITH === stamp) return CATALOG;
+  // 每小時重新篩一次，剛過結單時間的商品馬上下架
+  if (CATALOG && PRICED_WITH === stamp && LIVE_DAY === new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13)) return CATALOG;
   if (RAW_CATALOG) {
     for (const it of RAW_CATALOG) { if (rates) priceItem(it, rates); applyDl(it, rules, keys); }
-    CATALOG = RAW_CATALOG.slice(); PRICED_WITH = stamp;
+    CATALOG = RAW_CATALOG.filter((it) => !isExpired(it)); PRICED_WITH = stamp; // 過了結單日的商品直接移除
+    LIVE_DAY = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13);
     return CATALOG;
   }
   // 每次更新商品目錄就改 CATALOG_VERSION，讓新價格馬上生效
@@ -211,7 +213,8 @@ async function loadCatalog(env) {
   if (!res.ok) throw new Error("catalog " + res.status);
   const items = await res.json();
   for (const it of items) { it._t = it.t || norm([it.n, it.ja, it.b, it.s, it.code, it.jan].join(" ")); if (rates) priceItem(it, rates); applyDl(it, rules, keys); }
-  RAW_CATALOG = items; CATALOG = items.slice(); PRICED_WITH = stamp;
+  RAW_CATALOG = items; CATALOG = items.filter((it) => !isExpired(it)); PRICED_WITH = stamp;
+  LIVE_DAY = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13);
   return CATALOG;
 }
 
