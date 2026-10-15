@@ -124,7 +124,15 @@ function catsOf(it) {
 export function dlLabel(it) {
   const d = it.dlx || it.dl || "";
   const m = d.match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}:\d{2}))?/);
-  if (m) return `結單日 ${+m[2]}/${+m[3]}${m[4] && m[4] !== "23:59" ? " " + m[4] : ""}`;
+  if (m) {
+    const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    const ds = `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+    const tm = m[4] || "23:59";
+    const tmr = new Date(Date.now() + 32 * 3600e3).toISOString().slice(0, 10);
+    if (ds === today) return `今天 ${tm} 結單！要訂請把握`;
+    if (ds === tmr) return `明天 ${tm} 結單`;
+    return `結單日 ${+m[2]}/${+m[3]}${m[4] && m[4] !== "23:59" ? " " + m[4] : ""}`;
+  }
   if (d) return "結單日 " + d.split("（")[0];
   return "結單日 長期接單";
 }
@@ -641,7 +649,7 @@ function filter(){
   $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
   const cq=document.getElementById("clrq");if(cq)cq.onclick=e=>{e.preventDefault();$("#q").value="";filter()};
 }
-function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m)return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"");return"結單日 "+(d?d.split("（")[0]:"長期接單")}
+function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m){const td=new Date(Date.now()+288e5).toISOString().slice(0,10),tw=new Date(Date.now()+1152e5).toISOString().slice(0,10),ds=m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0"),tm=m[4]||"23:59";if(ds===td)return"⏰ 今天 "+tm+" 結單";if(ds===tw)return"⏰ 明天 "+tm+" 結單";return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"")}return"結單日 "+(d?d.split("（")[0]:"長期接單")}
 function card(x){
   const p=price(x),q=cart[x.k]||0;
   const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
@@ -786,7 +794,8 @@ function bubble(it, tier, link) {
     { type: "text", text: price + (packN(it) ? " ／個" : ""), size: "lg", weight: "bold", color: "#9E1B1B", margin: "sm" },
     { type: "text", text: sub, size: "xxs", color: "#888888" },
   ];
-  body.push({ type: "text", text: "⏰ " + dlLabel(it), size: "xs", weight: "bold", color: "#161616", margin: "sm" });
+  const dlt = dlLabel(it);
+  body.push({ type: "text", text: "⏰ " + dlt, size: "xs", weight: "bold", color: /今天|明天/.test(dlt) ? "#D0021B" : "#161616", margin: "sm", wrap: true });
   if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
   return { type: "bubble", size: "kilo",
     hero: { type: "image", url: it.th || it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },
