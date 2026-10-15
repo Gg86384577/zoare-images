@@ -812,7 +812,63 @@ async function audience(env) {
   for (const o of await allOrders(env, 200)) for (const l of o.lines || []) if (!l.mem) for (const k of catsOf({ n: l.n, b: l.b })) add(k, o.uid);
   return map;
 }
+// ---------- 新品自動群發：每天 20:00 把當天新上架的商品，依系列傳給問過該系列的客人 ----------
+async function newArrivalPlan(env) {
+  const twToday = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const last = (await env.SESSIONS.get("bc:lastAd")) || new Date(Date.now() + 8 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+  const cat = await loadCatalog(env);
+  const fresh = cat.filter((it) => it.ad && it.ad > last && it.ad <= twToday && it.img && it.g && !/缺貨|停售/.test(it.st || ""));
+  const byCat = {};
+  for (const it of fresh) for (const k of catsOf(it)) if (k !== "其他") (byCat[k] = byCat[k] || []).push(it);
+  const aud = await audience(env);
+  const perUser = {}; // uid → [系列]
+  for (const k of Object.keys(byCat)) for (const u of aud[k] || []) (perUser[u] = perUser[u] || []).push(k);
+  return { today: twToday, last, fresh, byCat, perUser };
+}
+async function sendNewArrivals(env, plan) {
+  let ok = 0;
+  for (const [uid, ks] of Object.entries(plan.perUser)) {
+    let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
+    const top = ks.sort((a, b) => plan.byCat[b].length - plan.byCat[a].length).slice(0, 4);
+    const msgs = [{ type: "text", text: `${name ? name + " " : ""}您好～您之前問過的「${top.join("、")}」有新品上架囉🎉\n幫您把最新款式整理在下面👇 喜歡的直接點「我要訂購」，數量、起批、到貨時間有任何問題都可以問我～` }];
+    for (const k of top) {
+      const seen = new Set(), list = [];
+      for (const it of plan.byCat[k]) { if (seen.has(it.img)) continue; seen.add(it.img); list.push(it); if (list.length >= 10) break; }
+      const card = await productCards(env, uid, list, `${k}新品（共 ${plan.byCat[k].length} 款）`);
+      if (card) msgs.push(card);
+    }
+    const more = top.map((k) => ({ type: "action", action: { type: "message", label: ("看全部" + k).slice(0, 20), text: k } }));
+    msgs[msgs.length - 1].quickReply = { items: more.concat([{ type: "action", action: { type: "message", label: "會員方案", text: "會員方案" } }]).slice(0, 13) };
+    const r = await lineApi(env, "/v2/bot/message/push", { to: uid, messages: msgs.slice(0, 5) });
+    if (r.ok) ok++; else console.log("new arrival push failed", r.status, await r.text());
+  }
+  await env.SESSIONS.put("bc:lastAd", plan.today);
+  return ok;
+}
+async function runNewArrivals(env) {
+  if ((await env.SESSIONS.get("bc:auto")) === "off") return;
+  const tw = new Date(Date.now() + 8 * 3600e3), today = tw.toISOString().slice(0, 10);
+  if (tw.getUTCHours() !== 20 || (await env.SESSIONS.get("bc:ran")) === today) return;
+  await env.SESSIONS.put("bc:ran", today, { expirationTtl: 3 * 86400 });
+  const plan = await newArrivalPlan(env);
+  const owner = await env.SESSIONS.get("owner");
+  if (!plan.fresh.length) return;
+  const n = Object.keys(plan.perUser).length;
+  const ok = n ? await sendNewArrivals(env, plan) : (await env.SESSIONS.put("bc:lastAd", plan.today), 0);
+  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 今日新品群發完成\n新上架 ${plan.fresh.length} 款：${Object.entries(plan.byCat).map(([k, v]) => `${k} ${v.length}`).join("、")}\n已傳給 ${ok} 位問過這些系列的客人` }] });
+}
 async function broadcastCommand(env, t) {
+  const nm = t.match(/^#?新品群發\s*(確認|關|關閉|開|開啟)?$/);
+  if (nm) {
+    if (nm[1] && /關/.test(nm[1])) { await env.SESSIONS.put("bc:auto", "off"); return "好👌 每晚 8 點的新品自動群發已關閉，要恢復傳「新品群發 開」"; }
+    if (nm[1] && /開/.test(nm[1])) { await env.SESSIONS.delete("bc:auto"); return "好👌 每晚 8 點的新品自動群發已開啟"; }
+    const plan = await newArrivalPlan(env);
+    if (!plan.fresh.length) return `目前沒有還沒群發的新品（上次群發到 ${plan.last} 上架的商品）`;
+    const n = Object.keys(plan.perUser).length;
+    if (nm[1] === "確認") { const ok = await sendNewArrivals(env, plan); return `📣 已傳新品給 ${ok} 位客人`; }
+    const auto = (await env.SESSIONS.get("bc:auto")) !== "off";
+    return `📣 還沒群發的新品 ${plan.fresh.length} 款\n${(() => { const rows = Object.entries(plan.byCat).map(([k, v]) => [k, v.length, Object.values(plan.perUser).filter((x) => x.includes(k)).length]).sort((a, b) => b[2] - a[2] || b[1] - a[1]); const hit = rows.filter((r) => r[2]); return (hit.length ? hit.map(([k, c, u]) => `・${k} ${c} 款 → ${u} 位客人`).join("\n") : "・目前還沒有問過這些系列的客人") + (rows.length > hit.length ? `\n（另外 ${rows.length - hit.length} 個系列還沒有客人詢問過）` : ""); })()}\n\n每位客人只會收到一則（他問過的系列各附新品卡片），共 ${n} 位、用掉 ${n} 則推播額度\n${auto ? "今晚 8 點會自動傳" : "自動群發目前關閉"}，要現在馬上傳請回「新品群發 確認」`;
+  }
   if (/^#?群發名單$/.test(t)) {
     const map = await audience(env);
     const rows = Object.entries(map).sort((a, b) => b[1].size - a[1].size).map(([k, v]) => `・${k}：${v.size} 位`);
@@ -938,6 +994,7 @@ export default {
       const r = await getRates(env);
       if (Math.floor(hm / 5) % 12 === 0) { try { await memExpiry(env, { lineApi }); } catch (e) { console.log("memExpiry", e); } }
       if (Math.floor(hm / 5) % 12 === 1) { try { await runCare(env); } catch (e) { console.log("care", e); } }
+      if (Math.floor(hm / 5) % 12 === 2) { try { await runNewArrivals(env); } catch (e) { console.log("newArrivals", e); } }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
     })());
   },
