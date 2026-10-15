@@ -126,7 +126,7 @@ export function shipLabel(it) {
   const now = new Date(Date.now() + 8 * 3600e3), ym = now.getUTCFullYear() * 100 + now.getUTCMonth() + 1;
   if (/^現貨$|好評発売中|発売中|常規商品/.test(sh) || /^現貨/.test(st)) return "現貨";
   let m = sh.match(/(\d{4})年(\d{1,2})月(上旬|中旬|下旬)?/);
-  if (m) { const v = +m[1] * 100 + +m[2]; return v <= ym && !m[3] ? (/新品|再販/.test(sh) ? "現貨" : "") : `預計 ${+m[2]}月${m[3] || ""}到貨`; }
+  if (m) { const v = +m[1] * 100 + +m[2]; return v < ym || (v === ym && /新品|再販/.test(sh)) ? "現貨" : `預計 ${+m[2]}月${m[3] || ""}到貨`; }
   m = sh.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
   if (m) { const v = +m[1] * 100 + +m[2]; return v < ym ? "現貨" : `預計 ${+m[2]}/${+m[3]} 發售`; }
   m = sh.match(/次回入荷\s*(\d{1,2})月/);
