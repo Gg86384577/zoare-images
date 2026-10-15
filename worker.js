@@ -15,7 +15,7 @@ const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客�
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261016-0025";
+const CATALOG_VERSION = "20261016-0022";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -1120,8 +1120,7 @@ async function runMemberReminders(env) {
   } while (cursor);
 }
 // 部署後要執行一次的老闆指令（執行結果會傳給老闆）
-const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" },
-  { id: "20261016-sanrio-new-push", cmd: "新品群發 確認", notBefore: "2026-10-16T10:00:00+08:00" }];
+const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" }];
 async function runBootTasks(env) {
   const owner = await env.SESSIONS.get("owner");
   // 一次性：之前設定、沒有期限的會員，一律從今天起算 1 個月
