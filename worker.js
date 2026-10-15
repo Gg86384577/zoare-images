@@ -638,6 +638,21 @@ async function handleEvent(env, ev) {
     const r = await ownerCommand(env, text);
     if (r) return reply(env, ev.replyToken, (Array.isArray(r) ? r : [r]).map((x) => ({ type: "text", text: x })));
   }
+  // 管理員自由切換自己的會員等級（測試價格用）：「切換 VIP」「切換 一般會員」「切換 非會員」
+  const sw = text.replace(/\s/g, "").match(/^#?(?:切換|切換成|切換為|改成|改為|設為)(VIP會員|VIP|vip|一般會員|會員|一般|非會員)$/);
+  if (uid && env.SESSIONS && sw) {
+    let admins = []; try { admins = JSON.parse((await env.SESSIONS.get("admins")) || "[]"); } catch (e) {}
+    let isAdmin = uid === (await env.SESSIONS.get("owner")) || admins.includes(uid);
+    if (!isAdmin) { const dn = await displayName(env, uid); if (ADMIN_NAMES.some((a) => dn.replace(/\s/g, "").startsWith(a.replace(/[\s🦁]/gu, "")))) { isAdmin = true; admins.push(uid); await env.SESSIONS.put("admins", JSON.stringify(admins)); } }
+    if (isAdmin) {
+      const tier = /vip/i.test(sw[1]) ? "vip" : /^(一般會員|會員|一般)$/.test(sw[1]) ? "member" : "none";
+      if (tier === "none") { await env.SESSIONS.delete("tier:" + uid); await env.SESSIONS.delete("tx:" + uid); }
+      else { await env.SESSIONS.put("tier:" + uid, tier); await env.SESSIONS.delete("tx:" + uid); } // 管理員不設期限
+      const nm = { vip: "👑 VIP 會員", member: "一般會員", none: "非會員" }[tier];
+      return reply(env, ev.replyToken, [{ type: "text", text: `🔧 管理員模式：已切換為 ${nm}\n商品卡片、訂購網站都會用這個等級的價格和起批規則（網站重新整理就會更新）\n管理員沒有期限，不會被自動停止`,
+        quickReply: { items: [["切換 VIP", "切換 VIP"], ["切換 一般會員", "切換 一般會員"], ["切換 非會員", "切換 非會員"]].map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) } }]);
+    }
+  }
   // 記錄客人聯絡時間（3 天沒下單 → 關懷訊息）
   const isOwnerUser = uid && env.SESSIONS && uid === (await env.SESSIONS.get("owner"));
   if (uid && !isOwnerUser) {
@@ -811,6 +826,8 @@ async function handleEvent(env, ev) {
 // 每 5 分鐘檢查一次要追蹤的客人
 // ---------- 3 天關懷：客人聯絡後 3 天內沒下單 → 傳一則溫暖的問候 ----------
 const CARE_DAYS = 3;
+// 管理員（LINE 顯示名稱）：可以自由切換自己的會員等級
+const ADMIN_NAMES = ["James 森🦁"];
 const SHOP_BASE_URL = "https://shiny-mud-319f.ojason90816-a70.workers.dev";
 async function noteContact(env, uid, interest) {
   if (!env.SESSIONS || !uid) return;
