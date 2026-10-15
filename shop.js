@@ -1016,7 +1016,8 @@ async function ownerOrders(env, t, deps) {
 }
 
 // 給商家後台用
-export { TIER_NAME, sign, allOrders, saveOrder, deleteOrder, lineCost, situation, OPEN, payDiff, slim };
+export { TIER_NAME, sign, allOrders, saveOrder, deleteOrder, lineCost, situation, OPEN, payDiff, slim, catsOf };
+export const CAT_NAMES = () => CATS.concat(WEB_CATS).map((c) => c.k);
 
 // AI 報價時用的商品卡片
 export async function productCards(env, uid, items, altText) {

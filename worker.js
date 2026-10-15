@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -508,6 +508,8 @@ async function ownerCommand(env, text) {
     const n = key === "*" ? items.length : items.filter((it) => ((it.b || "") + " " + (it.n || "")).includes(key)).length;
     return rules[key] ? `好👌 ${key === "*" ? "全部商品（沒另外設定的）" : `「${key}」${n} 款商品`}結單日設為：${rules[key]}\n商品卡片和訂購網站都會顯示，日期過了會自動改回預設` : `好👌 已清除「${key === "*" ? "全部" : key}」的結單日設定`;
   }
+  const bcr = env.SESSIONS ? await broadcastCommand(env, text.trim()) : null;
+  if (bcr) return bcr;
   // 補發關懷：功能上線前聯絡過、還沒下單的舊客人
   const bm = text.trim().match(/^#?補發關懷\s*(確認)?$/);
   if (bm && env.SESSIONS) {
@@ -771,6 +773,7 @@ async function handleEvent(env, ev) {
 // 每 5 分鐘檢查一次要追蹤的客人
 // ---------- 3 天關懷：客人聯絡後 3 天內沒下單 → 傳一則溫暖的問候 ----------
 const CARE_DAYS = 3;
+const SHOP_BASE_URL = "https://shiny-mud-319f.ojason90816-a70.workers.dev";
 async function noteContact(env, uid, interest) {
   if (!env.SESSIONS || !uid) return;
   let c = {};
@@ -779,6 +782,71 @@ async function noteContact(env, uid, interest) {
   if (interest && interest.items && interest.items.length) { c.items = interest.items.slice(0, 5); c.topic = interest.topic || ""; }
   else if (interest && interest.topic) { c.topic = interest.topic; c.items = []; }
   await env.SESSIONS.put("c3:" + uid, JSON.stringify(c), { expirationTtl: 10 * 86400 });
+  // 興趣標籤（群發用）：問過／逛過哪些系列，保留 180 天
+  if (interest) {
+    const cats = new Set();
+    for (const x of interest.items || []) for (const k of catsOf({ n: x.n })) cats.add(k);
+    if (interest.topic) for (const k of catsOf({ n: interest.topic })) cats.add(k);
+    cats.delete("其他");
+    if (cats.size) {
+      let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get("tg:" + uid)) || "{}"); } catch (e) {}
+      for (const k of cats) tg[k] = Date.now();
+      await env.SESSIONS.put("tg:" + uid, JSON.stringify(tg), { expirationTtl: 180 * 86400 });
+    }
+  }
+}
+// 依系列找客人：興趣標籤＋訂過該系列商品的客人
+async function audience(env) {
+  const owner = await env.SESSIONS.get("owner");
+  const map = {}; // 系列 → Set(uid)
+  const add = (k, uid) => { if (uid && uid !== owner && k !== "其他") (map[k] = map[k] || new Set()).add(uid); };
+  let cursor;
+  do {
+    const r = await env.SESSIONS.list({ prefix: "tg:", cursor });
+    for (const key of r.keys) {
+      let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get(key.name)) || "{}"); } catch (e) {}
+      for (const k of Object.keys(tg)) add(k, key.name.slice(3));
+    }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  for (const o of await allOrders(env, 200)) for (const l of o.lines || []) if (!l.mem) for (const k of catsOf({ n: l.n, b: l.b })) add(k, o.uid);
+  return map;
+}
+async function broadcastCommand(env, t) {
+  if (/^#?群發名單$/.test(t)) {
+    const map = await audience(env);
+    const rows = Object.entries(map).sort((a, b) => b[1].size - a[1].size).map(([k, v]) => `・${k}：${v.size} 位`);
+    return `📣 可以群發的客人（問過、逛過或訂過該系列）\n${rows.length ? rows.join("\n") : "目前還沒有資料，客人開始詢問後就會累積"}\n\n群發方式：\n群發 吉伊卡哇\n（換行）要傳的內容\n\n多個系列用逗號：群發 吉伊卡哇,三麗鷗\n系統會自動在最後附上「點這裡看商品」連結，客人點了會看到該系列商品卡片和自己的下單按鈕`;
+  }
+  if (/^#?群發確認$/.test(t)) {
+    const p = JSON.parse((await env.SESSIONS.get("bc:pending")) || "null");
+    if (!p) return "沒有待確認的群發，請先傳「群發 系列名稱＋內容」";
+    await env.SESSIONS.delete("bc:pending");
+    const go = `${SHOP_BASE_URL}/go?q=${encodeURIComponent(p.cats[0])}`;
+    const text = `${p.text}\n\n👉 點這裡看商品、直接下單：\n${go}`.slice(0, 4900);
+    let ok = 0;
+    for (let i = 0; i < p.uids.length; i += 500) {
+      const r = await lineApi(env, "/v2/bot/message/multicast", { to: p.uids.slice(i, i + 500), messages: [{ type: "text", text,
+        quickReply: { items: p.cats.slice(0, 3).map((k) => ({ type: "action", action: { type: "message", label: ("看" + k).slice(0, 20), text: k } })).concat([{ type: "action", action: { type: "message", label: "會員方案", text: "會員方案" } }]) } }] });
+      if (r.ok) ok += Math.min(500, p.uids.length - i); else console.log("multicast failed", r.status, await r.text());
+    }
+    return ok ? `📣 已群發給 ${ok} 位客人（${p.cats.join("、")}）` : "群發失敗，可能是 LINE 推播額度用完了，請到官方帳號後台確認";
+  }
+  if (/^#?群發取消$/.test(t)) { await env.SESSIONS.delete("bc:pending"); return "好👌 已取消群發"; }
+  const m = t.match(/^#?群發\s+([^\n]+?)\s*(?:\n([\s\S]+))?$/);
+  if (!m) return null;
+  const names = CAT_NAMES();
+  const want = m[1].split(/[,，、\s]+/).filter(Boolean);
+  const bad = want.filter((k) => k !== "全部" && !names.includes(k));
+  if (bad.length) return `找不到系列：${bad.join("、")}\n可以用：${names.join("、")}、全部`;
+  const map = await audience(env);
+  const uids = new Set();
+  for (const k of want[0] === "全部" ? Object.keys(map) : want) for (const u of map[k] || []) uids.add(u);
+  if (!uids.size) return `「${want.join("、")}」目前還沒有詢問過的客人可以群發`;
+  if (!m[2]) return `「${want.join("、")}」共有 ${uids.size} 位客人\n\n請把要傳的內容寫在下一行，例如：\n群發 ${want.join(",")}\n吉伊卡哇新品到貨囉🎉 …`;
+  const cats = want[0] === "全部" ? ["商品目錄"] : want;
+  await env.SESSIONS.put("bc:pending", JSON.stringify({ cats, uids: [...uids], text: m[2].trim() }), { expirationTtl: 3600 });
+  return `📣 群發預覽（${cats.join("、")}，共 ${uids.size} 位，會用掉 ${uids.size} 則推播額度）\n————\n${m[2].trim()}\n\n👉 點這裡看商品、直接下單：（系統自動附連結）\n————\n確定請回「群發確認」，不要請回「群發取消」（1 小時內有效）`;
 }
 const itemRef = (it) => ({ k: it.jan || it.code || "", n: it.n });
 async function orderedSince(env, uid, since) {
