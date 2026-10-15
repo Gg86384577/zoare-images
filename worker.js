@@ -15,7 +15,7 @@ const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客�
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261015-1830";
+const CATALOG_VERSION = "20261016-0025";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -1120,7 +1120,8 @@ async function runMemberReminders(env) {
   } while (cursor);
 }
 // 部署後要執行一次的老闆指令（執行結果會傳給老闆）
-const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" }];
+const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" },
+  { id: "20261016-sanrio-new-push", cmd: "新品群發 確認", notBefore: "2026-10-16T10:00:00+08:00" }];
 async function runBootTasks(env) {
   const owner = await env.SESSIONS.get("owner");
   // 一次性：之前設定、沒有期限的會員，一律從今天起算 1 個月
@@ -1143,6 +1144,7 @@ async function runBootTasks(env) {
   }
   for (const t of BOOT_TASKS) {
     if (await env.SESSIONS.get("boot:" + t.id)) continue;
+    if (t.notBefore && Date.now() < Date.parse(t.notBefore)) continue; // 不要半夜傳給客人
     await env.SESSIONS.put("boot:" + t.id, "1");
     let r; try { r = await ownerCommand(env, t.cmd); } catch (e) { r = "執行失敗：" + e.message; }
     if (owner && r) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `（你交代的：${t.cmd}）\n${Array.isArray(r) ? r.join("\n") : r}` }] });
