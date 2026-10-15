@@ -560,6 +560,26 @@ async function ownerCommand(env, text) {
   if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}\n\n💡 傳「#更新選單」後，你的圖文選單右下角會變成「商家後台」按鈕，之後點一下就能開`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
+  if (/^#?(會員名單|會員列表|所有會員|會員清單)$/.test(t)) {
+    const rows = [];
+    let cursor;
+    do {
+      const r = await env.SESSIONS.list({ prefix: "tier:", cursor });
+      for (const k of r.keys) {
+        const uid = k.name.slice(5), tier = await env.SESSIONS.get(k.name);
+        if (tier !== "vip" && tier !== "member") continue;
+        const until = Number(await env.SESSIONS.get("tx:" + uid)) || 0;
+        if (until && until < Date.now()) continue;
+        rows.push({ tier, until, name: await nameOf(env, uid) });
+      }
+      cursor = r.list_complete ? null : r.cursor;
+    } while (cursor);
+    if (!rows.length) return "目前沒有有效的會員";
+    rows.sort((a, b) => (a.tier === b.tier ? (a.until || 9e15) - (b.until || 9e15) : a.tier === "vip" ? -1 : 1));
+    const line = (x) => `・${x.name}　${x.until ? `到 ${fmtDay(x.until)}（剩 ${Math.ceil((x.until - Date.now()) / 86400e3)} 天）` : "未設期限"}`;
+    const vip = rows.filter((x) => x.tier === "vip"), gen = rows.filter((x) => x.tier === "member");
+    return `📅 有效會員共 ${rows.length} 位\n\n👑 VIP 會員（${vip.length}）\n${vip.map(line).join("\n") || "・無"}\n\n🔹 一般會員（${gen.length}）\n${gen.map(line).join("\n") || "・無"}\n\n改期限：「名字 VIP 3個月」「名字 會員 到12/31」`;
+  }
   // 會員等級：「小美 VIP」「芊芊 改為VIP會員 期限2個月」「小美 會員 到12/31」「小美 非會員」（沒寫期限＝1 個月）
   const dm2 = t.match(/^(.*?)\s*(?:[,，、]?\s*(?:期限|效期|有效|為期|共)?\s*(\d+\s*(?:個多月|個月|月|天|日|週|周|年)|(?:到|至)\s*[\d/.-]+))\s*$/);
   const body = dm2 && dm2[2] ? dm2[1] : t;
@@ -1083,7 +1103,7 @@ async function runMemberReminders(env) {
   } while (cursor);
 }
 // 部署後要執行一次的老闆指令（執行結果會傳給老闆）
-const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }];
+const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" }];
 async function runBootTasks(env) {
   const owner = await env.SESSIONS.get("owner");
   // 一次性：之前設定、沒有期限的會員，一律從今天起算 1 個月
