@@ -508,6 +508,12 @@ async function ownerCommand(env, text) {
     const n = key === "*" ? items.length : items.filter((it) => ((it.b || "") + " " + (it.n || "")).includes(key)).length;
     return rules[key] ? `好👌 ${key === "*" ? "全部商品（沒另外設定的）" : `「${key}」${n} 款商品`}結單日設為：${rules[key]}\n商品卡片和訂購網站都會顯示，日期過了會自動改回預設` : `好👌 已清除「${key === "*" ? "全部" : key}」的結單日設定`;
   }
+  if (/^#?(關懷訊息|關懷)\s*(關|關閉|停止|開|開啟)?$/.test(text.trim())) {
+    const m = text.trim().match(/(關|關閉|停止|開|開啟)$/);
+    if (m) { if (/開/.test(m[1])) await env.SESSIONS.delete("care:off"); else await env.SESSIONS.put("care:off", "1"); }
+    const off = (await env.SESSIONS.get("care:off")) === "1";
+    return `💌 3 天關懷訊息：${off ? "已關閉" : "開啟中"}\n客人聯絡後 3 天內沒下單，會在 11:00～21:00 自動傳一則溫暖的問候，附上他上次問的商品（沒問過商品就問他想找什麼）\n每次聯絡只會傳一次\n\n傳「關懷 關」可以關閉、「關懷 開」重新開啟`;
+  }
   if (/^#?(匯率|今日匯率)$/.test(text.trim())) {
     const r = await getRates(env);
     return r ? `目前計價匯率（台銀 ${r.at}）\n日圓 現金賣出：${r.JPY}\n人民幣 即期賣出：${r.CNY}\n\n每天早上 9:15 後自動更新，要馬上更新請傳「更新匯率」` : "還沒抓過匯率，傳「更新匯率」可以馬上抓";
@@ -573,6 +579,9 @@ async function handleEvent(env, ev) {
     const r = await ownerCommand(env, text);
     if (r) return reply(env, ev.replyToken, (Array.isArray(r) ? r : [r]).map((x) => ({ type: "text", text: x })));
   }
+  // 記錄客人聯絡時間（3 天沒下單 → 關懷訊息）
+  const isOwnerUser = uid && env.SESSIONS && uid === (await env.SESSIONS.get("owner"));
+  if (uid && !isOwnerUser) await noteContact(env, uid, null);
   // 匯款後五碼回報
   if (uid && env.SESSIONS && text) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
@@ -589,10 +598,10 @@ async function handleEvent(env, ev) {
   // 商品目錄：選系列 → 選角色 → 傳商品圖片卡
   if (uid && text) {
     const cm = await catalogMenu(env, { loadCatalog, isExpired }, uid, text);
-    if (cm) return reply(env, ev.replyToken, cm);
+    if (cm) { if (!isOwnerUser && /^(商品目錄|目錄)\s+\S/.test(text)) await noteContact(env, uid, { topic: text.replace(/^(商品目錄|目錄)\s+/, "").replace(/\s+全部$/, "") }); return reply(env, ev.replyToken, cm); }
     // 只打品牌／角色名稱 → 直接傳全部商品卡片
     const kb = await keywordBrowse(env, { loadCatalog, isExpired }, uid, text);
-    if (kb) return reply(env, ev.replyToken, kb);
+    if (kb) { if (!isOwnerUser) await noteContact(env, uid, { topic: text }); return reply(env, ev.replyToken, kb); }
   }
   // 商品動態
   if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {
@@ -711,6 +720,7 @@ async function handleEvent(env, ev) {
     if (!cardMsg) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     if (!cardMsg && uid && /\{會員連結\}/.test(out.reply || "")) lineMsgs.push(...(await membershipCards(env, uid)));
     await reply(env, ev.replyToken, lineMsgs);
+    if (uid && !isOwnerUser && shown.length) await noteContact(env, uid, { items: shown.map(itemRef), topic: text.slice(0, 20) });
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
     const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
     const ordered = /下單了|已下單|訂好了|已訂|買了|付款了|匯款了/.test(text);
@@ -729,6 +739,82 @@ async function handleEvent(env, ev) {
 
 
 // 每 5 分鐘檢查一次要追蹤的客人
+// ---------- 3 天關懷：客人聯絡後 3 天內沒下單 → 傳一則溫暖的問候 ----------
+const CARE_DAYS = 3;
+async function noteContact(env, uid, interest) {
+  if (!env.SESSIONS || !uid) return;
+  let c = {};
+  try { c = JSON.parse((await env.SESSIONS.get("c3:" + uid)) || "{}"); } catch (e) {}
+  c.at = Date.now();
+  if (interest && interest.items && interest.items.length) { c.items = interest.items.slice(0, 5); c.topic = interest.topic || ""; }
+  else if (interest && interest.topic) { c.topic = interest.topic; c.items = []; }
+  await env.SESSIONS.put("c3:" + uid, JSON.stringify(c), { expirationTtl: 10 * 86400 });
+}
+const itemRef = (it) => ({ k: it.jan || it.code || "", n: it.n });
+async function orderedSince(env, uid, since) {
+  const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]");
+  if (!ids.length) return false;
+  const o = JSON.parse((await env.SESSIONS.get("o:" + ids[0])) || "null");
+  if (!o) return false;
+  const t = Date.parse(o.at.replace(" ", "T") + ":00+08:00");
+  return t >= since - 60000;
+}
+async function runCare(env) {
+  const hourTW = (new Date().getUTCHours() + 8) % 24;
+  if (hourTW < 11 || hourTW >= 21) return; // 只在 11:00～21:00 傳，不吵到客人
+  if ((await env.SESSIONS.get("care:off")) === "1") return;
+  const owner = await env.SESSIONS.get("owner");
+  let cursor, sent = 0;
+  do {
+    const r = await env.SESSIONS.list({ prefix: "c3:", cursor });
+    for (const k of r.keys) {
+      const uid = k.name.slice(3);
+      let c; try { c = JSON.parse((await env.SESSIONS.get(k.name)) || "null"); } catch (e) { c = null; }
+      if (!c || !c.at || Date.now() - c.at < CARE_DAYS * 86400e3) continue;
+      await env.SESSIONS.delete(k.name); // 每次聯絡只關懷一次
+      if (uid === owner || (await env.SESSIONS.get("h:" + uid)) || (await orderedSince(env, uid, c.at))) continue;
+      const msgs = await careMessages(env, uid, c);
+      const pr = await lineApi(env, "/v2/bot/message/push", { to: uid, messages: msgs });
+      if (!pr.ok) console.log("care failed", pr.status, await pr.text()); else sent++;
+      if (sent >= 30) return; // 一次最多 30 位，下個整點再繼續
+    }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+}
+async function careMessages(env, uid, c) {
+  let name = "";
+  try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
+  const hi = name ? `${name} 您好～` : "您好～";
+  const link = await shopLink(env, uid);
+  let items = [];
+  if (c.items && c.items.length) {
+    const cat = await loadCatalog(env);
+    const keys = new Set(c.items.map((x) => x.k).filter(Boolean));
+    items = cat.filter((it) => keys.has(it.jan || it.code || "") && it.img).slice(0, 5);
+  }
+  const qrItems = (list) => ({ items: list.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) });
+  if (items.length) {
+    const first = items[0].n.replace(/\s+/g, " ");
+    const text = `${hi}好幾天沒聊天了，最近一切都還順利嗎？☺️\n\n前幾天您問到的「${first}」${items.length > 1 ? `等 ${items.length} 款` : ""}，不知道還有沒有需要呢？\n我幫您把商品再整理一次放在下面👇 數量、起批、到貨時間有任何想問的，都可以直接跟我說，我們陪您慢慢挑，不用有壓力喔🙏\n\n決定好的話，點卡片上的「我要訂購」就能直接下單～`;
+    const cards = await productCards(env, uid, items, "上次詢問的商品");
+    const out = [{ type: "text", text }];
+    if (cards) { cards.quickReply = qrItems([["想下單", "我要訂購"], ["再看看別的", "商品目錄"], ["問真人客服", "真人客服"]]); out.push(cards); }
+    else out[0].quickReply = qrItems([["想下單", "我要訂購"], ["再看看別的", "商品目錄"]]);
+    return out;
+  }
+  if (c.topic) {
+    const kb = await keywordBrowse(env, { loadCatalog, isExpired }, uid, c.topic).catch(() => null);
+    if (kb && kb.length) {
+      const flex = kb[0]; delete flex.quickReply;
+      flex.quickReply = qrItems([["想下單", "我要訂購"], ["看別的系列", "商品目錄"], ["問真人客服", "真人客服"]]);
+      const text = `${hi}好幾天沒聊天了，最近一切都還順利嗎？☺️\n\n前幾天看您在看「${c.topic}」的商品，不知道有沒有找到喜歡的呢？\n我把這個系列再整理給您看看👇 想問數量、起批、到貨時間，或想找其他款式，都可以直接跟我說，我們陪您慢慢挑，不用有壓力喔🙏`;
+      return [{ type: "text", text }, flex];
+    }
+  }
+  const topic = c.topic ? `前幾天看到您在逛「${c.topic}」，` : "";
+  const text = `${hi}前幾天謝謝您來找我們聊天☺️ 最近忙不忙呢？\n\n${topic}不知道最近有沒有想找的商品？吉伊卡哇、三麗鷗、寶可夢、蠟筆小新…都有不少新貨喔！\n跟我說想要的角色或商品，我馬上幫您找、幫您報價；有預算或數量的考量也可以先聊聊，我們一起慢慢挑🙏\n\n🛒 您的專屬商城：${link}`;
+  return [{ type: "text", text, quickReply: qrItems([["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["寶可夢", "寶可夢"], ["蠟筆小新", "蠟筆小新"], ["商品目錄", "商品目錄"], ["會員方案", "會員方案"]]) }];
+}
 async function runFollowups(env) {
   if (!env.SESSIONS) return;
   const hourTW = (new Date().getUTCHours() + 8) % 24;
@@ -753,6 +839,7 @@ export default {
       const hm = tw.getUTCHours() * 60 + tw.getUTCMinutes();
       const r = await getRates(env);
       if (Math.floor(hm / 5) % 12 === 0) { try { await memExpiry(env, { lineApi }); } catch (e) { console.log("memExpiry", e); } }
+      if (Math.floor(hm / 5) % 12 === 1) { try { await runCare(env); } catch (e) { console.log("care", e); } }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
     })());
   },
