@@ -120,6 +120,21 @@ function catsOf(it) {
   const out = CATS.concat(WEB_CATS).filter((c) => c.w.some((w) => h.includes(w.toLowerCase()))).map((c) => c.k);
   return out.length ? out : ["其他"];
 }
+// 到貨／發售時間：把各家型錄寫法統一成客人看得懂的一句（看不出來就不顯示）
+export function shipLabel(it) {
+  const sh = String(it.ship || "").trim(), st = String(it.st || "");
+  const now = new Date(Date.now() + 8 * 3600e3), ym = now.getUTCFullYear() * 100 + now.getUTCMonth() + 1;
+  if (/^現貨$|好評発売中|発売中|常規商品/.test(sh) || /^現貨/.test(st)) return "現貨";
+  let m = sh.match(/(\d{4})年(\d{1,2})月(上旬|中旬|下旬)?/);
+  if (m) { const v = +m[1] * 100 + +m[2]; return v <= ym && !m[3] ? (/新品|再販/.test(sh) ? "現貨" : "") : `預計 ${+m[2]}月${m[3] || ""}到貨`; }
+  m = sh.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m) { const v = +m[1] * 100 + +m[2]; return v < ym ? "現貨" : `預計 ${+m[2]}/${+m[3]} 發售`; }
+  m = sh.match(/次回入荷\s*(\d{1,2})月/);
+  if (m) return `下一批 ${+m[1]}月到貨`;
+  m = sh.match(/(\d{1,2})月[～~〜-](\d{1,2})月/);
+  if (m) return `預計 ${+m[1]}～${+m[2]}月到貨`;
+  return "";
+}
 // 結單日顯示：有日期 → 「結單 10/31 23:59」；文字規則（每週日…）照寫；都沒有 → 長期接單
 export function dlLabel(it) {
   const d = it.dlx || it.dl || "";
@@ -143,7 +158,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", sh: it.ship || "", dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
+      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
   }
   out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
@@ -652,7 +667,7 @@ function filter(){
 function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m){const td=new Date(Date.now()+288e5).toISOString().slice(0,10),tw=new Date(Date.now()+1152e5).toISOString().slice(0,10),ds=m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0"),tm=m[4]||"23:59";if(ds===td)return"⏰ 今天 "+tm+" 結單";if(ds===tw)return"⏰ 明天 "+tm+" 結單";return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"")}return"結單日 "+(d?d.split("（")[0]:"長期接單")}
 function card(x){
   const p=price(x),q=cart[x.k]||0;
-  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
+  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.sh?"📦 "+x.sh:"",x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
@@ -796,6 +811,8 @@ function bubble(it, tier, link) {
   ];
   const dlt = dlLabel(it);
   body.push({ type: "text", text: "⏰ " + dlt, size: "xs", weight: "bold", color: /今天|明天/.test(dlt) ? "#D0021B" : "#161616", margin: "sm", wrap: true });
+  const shp = shipLabel(it);
+  if (shp) body.push({ type: "text", text: "📦 " + shp, size: "xxs", color: "#555555" });
   if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
   return { type: "bubble", size: "kilo",
     hero: { type: "image", url: it.th || it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },

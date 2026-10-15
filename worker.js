@@ -10,12 +10,12 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261015-1820";
+const CATALOG_VERSION = "20261015-1830";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -279,8 +279,8 @@ function itemLine(i, it) {
   if (it.pack && it.pack.includes("整箱")) f.push(`訂購方式：${it.pack}`);
   if (isExpired(it)) f.push(`狀態：已截止（不可下單）`);
   else if (it.st) f.push(`狀態：${it.st}`);
-  if (it.ship) f.push(`發售出貨：${it.ship}`);
-  if (it.dl) f.push(`截止：${it.dl}`);
+  if (it.ship) f.push(`發售出貨：${shipLabel(it) || it.ship}`);
+  f.push(`結單：${dlLabel(it)}`);
   if (it.code) f.push(`編號：${it.code}`);
   if (it.lm) f.push(`舊商品編號：${it.lm}`);
   if (it.jan && it.jan !== it.code) f.push(`JAN：${it.jan}`);
