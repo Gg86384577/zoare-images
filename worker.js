@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES } from "./shop.js";
+import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -78,6 +78,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 付款方式：線上訂購網站結帳時可以選「銀行轉帳」或「LINE Pay」，付款後在 LINE 傳後五碼和付款截圖，系統會自動對帳。
 - 運費細節、退換貨、改單、取消訂單、客訴，或任何從上面規則和候選商品裡找不到答案的問題：不要硬回答，直接加上 #HANDOFF（系統會自動跟客人說請專人回覆，你的文字不會送出）。
 - 客人一直問同一件事、你只能重複前面講過的話時，也加上 #HANDOFF。
+- 會員效期一般是 1 個月，到期自動停止；客人問自己的會員到期日，請他傳「會員期限」。續約會從到期日往後延長。
 - 會員取消：下個月不繼續繳費就等於取消，不用另外申請。已下的訂單一律以下單當時的金額、數量為準。
 - 不能挑款的原因：貿易商那邊也沒辦法挑款，盲盒也不確定會出哪一款，可以老實跟客人說明。
 
@@ -559,14 +560,18 @@ async function ownerCommand(env, text) {
   if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}\n\n💡 傳「#更新選單」後，你的圖文選單右下角會變成「商家後台」按鈕，之後點一下就能開`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
-  // 會員等級：「小美 VIP」「小美 會員」「小美 非會員」
-  const tm = t.match(/^(.+?)\s*(VIP|vip|VIP會員|會員|一般會員|非會員|一般)$/);
+  // 會員等級：「小美 VIP」「芊芊 改為VIP會員 期限2個月」「小美 會員 到12/31」「小美 非會員」（沒寫期限＝1 個月）
+  const dm2 = t.match(/^(.*?)\s*(?:[,，、]?\s*(?:期限|效期|有效|為期|共)?\s*(\d+\s*(?:個多月|個月|月|天|日|週|周|年)|(?:到|至)\s*[\d/.-]+))\s*$/);
+  const body = dm2 && dm2[2] ? dm2[1] : t;
+  const tm = body.match(/^(.+?)\s*(?:改為|改成|設為|設定為|升級為|升級成|開通|設定)?\s*(VIP會員|VIP|vip|一般會員|會員|非會員|一般)$/);
   if (tm) {
     const r = await findUid(env, tm[1]);
     if (r.error) return r.error;
     const tier = /vip/i.test(tm[2]) ? "vip" : /^(會員|一般會員)$/.test(tm[2]) ? "member" : "none";
-    if (tier === "none") await env.SESSIONS.delete("tier:" + r.uid); else await env.SESSIONS.put("tier:" + r.uid, tier);
-    return `好👌 「${r.name}」設定為${{ vip: "VIP 會員", member: "一般會員（NT$100）", none: "非會員" }[tier]}，訂購網站會自動套用對應價格與規則`;
+    const period = (dm2 && dm2[2] && parsePeriod(dm2[2])) || { months: 1 };
+    const res = await setMembership(env, r.uid, tier, period, false);
+    if (tier === "none") return `好👌 「${r.name}」已改為非會員`;
+    return `好👌 「${r.name}」設定為${{ vip: "VIP 會員", member: "一般會員（NT$100）" }[tier]}\n📅 有效到 ${fmtDay(res.until)}（${Math.ceil((res.until - Date.now()) / 86400e3)} 天）\n到期會自動停止，到期前 3 天會提醒客人續約；客人傳「會員期限」可以看到自己的到期日`;
   }
   const m = t.match(/^(.+?)\s*(停止回覆|開始回覆)$/) || t.match(/^(停止回覆|開始回覆)\s*(.+)$/);
   if (!m) return null;
@@ -643,6 +648,14 @@ async function handleEvent(env, ev) {
   // 商品動態
   if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {
     return reply(env, ev.replyToken, [{ type: "text", text: await newsReply(env, { loadCatalog, isExpired }, await shopLink(env, uid)) }]);
+  }
+  // 查自己的會員期限
+  if (uid && env.SESSIONS && /^(會員期限|我的會員|會員到期|到期日|會員資格|會員狀態|我是會員嗎)$/.test(text.replace(/\s/g, ""))) {
+    const mi = await memberInfo(env, uid);
+    if (mi.tier === "none") return reply(env, ev.replyToken, [{ type: "text", text: "您目前還不是會員喔～\n加入會員可以不同款混批 21 件、每款照商品起批數就能訂👇" }, ...(await membershipCards(env, uid))]);
+    const name = mi.tier === "vip" ? "👑 VIP 會員" : "一般會員";
+    return reply(env, ev.replyToken, [{ type: "text", text: `您目前是 ${name}\n📅 有效到 ${fmtDay(mi.until)}（還有 ${mi.days} 天）\n\n到期會自動停止，想續約的話傳「會員方案」直接下單，會從到期日往後延長，不會浪費天數喔～`,
+      quickReply: { items: [{ type: "action", action: { type: "message", label: "續約／升級", text: "會員方案" } }, { type: "action", action: { type: "message", label: "商品目錄", text: "商品目錄" } }] } }]);
   }
   // 加入會員
   if (uid && /^(加入會員|會員|入會|VIP|加入VIP|會員方案|會員制|會員制度|會員費|VIP會員|一般會員|升級VIP|怎麼加入會員|(NT)?\$?1,?000(元)?(方案|會員)?|(NT)?\$?100(元)?(方案|會員)?)$/i.test(text.replace(/\s/g, ""))) {
@@ -1042,6 +1055,62 @@ async function careMessages(env, uid, c) {
   const text = `${hi}之前謝謝您來找我們聊天☺️ 最近忙不忙呢？\n\n${topic}不知道最近有沒有想找的商品？吉伊卡哇、三麗鷗、寶可夢、蠟筆小新…都有不少新貨喔！\n跟我說想要的角色或商品，我馬上幫您找、幫您報價；有預算或數量的考量也可以先聊聊，我們一起慢慢挑🙏\n\n🛒 您的專屬商城：${link}`;
   return [{ type: "text", text, quickReply: qrItems([["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["寶可夢", "寶可夢"], ["蠟筆小新", "蠟筆小新"], ["商品目錄", "商品目錄"], ["會員方案", "會員方案"]]) }];
 }
+// ---------- 會員到期提醒：到期前 3 天提醒續約、到期當天通知 ----------
+async function runMemberReminders(env) {
+  const hourTW = (new Date().getUTCHours() + 8) % 24;
+  if (hourTW < 10 || hourTW >= 20) return;
+  let cursor;
+  do {
+    const r = await env.SESSIONS.list({ prefix: "tx:", cursor });
+    for (const k of r.keys) {
+      const uid = k.name.slice(3), until = Number(await env.SESSIONS.get(k.name)) || 0;
+      if (!until) continue;
+      const left = until - Date.now(), done = (await env.SESSIONS.get("txr:" + uid)) || "";
+      const tier = await env.SESSIONS.get("tier:" + uid);
+      const nm = tier === "vip" ? "VIP 會員" : "一般會員";
+      if (left > 0 && left <= 3 * 86400e3 && !done.includes("soon")) {
+        await env.SESSIONS.put("txr:" + uid, done + "soon", { expirationTtl: 40 * 86400 });
+        await lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text: `您好～提醒您，您的 ${nm} 將在 ${fmtDay(until)} 到期☺️\n想繼續享有會員價${tier === "vip" ? "和運費全免" : ""}的話，點下面直接續約，會從到期日往後延長，不會浪費天數喔～` }, ...(await membershipCards(env, uid)).filter((m) => m.type === "flex")] });
+      } else if (left <= 0 && !done.includes("end")) {
+        await env.SESSIONS.put("txr:" + uid, done + "end", { expirationTtl: 40 * 86400 });
+        await env.SESSIONS.delete("tier:" + uid);
+        await lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text: `您好～您的會員資格已在 ${fmtDay(until)} 到期，謝謝您這段時間的支持🙏\n隨時想恢復會員價，傳「會員方案」就能直接續約喔～` }] });
+        const owner = await env.SESSIONS.get("owner");
+        if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📅 ${await nameOf(env, uid)} 的會員已到期（${fmtDay(until)}），已自動改回非會員` }] });
+      }
+    }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+}
+// 部署後要執行一次的老闆指令（執行結果會傳給老闆）
+const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }];
+async function runBootTasks(env) {
+  const owner = await env.SESSIONS.get("owner");
+  // 一次性：之前設定、沒有期限的會員，一律從今天起算 1 個月
+  if (!(await env.SESSIONS.get("boot:20261015-member-expiry"))) {
+    await env.SESSIONS.put("boot:20261015-member-expiry", "1");
+    const fixed = [];
+    let cursor;
+    do {
+      const r = await env.SESSIONS.list({ prefix: "tier:", cursor });
+      for (const k of r.keys) {
+        const uid = k.name.slice(5), tier = await env.SESSIONS.get(k.name);
+        if ((tier === "vip" || tier === "member") && !(await env.SESSIONS.get("tx:" + uid))) {
+          const res = await setMembership(env, uid, tier, { months: 1 }, false);
+          fixed.push(`・${await nameOf(env, uid)}（${tier === "vip" ? "VIP" : "一般"}）到 ${fmtDay(res.until)}`);
+        }
+      }
+      cursor = r.list_complete ? null : r.cursor;
+    } while (cursor);
+    if (owner && fixed.length) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📅 會員期限功能上線：之前沒有設期限的會員，已從今天起算 1 個月\n${fixed.join("\n")}\n\n有人期限不一樣的話，傳「名字 VIP 3個月」或「名字 VIP 到12/31」就能改` }] });
+  }
+  for (const t of BOOT_TASKS) {
+    if (await env.SESSIONS.get("boot:" + t.id)) continue;
+    await env.SESSIONS.put("boot:" + t.id, "1");
+    let r; try { r = await ownerCommand(env, t.cmd); } catch (e) { r = "執行失敗：" + e.message; }
+    if (owner && r) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `（你交代的：${t.cmd}）\n${Array.isArray(r) ? r.join("\n") : r}` }] });
+  }
+}
 async function runFollowups(env) {
   if (!env.SESSIONS) return;
   const hourTW = (new Date().getUTCHours() + 8) % 24;
@@ -1068,6 +1137,8 @@ export default {
       if (Math.floor(hm / 5) % 12 === 0) { try { await memExpiry(env, { lineApi }); } catch (e) { console.log("memExpiry", e); } }
       if (Math.floor(hm / 5) % 12 === 1) { try { await runCare(env); } catch (e) { console.log("care", e); } }
       if (Math.floor(hm / 5) % 12 === 2) { try { await runNewArrivals(env); } catch (e) { console.log("newArrivals", e); } }
+      if (Math.floor(hm / 5) % 12 === 3) { try { await runMemberReminders(env); } catch (e) { console.log("memberRemind", e); } }
+      try { await runBootTasks(env); } catch (e) { console.log("boot", e); }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
     })());
   },

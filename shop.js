@@ -20,7 +20,56 @@ async function verifyToken(env, t) {
   return (await sign(env, uid)) === sig ? uid : null;
 }
 export async function getTier(env, uid) {
-  return (env.SESSIONS && (await env.SESSIONS.get("tier:" + uid))) || "none";
+  if (!env.SESSIONS) return "none";
+  const t = (await env.SESSIONS.get("tier:" + uid)) || "none";
+  if (t === "none") return t;
+  const until = Number(await env.SESSIONS.get("tx:" + uid)) || 0;
+  if (until && until < Date.now()) return "none"; // 到期就停止
+  return t;
+}
+// ---------- 會員期限 ----------
+// 期限算到到期日當天 23:59（台灣時間）；預設 1 個月
+const TW = 8 * 3600e3;
+export function fmtDay(ms) { const d = new Date(ms + TW); return `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}`; }
+function addPeriod(fromMs, { months = 0, days = 0 }) {
+  const d = new Date(fromMs + TW);
+  const day = d.getUTCDate();
+  d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + months);
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, last) + days);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59) - TW;
+}
+export async function memberInfo(env, uid) {
+  const tier = await getTier(env, uid);
+  const until = tier === "none" ? 0 : Number(await env.SESSIONS.get("tx:" + uid)) || 0;
+  return { tier, until, days: until ? Math.max(0, Math.ceil((until - Date.now()) / 86400e3)) : null };
+}
+// 設定會員：period = {months, days} 或 {until: ms}；extend=true 時同等級還沒到期就從原到期日往後加
+export async function setMembership(env, uid, tier, period = { months: 1 }, extend = true) {
+  if (tier !== "vip" && tier !== "member") { await env.SESSIONS.delete("tier:" + uid); await env.SESSIONS.delete("tx:" + uid); return { tier: "none", until: 0 }; }
+  const cur = await memberInfo(env, uid);
+  let until;
+  if (period.until) until = period.until;
+  else {
+    const base = extend && cur.tier === tier && cur.until > Date.now() ? cur.until : Date.now();
+    until = addPeriod(base, period);
+  }
+  const ttl = Math.max(120, Math.ceil((until - Date.now()) / 1000) + 7 * 86400);
+  await env.SESSIONS.put("tier:" + uid, tier, { expirationTtl: ttl });
+  await env.SESSIONS.put("tx:" + uid, String(until), { expirationTtl: ttl });
+  await env.SESSIONS.delete("txr:" + uid);
+  return { tier, until };
+}
+export function parsePeriod(str) {
+  const s = String(str || "");
+  let m = s.match(/(\d+)\s*(?:個)?(?:多)?月/); if (m) return { months: +m[1] };
+  m = s.match(/(\d+)\s*(?:天|日)/); if (m) return { days: +m[1] };
+  m = s.match(/(\d+)\s*(?:週|周|星期)/); if (m) return { days: 7 * +m[1] };
+  m = s.match(/(\d+)\s*年/); if (m) return { months: 12 * +m[1] };
+  m = s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})|(\d{1,2})[-/.](\d{1,2})/);
+  if (m) { const y = m[1] ? +m[1] : new Date(Date.now() + TW).getUTCFullYear(); const mo = +(m[2] || m[4]), d = +(m[3] || m[5]);
+    let until = Date.UTC(y, mo - 1, d, 23, 59, 59) - TW; if (!m[1] && until < Date.now()) until = Date.UTC(y + 1, mo - 1, d, 23, 59, 59) - TW; return { until }; }
+  return null;
 }
 
 // ---------- 目錄（精簡版給網頁） ----------
@@ -178,7 +227,8 @@ export async function handleShop(request, env, ctx, deps) {
     const uid = await verifyToken(env, url.searchParams.get("t"));
     if (!uid) return Response.json({ ok: false, error: "連結無效，請回到 LINE 重新點訂購連結" }, { status: 401 });
     const tier = await getTier(env, uid);
-    return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier] });
+    const mi = await memberInfo(env, uid);
+    return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier], until: mi.until ? fmtDay(mi.until) : "", days: mi.days });
   }
   if (p === "/shop/orders") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
@@ -219,7 +269,11 @@ export async function handleShop(request, env, ctx, deps) {
     const notes = ruleNotes(lines, tier);
     const lineName = await deps.displayName(env, uid);
     const order = { id, uid, lineName, tier, lines, total, qty, form, notes, status: "待付款", at: d.toISOString().slice(0, 16).replace("T", " ") };
-    if (wantMem) { order.memGranted = wantMem; order.prevTier = prevTier; await env.SESSIONS.put("tier:" + uid, tier, { expirationTtl: 35 * 86400 }); }
+    if (wantMem) {
+      const pi = await memberInfo(env, uid);
+      order.memGranted = wantMem; order.prevTier = prevTier; order.prevUntil = pi.until;
+      if (wantMem === tier) { const r = await setMembership(env, uid, tier, { months: 1 }); order.memUntil = r.until; }
+    }
     const bank = await payInfo(env, form.pay);
     await env.SESSIONS.put("o:" + id, JSON.stringify(order), { expirationTtl: 180 * 86400 });
     await env.SESSIONS.put("ol:" + uid, id, { expirationTtl: 30 * 86400 });
@@ -339,7 +393,11 @@ export async function verifyPaymentImage(env, deps, uid, img) {
   let memMsg = "";
   if (ok) {
     const mem = o.lines.find((l) => l.mem === "vip") ? "vip" : o.lines.find((l) => l.mem === "member") ? "member" : "";
-    if (mem) { await env.SESSIONS.put("tier:" + uid, mem, { expirationTtl: 35 * 86400 }); memMsg = `\n🎉 ${TIER_NAME[mem]}已開通，訂購網站會自動套用會員價～`; }
+    if (mem) {
+      const info = o.memUntil && (await getTier(env, uid)) === mem ? { until: o.memUntil } : await setMembership(env, uid, mem, { months: 1 });
+      o.memUntil = info.until; await env.SESSIONS.put("o:" + o.id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+      memMsg = `\n🎉 ${TIER_NAME[mem]}已開通，有效到 ${fmtDay(info.until)}，訂購網站會自動套用會員價～`;
+    }
   }
   const owner = await env.SESSIONS.get("owner");
   if (owner) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: ok
@@ -435,7 +493,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
         o.paidAt = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
         o.payInfo = Object.assign({ method: o.form.pay || "轉帳", amount: o.total }, o.payInfo || {});
         const mem = o.lines.find((l) => l.mem === "vip") ? "vip" : o.lines.find((l) => l.mem === "member") ? "member" : "";
-        if (mem) await env.SESSIONS.put("tier:" + o.uid, mem, { expirationTtl: 35 * 86400 });
+        if (mem && !(o.memUntil && (await getTier(env, o.uid)) === mem)) { const r = await setMembership(env, o.uid, mem, { months: 1 }); o.memUntil = r.until; }
       }
       await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
       const msg = { 已付款: `💰 已收到您的款項囉 謝謝🙏\n訂單 ${id} 我們會盡快安排出貨～`,
@@ -561,7 +619,7 @@ async function init(){
     if(!me.ok){$("#grid").innerHTML='<div class="err">'+esc(me.error)+'</div>';$("#who").textContent="";return}
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
-  $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span><br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
+  $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
   const CO=["會員方案","吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
@@ -864,8 +922,8 @@ async function revertMem(env, o) {
   if (!o || !o.memGranted || o.paidAt || ["已付款", "已出貨"].includes(o.statusBefore || "")) return;
   const cur = await getTier(env, o.uid);
   if (cur !== o.tier) return;
-  if (!o.prevTier || o.prevTier === "none") await env.SESSIONS.delete("tier:" + o.uid);
-  else await env.SESSIONS.put("tier:" + o.uid, o.prevTier, { expirationTtl: 35 * 86400 });
+  if (!o.prevTier || o.prevTier === "none" || (o.prevUntil && o.prevUntil < Date.now())) await setMembership(env, o.uid, "none");
+  else await setMembership(env, o.uid, o.prevTier, o.prevUntil ? { until: o.prevUntil } : { months: 1 });
 }
 async function deleteOrder(env, id) {
   try { await revertMem(env, JSON.parse((await env.SESSIONS.get("o:" + id)) || "null")); } catch (e) {}
@@ -879,7 +937,7 @@ async function memberCounts(env) {
   let cursor;
   do {
     const r = await env.SESSIONS.list({ prefix: "tier:", cursor });
-    for (const k of r.keys) { const v = await env.SESSIONS.get(k.name); if (c[v] != null) c[v]++; }
+    for (const k of r.keys) { const v = await env.SESSIONS.get(k.name); const tx = Number(await env.SESSIONS.get("tx:" + k.name.slice(5))) || 0; if (tx && tx < Date.now()) continue; if (c[v] != null) c[v]++; }
     cursor = r.list_complete ? null : r.cursor;
   } while (cursor);
   return c;
@@ -1047,8 +1105,12 @@ export async function membershipCards(env, uid) {
     memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "不同款混批 21 件，每款照商品起批數", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
     memBubble("一般會員", "NT$100／月", ["免國際運費", "不同款混批 21 件，每款照商品起批數", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
   ];
-  const head = tier === "vip" ? "您已經是 VIP 會員囉👑 要續約可以點下面直接下單～" : tier === "member" ? "您目前是一般會員，升級 VIP 運費全免、每件再便宜 NT$30👇" : "ZOARÉ 批發會員方案👇 付款完成會自動開通";
-  return [{ type: "flex", altText: head, contents: { type: "carousel", contents: bubbles } }];
+  const mi = await memberInfo(env, uid);
+  const exp = mi.until ? `有效到 ${fmtDay(mi.until)}（還有 ${mi.days} 天）` : "";
+  const head = tier === "vip" ? `您已經是 VIP 會員囉👑 ${exp}\n要續約可以點下面直接下單，會從到期日往後延長～` : tier === "member" ? `您目前是一般會員，${exp}\n升級 VIP 運費全免、每件再便宜 NT$30👇` : "ZOARÉ 批發會員方案👇 付款完成會自動開通，效期 1 個月";
+  const out = [{ type: "flex", altText: head, contents: { type: "carousel", contents: bubbles } }];
+  if (tier !== "none") out.unshift({ type: "text", text: head });
+  return out;
 }
 
 // ---------- 新朋友加入的歡迎訊息 ----------

@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE } from "./shop.js";
+import { TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -45,7 +45,7 @@ async function buildData(env) {
   }
   const owner = await env.SESSIONS.get("owner");
   const custList = [];
-  for (const c of Object.values(cust)) { if (c.uid === owner) continue; c.tier = (await env.SESSIONS.get("tier:" + c.uid)) || "none"; custList.push(c); }
+  for (const c of Object.values(cust)) { if (c.uid === owner) continue; c.tier = (await env.SESSIONS.get("tier:" + c.uid)) || "none"; const tx = Number(await env.SESSIONS.get("tx:" + c.uid)) || 0; if (tx && tx < Date.now()) c.tier = "none"; c.until = c.tier !== "none" && tx ? fmtDay(tx) : ""; custList.push(c); }
   custList.sort((a, b) => b.spent - a.spent || (b.last || "").localeCompare(a.last || ""));
   return {
     stats: st, daily, counts,
@@ -73,8 +73,8 @@ export async function handleAdmin(request, env, ctx, deps) {
   if (request.method === "POST" && url.pathname === "/admin/api/tier") {
     const { uid, tier } = await request.json();
     if (!/^U[0-9a-f]{32}$/.test(uid || "")) return Response.json({ ok: false });
-    if (tier === "vip" || tier === "member") await env.SESSIONS.put("tier:" + uid, tier); else await env.SESSIONS.delete("tier:" + uid);
-    return Response.json({ ok: true, result: `已設定為 ${TIER_NAME[tier] || "非會員"}` });
+    const r = await setMembership(env, uid, tier === "vip" || tier === "member" ? tier : "none", { months: 1 }, false);
+    return Response.json({ ok: true, result: `已設定為 ${TIER_NAME[r.tier] || "非會員"}${r.until ? `，有效到 ${fmtDay(r.until)}` : ""}` });
   }
   return new Response("Not found", { status: 404 });
 }
@@ -163,7 +163,7 @@ window.setQ=async(id,i,btn)=>{const q=btn.previousElementSibling.value;const l=o
 window.addItem=async id=>{const k=prompt("輸入 JAN 碼或商品名稱");if(!k)return;const q=prompt("數量","1");if(!q)return;await cmd(id+" 加 "+k+" "+q)};
 function cust(){const L=D.customers;
   $("#m").innerHTML='<input class="f" id="cq" placeholder="搜尋客人">'+'<div id="cl"></div>';
-  const draw=q=>{$("#cl").innerHTML=L.filter(c=>!q||c.name.includes(q)).slice(0,200).map(c=>'<div class="cu"><div class="n"><b>'+esc(c.name)+'</b><small>'+c.orders+' 筆訂單｜消費 '+fmt(c.spent)+(c.last?'｜最近 '+esc(c.last.slice(0,10)):'')+'</small></div><select data-u="'+c.uid+'">'+[["none","非會員"],["member","一般會員"],["vip","VIP 會員"]].map(([v,t])=>'<option value="'+v+'"'+(c.tier===v?" selected":"")+'>'+t+'</option>').join("")+'</select></div>').join("")||'<div class="err">還沒有客人</div>';
+  const draw=q=>{$("#cl").innerHTML=L.filter(c=>!q||c.name.includes(q)).slice(0,200).map(c=>'<div class="cu"><div class="n"><b>'+esc(c.name)+'</b><small>'+c.orders+' 筆訂單｜消費 '+fmt(c.spent)+(c.last?'｜最近 '+esc(c.last.slice(0,10)):'')+(c.until?'｜會員到 '+esc(c.until):'')+'</small></div><select data-u="'+c.uid+'">'+[["none","非會員"],["member","一般會員"],["vip","VIP 會員"]].map(([v,t])=>'<option value="'+v+'"'+(c.tier===v?" selected":"")+'>'+t+'</option>').join("")+'</select></div>').join("")||'<div class="err">還沒有客人</div>';
     document.querySelectorAll("select[data-u]").forEach(s=>s.onchange=async()=>{const r=await api("/admin/api/tier",{uid:s.dataset.u,tier:s.value});toast(r.result||"完成");const c=L.find(x=>x.uid===s.dataset.u);if(c)c.tier=s.value})};
   draw("");$("#cq").oninput=e=>draw(e.target.value.trim())}
 function sales(){const P={today:"今天",week:"本週",month:"本月",all:"累計"};const s=D.stats[SP];
