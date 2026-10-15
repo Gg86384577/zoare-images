@@ -508,6 +508,8 @@ async function ownerCommand(env, text) {
     const n = key === "*" ? items.length : items.filter((it) => ((it.b || "") + " " + (it.n || "")).includes(key)).length;
     return rules[key] ? `好👌 ${key === "*" ? "全部商品（沒另外設定的）" : `「${key}」${n} 款商品`}結單日設為：${rules[key]}\n商品卡片和訂購網站都會顯示，日期過了會自動改回預設` : `好👌 已清除「${key === "*" ? "全部" : key}」的結單日設定`;
   }
+  const iqr = env.SESSIONS ? await inquiryCommand(env, text.replace(/\s+/g, " ").trim()) : null;
+  if (iqr) return iqr;
   const bcr = env.SESSIONS ? await broadcastCommand(env, text.trim()) : null;
   if (bcr) return bcr;
   // 補發關懷：功能上線前聯絡過、還沒下單的舊客人
@@ -613,7 +615,10 @@ async function handleEvent(env, ev) {
   }
   // 記錄客人聯絡時間（3 天沒下單 → 關懷訊息）
   const isOwnerUser = uid && env.SESSIONS && uid === (await env.SESSIONS.get("owner"));
-  if (uid && !isOwnerUser) await noteContact(env, uid, null);
+  if (uid && !isOwnerUser) {
+    await noteContact(env, uid, null);
+    await logInquiry(env, uid, msg.type === "text" ? text : msg.type === "image" ? "（傳了圖片）" : msg.type === "sticker" ? "（貼圖）" : "");
+  }
   // 匯款後五碼回報
   if (uid && env.SESSIONS && text) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
@@ -856,6 +861,74 @@ async function runNewArrivals(env) {
   const n = Object.keys(plan.perUser).length;
   const ok = n ? await sendNewArrivals(env, plan) : (await env.SESSIONS.put("bc:lastAd", plan.today), 0);
   if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 今日新品群發完成\n新上架 ${plan.fresh.length} 款：${Object.entries(plan.byCat).map(([k, v]) => `${k} ${v.length}`).join("、")}\n已傳給 ${ok} 位問過這些系列的客人` }] });
+}
+// ---------- 詢問紀錄：記下客人最近問了什麼（保留 90 天），老闆可以查、可以手動補標籤 ----------
+async function logInquiry(env, uid, line) {
+  if (!env.SESSIONS || !line) return;
+  if (!(await env.SESSIONS.get("nm:" + uid))) { try { await rememberName(env, uid); } catch (e) {} await env.SESSIONS.put("nm:" + uid, "1", { expirationTtl: 86400 }); }
+  let q = []; try { q = JSON.parse((await env.SESSIONS.get("iq:" + uid)) || "[]"); } catch (e) {}
+  q.unshift({ at: Date.now(), t: line.slice(0, 80) });
+  await env.SESSIONS.put("iq:" + uid, JSON.stringify(q.slice(0, 20)), { expirationTtl: 90 * 86400 });
+  // 訊息裡提到的角色／系列也記成興趣（例如「酷洛米相框還有嗎」→ 三麗鷗）
+  const cats = catsOf({ n: line }).filter((k) => k !== "其他");
+  if (cats.length) {
+    let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get("tg:" + uid)) || "{}"); } catch (e) {}
+    for (const k of cats) tg[k] = Date.now();
+    await env.SESSIONS.put("tg:" + uid, JSON.stringify(tg), { expirationTtl: 180 * 86400 });
+  }
+}
+async function nameOf(env, uid) {
+  try { const n = await displayName(env, uid); return n === "老闆" ? uid.slice(0, 8) : n; } catch (e) { return uid.slice(0, 8); }
+}
+const fmtTW = (ms) => new Date(ms + 8 * 3600e3).toISOString().slice(5, 16).replace("T", " ").replace("-", "/");
+async function inquiryCommand(env, t) {
+  if (/^#?(詢問紀錄|詢問名單|誰問過)$/.test(t)) {
+    const rows = [];
+    let cursor;
+    do {
+      const r = await env.SESSIONS.list({ prefix: "iq:", cursor });
+      for (const k of r.keys) {
+        const uid = k.name.slice(3);
+        const q = JSON.parse((await env.SESSIONS.get(k.name)) || "[]");
+        if (!q.length) continue;
+        let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get("tg:" + uid)) || "{}"); } catch (e) {}
+        rows.push({ uid, at: q[0].at, last: q[0].t, n: q.length, tags: Object.keys(tg) });
+      }
+      cursor = r.list_complete ? null : r.cursor;
+    } while (cursor);
+    if (!rows.length) return "還沒有詢問紀錄（今天開始記錄，客人傳訊息後就會出現）";
+    rows.sort((a, b) => b.at - a.at);
+    const out = [];
+    for (const x of rows.slice(0, 25)) out.push(`・${await nameOf(env, x.uid)}（${fmtTW(x.at)}）「${x.last.slice(0, 20)}」${x.tags.length ? "\n　🏷 " + x.tags.join("、") : ""}`);
+    return `💬 最近詢問的客人（共 ${rows.length} 位）\n${out.join("\n")}${rows.length > 25 ? `\n…還有 ${rows.length - 25} 位` : ""}\n\n看某位客人問了什麼：「小美 詢問紀錄」\n幫客人補標籤（群發用）：「小美 標記 三麗鷗,吉伊卡哇」`;
+  }
+  const one = t.match(/^(.+?)\s+(詢問紀錄|問了什麼)$/);
+  if (one) {
+    const fr = await findUid(env, one[1]); if (fr.error) return fr.error;
+    const q = JSON.parse((await env.SESSIONS.get("iq:" + fr.uid)) || "[]");
+    let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get("tg:" + fr.uid)) || "{}"); } catch (e) {}
+    return `💬 ${fr.name} 的詢問紀錄${Object.keys(tg).length ? `\n🏷 興趣：${Object.keys(tg).join("、")}` : ""}\n${q.length ? q.map((x) => `${fmtTW(x.at)}　${x.t}`).join("\n") : "（還沒有紀錄）"}`;
+  }
+  const tm = t.match(/^(.+?)\s+(標記|加標籤|貼標籤)\s+(.+)$/);
+  if (tm) {
+    const fr = await findUid(env, tm[1]); if (fr.error) return fr.error;
+    const names = CAT_NAMES(), want = tm[3].split(/[,，、\s]+/).filter(Boolean);
+    const bad = want.filter((k) => !names.includes(k));
+    if (bad.length) return `找不到系列：${bad.join("、")}\n可以用：${names.join("、")}`;
+    let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get("tg:" + fr.uid)) || "{}"); } catch (e) {}
+    for (const k of want) tg[k] = Date.now();
+    await env.SESSIONS.put("tg:" + fr.uid, JSON.stringify(tg), { expirationTtl: 180 * 86400 });
+    return `好👌 ${fr.name} 已標記：${Object.keys(tg).join("、")}\n之後這些系列有新品，會自動傳給他`;
+  }
+  const rm = t.match(/^(.+?)\s+(取消標記|刪標籤)\s+(.+)$/);
+  if (rm) {
+    const fr = await findUid(env, rm[1]); if (fr.error) return fr.error;
+    let tg = {}; try { tg = JSON.parse((await env.SESSIONS.get("tg:" + fr.uid)) || "{}"); } catch (e) {}
+    for (const k of rm[3].split(/[,，、\s]+/)) delete tg[k];
+    await env.SESSIONS.put("tg:" + fr.uid, JSON.stringify(tg), { expirationTtl: 180 * 86400 });
+    return `好👌 ${fr.name} 目前標記：${Object.keys(tg).join("、") || "（無）"}`;
+  }
+  return null;
 }
 async function broadcastCommand(env, t) {
   const nm = t.match(/^#?新品群發\s*(確認|關|關閉|開|開啟)?$/);
