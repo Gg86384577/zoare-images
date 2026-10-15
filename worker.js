@@ -508,6 +508,36 @@ async function ownerCommand(env, text) {
     const n = key === "*" ? items.length : items.filter((it) => ((it.b || "") + " " + (it.n || "")).includes(key)).length;
     return rules[key] ? `好👌 ${key === "*" ? "全部商品（沒另外設定的）" : `「${key}」${n} 款商品`}結單日設為：${rules[key]}\n商品卡片和訂購網站都會顯示，日期過了會自動改回預設` : `好👌 已清除「${key === "*" ? "全部" : key}」的結單日設定`;
   }
+  // 補發關懷：功能上線前聯絡過、還沒下單的舊客人
+  const bm = text.trim().match(/^#?補發關懷\s*(確認)?$/);
+  if (bm && env.SESSIONS) {
+    const owner = await env.SESSIONS.get("owner");
+    const seen = new Set(), list = [];
+    let cursor;
+    do {
+      const r = await env.SESSIONS.list({ prefix: "n:", cursor });
+      for (const k of r.keys) {
+        const uid = await env.SESSIONS.get(k.name);
+        if (!uid || uid === owner || seen.has(uid)) continue;
+        seen.add(uid);
+        let c = null; try { c = JSON.parse((await env.SESSIONS.get("c3:" + uid)) || "null"); } catch (e) {}
+        if (c && c.at && Date.now() - c.at < CARE_DAYS * 86400e3) continue; // 3 天內有聯絡，交給自動關懷
+        if (await orderedSince(env, uid, Date.now() - CARE_DAYS * 86400e3)) continue; // 最近 3 天有下單
+        if (await env.SESSIONS.get("care:done:" + uid)) continue; // 已補發過
+        list.push({ uid, name: k.name.slice(2), c });
+      }
+      cursor = r.list_complete ? null : r.cursor;
+    } while (cursor);
+    if (!list.length) return "目前沒有需要補發的客人👌（最近 3 天有聯絡或有下單的都會跳過）";
+    if (!bm[1]) return `💌 可以補發關懷的客人共 ${list.length} 位：\n${list.slice(0, 40).map((x) => "・" + x.name).join("\n")}${list.length > 40 ? `\n…還有 ${list.length - 40} 位` : ""}\n\n這些是之前聯絡過、最近 3 天沒聯絡也沒下單的客人。系統沒有記錄他們以前問過哪些商品，會傳「問想找什麼商品」的溫暖版本\n會用掉 ${list.length} 則 LINE 推播額度\n\n確定要傳，請回「補發關懷 確認」`;
+    let ok = 0, fail = 0;
+    for (const x of list.slice(0, 100)) {
+      const msgs = await careMessages(env, x.uid, x.c || {});
+      const r = await lineApi(env, "/v2/bot/message/push", { to: x.uid, messages: msgs });
+      if (r.ok) { ok++; await env.SESSIONS.put("care:done:" + x.uid, "1", { expirationTtl: 30 * 86400 }); await env.SESSIONS.delete("c3:" + x.uid); } else fail++;
+    }
+    return `💌 已補發關懷訊息給 ${ok} 位客人${fail ? `（${fail} 位沒送出，可能已封鎖）` : ""}${list.length > 100 ? `\n一次最多 100 位，還有 ${list.length - 100} 位，再傳一次「補發關懷 確認」` : ""}`;
+  }
   if (/^#?(關懷訊息|關懷)\s*(關|關閉|停止|開|開啟)?$/.test(text.trim())) {
     const m = text.trim().match(/(關|關閉|停止|開|開啟)$/);
     if (m) { if (/開/.test(m[1])) await env.SESSIONS.delete("care:off"); else await env.SESSIONS.put("care:off", "1"); }
@@ -812,7 +842,7 @@ async function careMessages(env, uid, c) {
     }
   }
   const topic = c.topic ? `前幾天看到您在逛「${c.topic}」，` : "";
-  const text = `${hi}前幾天謝謝您來找我們聊天☺️ 最近忙不忙呢？\n\n${topic}不知道最近有沒有想找的商品？吉伊卡哇、三麗鷗、寶可夢、蠟筆小新…都有不少新貨喔！\n跟我說想要的角色或商品，我馬上幫您找、幫您報價；有預算或數量的考量也可以先聊聊，我們一起慢慢挑🙏\n\n🛒 您的專屬商城：${link}`;
+  const text = `${hi}之前謝謝您來找我們聊天☺️ 最近忙不忙呢？\n\n${topic}不知道最近有沒有想找的商品？吉伊卡哇、三麗鷗、寶可夢、蠟筆小新…都有不少新貨喔！\n跟我說想要的角色或商品，我馬上幫您找、幫您報價；有預算或數量的考量也可以先聊聊，我們一起慢慢挑🙏\n\n🛒 您的專屬商城：${link}`;
   return [{ type: "text", text, quickReply: qrItems([["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["寶可夢", "寶可夢"], ["蠟筆小新", "蠟筆小新"], ["商品目錄", "商品目錄"], ["會員方案", "會員方案"]]) }];
 }
 async function runFollowups(env) {
