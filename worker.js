@@ -773,6 +773,17 @@ export default {
       });
     }
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
+    // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
+    if (url.pathname === "/go" || url.pathname.startsWith("/go/")) {
+      let id = env.SESSIONS ? await env.SESSIONS.get("botid") : null;
+      if (!id) {
+        const r = await lineApi(env, "/v2/bot/info");
+        if (r.ok) { id = (await r.json()).basicId; if (id && env.SESSIONS) await env.SESSIONS.put("botid", id); }
+      }
+      if (!id) return new Response("暫時無法開啟，請直接在 LINE 搜尋我們的官方帳號", { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } });
+      const q = (url.searchParams.get("q") || decodeURIComponent(url.pathname.slice(4)) || "商品目錄").slice(0, 50);
+      return Response.redirect(`https://line.me/R/oaMessage/${encodeURIComponent(id)}/?${encodeURIComponent(q)}`, 302);
+    }
     if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi });
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
