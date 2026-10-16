@@ -1011,7 +1011,24 @@ async function broadcastCommand(env, t) {
     }
     return ok ? `📣 已群發給 ${ok} 位客人（${p.cats.join("、")}）` : "群發失敗，可能是 LINE 推播額度用完了，請到官方帳號後台確認";
   }
-  if (/^#?群發取消$/.test(t)) { await env.SESSIONS.delete("bc:pending"); return "好👌 已取消群發"; }
+  if (/^#?群發取消$/.test(t)) { await env.SESSIONS.delete("bc:pending"); await env.SESSIONS.delete("bc:all"); return "好👌 已取消群發"; }
+  // 全體好友群發（用 LINE broadcast，所有加好友的人都會收到）
+  const am=t.match(/^#?(?:群發所有人|全體群發|群發大家)\s*(?:\n([\s\S]+))?$/);
+  if (am) {
+    if (!am[1]) return "要傳給所有好友的內容寫在下一行，例如：\n群發所有人\n🎉 J's Planning 秋冬新品上架…";
+    await env.SESSIONS.put("bc:all", am[1].trim(), { expirationTtl: 3600 });
+    const go = `${SHOP_BASE_URL}/go?q=${encodeURIComponent("訂購")}`;
+    return `📣 全體群發預覽（所有加好友的人都會收到，每人算 1 則推播額度）\n————\n${am[1].trim()}\n\n🛒 點這裡進入選購平台：${go}\n————\n確定請回「全體群發確認」，不要請回「群發取消」（1 小時內有效）`;
+  }
+  if (/^#?全體群發確認$/.test(t)) {
+    const body = await env.SESSIONS.get("bc:all");
+    if (!body) return "沒有待確認的全體群發，請先傳「群發所有人」＋內容";
+    await env.SESSIONS.delete("bc:all");
+    const go = `${SHOP_BASE_URL}/go?q=${encodeURIComponent("訂購")}`;
+    const r = await lineApi(env, "/v2/bot/message/broadcast", { messages: [{ type: "text", text: `${body}\n\n🛒 點這裡進入選購平台：\n${go}`.slice(0, 4900),
+      quickReply: { items: [["我要訂購", "訂購"], ["商品目錄", "商品目錄"], ["J's Planning", "J's Planning"], ["會員方案", "會員方案"]].map(([l, x]) => ({ type: "action", action: { type: "message", label: l, text: x } })) } }] });
+    return r.ok ? "📣 已群發給所有好友" : `群發失敗（${r.status}），可能是推播額度不夠，請到 LINE 官方帳號後台確認`;
+  }
   const m = t.match(/^#?群發\s+([^\n]+?)\s*(?:\n([\s\S]+))?$/);
   if (!m) return null;
   const names = CAT_NAMES();
