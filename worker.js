@@ -388,9 +388,15 @@ async function saveSession(env, uid, s) {
   s.history = s.history.slice(-8);
   await env.SESSIONS.put("s:" + uid, JSON.stringify(s), { expirationTtl: 86400 });
 }
-async function inHandoff(env, uid) { return env.SESSIONS ? !!(await env.SESSIONS.get("h:" + uid)) : false; }
-async function setHandoff(env, uid) {
-  if (env.SESSIONS) await env.SESSIONS.put("h:" + uid, "1", { expirationTtl: HANDOFF_MINUTES * 60 });
+// 轉真人有兩種：
+// "1"＝真人真的在處理（老闆停止回覆、客人要求真人、老闆親自回）→ 機器人完全安靜
+// "auto"＝機器人自己找不到答案先轉給老闆 → 客人再問「目錄裡有的商品」機器人照樣跳卡片，其他問題才安靜
+async function inHandoff(env, uid) { return env.SESSIONS ? (await env.SESSIONS.get("h:" + uid)) === "1" : false; }
+async function inAutoHandoff(env, uid) { return env.SESSIONS ? (await env.SESSIONS.get("h:" + uid)) === "auto" : false; }
+async function setHandoff(env, uid, kind = "1") {
+  if (!env.SESSIONS) return;
+  if (kind === "auto" && (await env.SESSIONS.get("h:" + uid)) === "1") kind = "1"; // 已經是真人處理就維持
+  await env.SESSIONS.put("h:" + uid, kind, { expirationTtl: HANDOFF_MINUTES * 60 });
 }
 
 
@@ -788,16 +794,18 @@ async function handleEvent(env, ev) {
     const prevBot = session.history.filter((h) => h.role === "assistant").slice(-2).map((h) => h.content);
     if (!pickedNumber && prevBot.some((t) => similar(t, out.reply))) out.handoff = true;
     if (uid && (await inHandoff(env, uid))) return; // 回覆前再確認一次：已轉真人就不插話
+    if (out.handoff && uid && (await inAutoHandoff(env, uid))) { await setHandoff(env, uid, "auto"); return; } // 已經轉給老闆了，不重複說「請專人回覆」
     if (out.handoff) {
       await reply(env, ev.replyToken, [{ type: "text", text: "這個我請專人來回覆您喔 請稍等一下～" }]);
       session.history.push({ role: "user", content: (earlierText ? earlierText + "\n" : "") + (img ? "（傳了照片：" + query + "）" + (msg.type === "text" ? text : "") : text) });
       session.history.push({ role: "assistant", content: "（已轉給專人）" });
       await saveSession(env, uid, session);
-      await setHandoff(env, uid);
+      await setHandoff(env, uid, "auto");
       await notifyOwner(env, uid, img ? "（傳了一張照片）" : text);
       return;
     }
     const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 10);
+    if (uid && env.SESSIONS && shown.length && (await inAutoHandoff(env, uid))) await env.SESSIONS.delete("h:" + uid); // 找到商品了 → 恢復正常回覆
     const lineMsgs = [];
     const cardMsg = uid && shown.length ? await productCards(env, uid, shown, `商品報價（${shown.length} 款）`) : null;
     if (cardMsg) lineMsgs.push(cardMsg);
