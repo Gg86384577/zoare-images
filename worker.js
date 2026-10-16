@@ -44,6 +44,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 價格直接用候選商品的「一般」和「VIP」價格，不可以自己計算或打折，也不可以透露成本或加價方式。可以說「VIP 每件比一般價便宜 NT$30」。
 - 候選商品裡沒有符合的：回答「這個商品目前不在我們的目錄裡，我幫您轉給專人確認喔！」並把 handoff 設為 true。
 - 韓國、中國商品沒有目錄，不可以報價：請客人提供商品圖片或連結、型號、數量，告知會由專人報價，handoff 設為 true。
+- 客人常常誤點圖文選單（例如點了「韓國批發」卻傳日本商品）。一律以客人「最後一次」點的選單為準，而且以客人實際傳的商品為主：只要候選商品裡找得到相同或相似的商品，就直接報價、列出商品，不要因為選單是韓國／中國批發就轉真人；選單和商品不一致時，可以順口說「這款是日本商品喔」。
 
 【相同／相似商品】
 - 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號／舊商品編號（例如 272655-S）相同；舊商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
@@ -741,6 +742,8 @@ async function handleEvent(env, ev) {
   }
 
   const name = uid ? await rememberName(env, uid) : "老闆";
+  // 記下客人「最後一次」點的批發選單（誤點時以最後一次為準），30 分鐘內有效
+  if (uid && env.SESSIONS && /^(韓國|日本|中國)批發$/.test(text)) await env.SESSIONS.put("org:" + uid, text, { expirationTtl: 1800 });
   if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name).replaceAll("{shop}", uid ? await shopLink(env, uid) : "") }]);
 
   if (uid) lineApi(env, "/v2/bot/chat/loading/start", { chatId: uid, loadingSeconds: 20 }).catch(() => {});
@@ -772,7 +775,8 @@ async function handleEvent(env, ev) {
     const lastText = session.last.length
       ? session.last.map((j, i) => (items[j] ? `${i + 1}. ${items[j].n}` : "")).join("\n") : "（無）";
     const burstNote = burst.length ? `（客人剛剛連續傳了 ${burst.length + 1} 則訊息${earlierImgs.length ? `，其中 ${earlierImgs.length + (msg.type === "image" ? 1 : 0)} 張照片` : ""}${earlierText ? "，前面的文字：" + earlierText : ""}；請合併成一則回覆）\n` : "";
-    const prompt = `客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n${burstNote}客人${img ? (text ? "傳了照片並說：" + text + "（照片辨識結果：" + query + "）" : "傳了一張照片（照片辨識結果：" + query + "）") : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
+    const lastMenu = uid && env.SESSIONS ? await env.SESSIONS.get("org:" + uid) : null;
+    const prompt = `${lastMenu ? `客人最後一次點的選單：${lastMenu}（客人常常誤點，只以最後一次為準；判斷時以客人實際傳的商品為主）\n` : ""}客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n${burstNote}客人${img ? (text ? "傳了照片並說：" + text + "（照片辨識結果：" + query + "）" : "傳了一張照片（照片辨識結果：" + query + "）") : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
     userContent = img
       ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt }]
       : prompt;
