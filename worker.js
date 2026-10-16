@@ -15,7 +15,7 @@ const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客�
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
-const CATALOG_VERSION = "20261016-1250";
+const CATALOG_VERSION = "20261016-1330";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
