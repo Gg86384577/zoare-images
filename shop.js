@@ -666,7 +666,7 @@ let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
 function hit(h,w){if(h.includes(w))return true;if(w.length<4)return false;for(let i=2;i<=w.length-2;i++){if(h.includes(w.slice(0,i))&&hit(h,w.slice(i)))return true}return false}
 function filter(){
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
-  VIEW=ALL.filter(x=>(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.box?"盲盒box整盒":""))),w))));
+  VIEW=ALL.filter(x=>(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":""))),w))));
   shown=0;$("#grid").innerHTML="";page();
   const qv=$("#q").value.trim();
   $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
