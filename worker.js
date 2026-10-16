@@ -15,6 +15,7 @@ const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客�
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
+const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
 const CATALOG_VERSION = "20261016-1330";
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
@@ -344,11 +345,11 @@ async function imageBase64(env, messageId) {
 }
 
 // ---------- Claude ----------
-async function claude(env, system, messages, maxTokens = 2500) {
+async function claude(env, system, messages, maxTokens = 2500, model) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: env.MODEL || DEFAULT_MODEL, max_tokens: maxTokens, system, messages }),
+    body: JSON.stringify({ model: model || env.MODEL || DEFAULT_MODEL, max_tokens: maxTokens, system, messages }),
   });
   if (!r.ok) throw new Error("claude " + r.status + " " + (await r.text()));
   const data = await r.json();
@@ -376,22 +377,37 @@ function parseJson(text) {
 
 // 照片 → 搜尋關鍵字
 async function describePhoto(env, img) {
-  const out = await claude(env,
-    "你是商品辨識助手。看照片判斷商品，只輸出 JSON：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）以及照片上看得到的商品名稱\",\"jan\":\"照片上看得到的 JAN 條碼或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT）和 13 碼 JAN 數字，最多 12 個，看不到就空陣列\"],\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品，請把每一款旁邊的「品番」和條碼下方的數字都抄下來，抄不清楚的不要猜。",
+  const ask = (model) => claude(env,
+    "你是商品辨識助手。看照片判斷商品，只輸出一個 JSON（不要加 ``` 或其他文字）：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）\",\"ja_text\":\"照片上印的日文商品名稱和系列名，照抄（例：サンリオキャラクターズ お出かけもこもこスタイル ミニトート）\",\"jan\":\"照片上看得到的一個 JAN 條碼數字或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT、SAOM-MT）和 13 碼 JAN 數字，最多 12 個\"],\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品：請把標題的商品名、系列名，以及每一款旁邊的「品番」、條碼下方的數字都抄下來；看不清楚的不要猜。",
     [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: "這是什麼商品？" }] }],
-    300);
-  try { return JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { return { query: out.slice(0, 80), jan: "" }; }
+    900, model);
+  let out;
+  try { out = await ask(env.PHOTO_MODEL || PHOTO_MODEL); } catch (e) { console.log("photo model failed", e); out = await ask(); } // 強模型失敗就退回預設模型
+  let d;
+  try { d = JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { d = { query: out.replace(/[{}"\[\]]/g, " ").slice(0, 160), jan: "" }; }
+  // JSON 壞掉或被截斷時，也從原文把品番、JAN 撈出來
+  const extra = (out.match(/\b[A-Z][A-Z0-9]{1,5}-[A-Z0-9]{1,5}(?:-[A-Z0-9]{1,4})?\b|\b49\d{11}\b/g) || []);
+  d.codes = [...new Set([...(Array.isArray(d.codes) ? d.codes : []), ...extra])].slice(0, 16);
+  d.query = [d.ja_text, d.query].filter(Boolean).join(" ");
+  if (env.SESSIONS) await env.SESSIONS.put("lastphoto", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + "\n" + JSON.stringify(d).slice(0, 900), { expirationTtl: 7 * 86400 }).catch(() => {});
+  return d;
 }
 
 // 照片上抄到的品番／JAN → 直接對目錄（一整頁目錄照片會有好幾款）
 function photoHits(items, d) {
+  const fz = (c) => String(c || "").toUpperCase().replace(/\s+/g, "").replace(/[–—－]/g, "-").replace(/0/g, "O"); // 品番常把 O 和 0 看錯
   const raw = [...(Array.isArray(d && d.codes) ? d.codes : []), (d && d.jan) || ""].map((c) => String(c || "").trim().toUpperCase().replace(/\s+/g, "")).filter((c) => c.length >= 4);
   const out = [], seen = new Set();
   const add = (it) => { if (!seen.has(it)) { seen.add(it); out.push(it); } };
   for (const c of raw) {
-    const hit = items.filter((it) => (it.code || "").toUpperCase() === c || (it.jan || "") === c);
+    const hit = items.filter((it) => fz(it.code) === fz(c) || (it.jan || "") === c);
     if (hit.length) { hit.forEach(add); continue; }
-    if (/^[A-Z]+-[A-Z0-9]+$/.test(c)) items.filter((it) => (it.code || "").toUpperCase().startsWith(c + "-")).slice(0, 12).forEach(add); // 只看到系列品番（例：SAOM-MT）
+    if (/^[A-Z0-9]+-[A-Z0-9]+$/.test(c)) items.filter((it) => fz(it.code).startsWith(fz(c) + "-")).slice(0, 12).forEach(add); // 只看到系列品番（例：SAOM-MT）
+  }
+  // 照片上抄到好幾個品番（多半是一整頁目錄）→ 同系列的其他款也一起列出（有些品番可能沒抄完整）
+  if (raw.length >= 2 && out.length) {
+    const pre = new Set(out.map((it) => fz(it.code).replace(/-[^-]+$/, "")).filter((x) => x.includes("-")));
+    for (const p of pre) items.filter((it) => fz(it.code).startsWith(p + "-")).forEach(add);
   }
   return out.slice(0, 10);
 }
@@ -582,6 +598,7 @@ async function ownerCommand(env, text) {
     try { const r = await updateRates(env, false); return `好👌 已更新為台銀最新匯率（${r.at}）\n日圓 ${r.JPY}｜人民幣 ${r.CNY}\n全部商品價格已重新計算`; } catch (e) { return "抓匯率失敗：" + e.message; }
   }
   if (/^#?(錯誤|錯誤紀錄)$/.test(text.trim())) return (await env.SESSIONS.get("lasterr")) || "最近沒有傳送失敗的紀錄👌";
+  if (/^#?(照片辨識|辨識紀錄)$/.test(text.trim())) return "📷 最近一次照片辨識結果：\n" + ((await env.SESSIONS.get("lastphoto")) || "（還沒有紀錄）");
   if (/^#?(後台|商家後台|管理後台)$/.test(text.trim())) return `🔐 ZOARÉ 商家後台（只有你的帳號能用，請不要轉傳）：\n${await adminLink(env, (await env.SESSIONS.get("owner")))}\n\n💡 傳「#更新選單」後，你的圖文選單右下角會變成「商家後台」按鈕，之後點一下就能開`;
   const shopR = await shopOwnerCommand(env, text.trim(), { lineApi, loadCatalog, isExpired, claude });
   if (shopR) return shopR;
