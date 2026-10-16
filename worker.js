@@ -1137,7 +1137,9 @@ async function runMemberReminders(env) {
   } while (cursor);
 }
 // 部署後要執行一次的老闆指令（執行結果會傳給老闆）
-const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" }];
+const BOOT_TASKS = [{ id: "20261015-qianqian-vip", cmd: "芊芊 VIP 2個月" }, { id: "20261015-member-list", cmd: "會員名單" },
+  { id: "20261016-sanrio-push", cmd: "群發 三麗鷗\n三麗鷗迷看過來💖 秋冬新品上架囉！\nHello Kitty、美樂蒂、酷洛米、大耳狗、布丁狗、帕恰狗…雨傘、襪子、環保袋、毛絨保暖小物、吊飾通通有，全部日本正版、批發價直送台灣🇯🇵\n每款都標好起批數和結單日，喜歡的直接點下面連結看商品、下單👇\n👑 VIP 會員運費全免、每件再省 NT$30" },
+  { id: "20261016-sanrio-push-ok", cmd: "群發確認" }];
 async function runBootTasks(env) {
   const owner = await env.SESSIONS.get("owner");
   // 一次性：之前設定、沒有期限的會員，一律從今天起算 1 個月
