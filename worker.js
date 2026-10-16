@@ -303,10 +303,15 @@ async function lineApi(env, path, payload, host = "api.line.me") {
     body: payload ? JSON.stringify(payload) : undefined,
   });
 }
-async function reply(env, token, messages) {
+async function reply(env, token, messages, to) {
   let r = await lineApi(env, "/v2/bot/message/reply", { replyToken: token, messages: messages.slice(0, 5) });
   if (!r.ok) {
     const err = await r.text();
+    // 照片辨識比較久，回覆權杖可能過期 → 改用推播送出，不讓客人等了半天沒回應
+    if (to && /reply ?token/i.test(err)) {
+      r = await lineApi(env, "/v2/bot/message/push", { to, messages: messages.slice(0, 5) });
+      if (r.ok) return;
+    }
     console.log("reply failed", r.status, err);
     if (env.SESSIONS) await env.SESSIONS.put("lasterr", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + " " + r.status + " " + err.slice(0, 600), { expirationTtl: 30 * 86400 });
     // 卡片格式有問題時，改用純文字再送一次，至少讓客人收到回覆
@@ -372,10 +377,23 @@ function parseJson(text) {
 // 照片 → 搜尋關鍵字
 async function describePhoto(env, img) {
   const out = await claude(env,
-    "你是商品辨識助手。看照片判斷商品，只輸出 JSON：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）以及照片上看得到的商品名稱\",\"jan\":\"照片上看得到的 JAN 條碼或型號，沒有就空字串\",\"is_product\":true}",
+    "你是商品辨識助手。看照片判斷商品，只輸出 JSON：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）以及照片上看得到的商品名稱\",\"jan\":\"照片上看得到的 JAN 條碼或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT）和 13 碼 JAN 數字，最多 12 個，看不到就空陣列\"],\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品，請把每一款旁邊的「品番」和條碼下方的數字都抄下來，抄不清楚的不要猜。",
     [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: "這是什麼商品？" }] }],
     300);
   try { return JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { return { query: out.slice(0, 80), jan: "" }; }
+}
+
+// 照片上抄到的品番／JAN → 直接對目錄（一整頁目錄照片會有好幾款）
+function photoHits(items, d) {
+  const raw = [...(Array.isArray(d && d.codes) ? d.codes : []), (d && d.jan) || ""].map((c) => String(c || "").trim().toUpperCase().replace(/\s+/g, "")).filter((c) => c.length >= 4);
+  const out = [], seen = new Set();
+  const add = (it) => { if (!seen.has(it)) { seen.add(it); out.push(it); } };
+  for (const c of raw) {
+    const hit = items.filter((it) => (it.code || "").toUpperCase() === c || (it.jan || "") === c);
+    if (hit.length) { hit.forEach(add); continue; }
+    if (/^[A-Z]+-[A-Z0-9]+$/.test(c)) items.filter((it) => (it.code || "").toUpperCase().startsWith(c + "-")).slice(0, 12).forEach(add); // 只看到系列品番（例：SAOM-MT）
+  }
+  return out.slice(0, 10);
 }
 
 // ---------- 對話記憶（有綁 KV 才會啟用） ----------
@@ -757,32 +775,35 @@ async function handleEvent(env, ev) {
   try {
     const items = await loadCatalog(env);
     const session = await getSession(env, uid);
-    let userContent, query = text, img = null;
+    let userContent, query = text, img = null, hits = [];
     // 同一波連續訊息：把前面的文字一起考慮；照片只取最後一張辨識
     const earlierText = burst.filter((b) => b.type === "text" && b.text).map((b) => b.text).join("\n");
     const earlierImgs = burst.filter((b) => b.type === "image");
     if (msg.type === "text" && !text.match(/^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$/) && earlierImgs.length) {
       img = await imageBase64(env, earlierImgs[earlierImgs.length - 1].id);
       const d = await describePhoto(env, img);
+      hits = photoHits(items, d);
       query = [d.jan, d.query, text].filter(Boolean).join(" ");
     }
 
     if (msg.type === "image") {
       img = await imageBase64(env, msg.id);
       const d = await describePhoto(env, img);
+      hits = photoHits(items, d);
       query = [d.jan, d.query].filter(Boolean).join(" ");
     }
     // 回覆編號（例如「2號」）時沿用上次列出的商品
     const pickedNumber = /^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$|[1-5]\s*號/.test(text);
-    let cands = pickedNumber && session.last.length ? session.last.map((j) => items[j]).filter(Boolean) : search(items, query);
-    if (!cands.length && session.last.length) cands = session.last.map((j) => items[j]).filter(Boolean);
+    let cands = hits.length ? hits : pickedNumber && session.last.length ? session.last.map((j) => items[j]).filter(Boolean) : search(items, query);
+    // 文字追問（例如「這款多少」）才沿用上次的商品；客人傳了新照片就不要拿舊商品充數，免得跳出不相干的東西
+    if (!cands.length && !img && session.last.length) cands = session.last.map((j) => items[j]).filter(Boolean);
 
     const candText = cands.length ? cands.map((it, i) => itemLine(i + 1, it)).join("\n") : "（目錄裡沒有找到相關商品）";
     const lastText = session.last.length
       ? session.last.map((j, i) => (items[j] ? `${i + 1}. ${items[j].n}` : "")).join("\n") : "（無）";
     const burstNote = burst.length ? `（客人剛剛連續傳了 ${burst.length + 1} 則訊息${earlierImgs.length ? `，其中 ${earlierImgs.length + (msg.type === "image" ? 1 : 0)} 張照片` : ""}${earlierText ? "，前面的文字：" + earlierText : ""}；請合併成一則回覆）\n` : "";
     const lastMenu = uid && env.SESSIONS ? await env.SESSIONS.get("org:" + uid) : null;
-    const prompt = `${lastMenu ? `客人最後一次點的選單：${lastMenu}（客人常常誤點，只以最後一次為準；判斷時以客人實際傳的商品為主）\n` : ""}客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n${burstNote}客人${img ? (text ? "傳了照片並說：" + text + "（照片辨識結果：" + query + "）" : "傳了一張照片（照片辨識結果：" + query + "）") : "說：" + text}\n\n候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
+    const prompt = `${lastMenu ? `客人最後一次點的選單：${lastMenu}（客人常常誤點，只以最後一次為準；判斷時以客人實際傳的商品為主）\n` : ""}客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n${burstNote}客人${img ? (text ? "傳了照片並說：" + text + "（照片辨識結果：" + query + "）" : "傳了一張照片（照片辨識結果：" + query + "）") : "說：" + text}\n\n${hits.length ? `照片上抄到的品番已經對到目錄，下面 ${hits.length} 款就是客人照片上的商品，請全部列出報價（show 全部編號）\n` : ""}候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
     userContent = img
       ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt }]
       : prompt;
@@ -793,10 +814,12 @@ async function handleEvent(env, ev) {
     // 回答不出來、或跟前兩次回覆差不多（一直鬼打牆）→ 轉真人，機器人先不回
     const prevBot = session.history.filter((h) => h.role === "assistant").slice(-2).map((h) => h.content);
     if (!pickedNumber && prevBot.some((t) => similar(t, out.reply))) out.handoff = true;
+    // 照片上的品番已經對到目錄 → 一定要跳卡片，不轉真人
+    if (hits.length && (out.handoff || !(out.show || []).length)) { out.handoff = false; out.show = hits.map((_, i) => i + 1); if (!out.reply) out.reply = "幫您查到照片上的商品了👇"; }
     if (uid && (await inHandoff(env, uid))) return; // 回覆前再確認一次：已轉真人就不插話
     if (out.handoff && uid && (await inAutoHandoff(env, uid))) { await setHandoff(env, uid, "auto"); return; } // 已經轉給老闆了，不重複說「請專人回覆」
     if (out.handoff) {
-      await reply(env, ev.replyToken, [{ type: "text", text: "這個我請專人來回覆您喔 請稍等一下～" }]);
+      await reply(env, ev.replyToken, [{ type: "text", text: "這個我請專人來回覆您喔 請稍等一下～" }], uid);
       session.history.push({ role: "user", content: (earlierText ? earlierText + "\n" : "") + (img ? "（傳了照片：" + query + "）" + (msg.type === "text" ? text : "") : text) });
       session.history.push({ role: "assistant", content: "（已轉給專人）" });
       await saveSession(env, uid, session);
@@ -816,7 +839,7 @@ async function handleEvent(env, ev) {
     // 有商品卡片時只傳卡片，不附文字；沒有卡片才傳文字報價
     if (!cardMsg) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     if (!cardMsg && uid && /\{會員連結\}/.test(out.reply || "")) lineMsgs.push(...(await membershipCards(env, uid)));
-    await reply(env, ev.replyToken, lineMsgs);
+    await reply(env, ev.replyToken, lineMsgs, uid);
     if (uid && !isOwnerUser && shown.length) await noteContact(env, uid, { items: shown.map(itemRef), topic: text.slice(0, 20) });
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
     const quoted = shown.length > 0 || /NT\$\s*\d/.test(out.reply || "");
