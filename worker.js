@@ -533,15 +533,15 @@ async function ownerCommand(env, text) {
         if (!uid || uid === owner || seen.has(uid)) continue;
         seen.add(uid);
         let c = null; try { c = JSON.parse((await env.SESSIONS.get("c3:" + uid)) || "null"); } catch (e) {}
-        if (c && c.at && Date.now() - c.at < CARE_DAYS * 86400e3) continue; // 3 天內有聯絡，交給自動關懷
-        if (await orderedSince(env, uid, Date.now() - CARE_DAYS * 86400e3)) continue; // 最近 3 天有下單
+        if (c && c.at && Date.now() - c.at < CARE_MS) continue; // 3 小時內有聯絡，交給自動關懷
+        if (await orderedSince(env, uid, Date.now() - CARE_MS)) continue; // 最近 3 小時有下單
         if (await env.SESSIONS.get("care:done:" + uid)) continue; // 已補發過
         list.push({ uid, name: k.name.slice(2), c });
       }
       cursor = r.list_complete ? null : r.cursor;
     } while (cursor);
-    if (!list.length) return "目前沒有需要補發的客人👌（最近 3 天有聯絡或有下單的都會跳過）";
-    if (!bm[1]) return `💌 可以補發關懷的客人共 ${list.length} 位：\n${list.slice(0, 40).map((x) => "・" + x.name).join("\n")}${list.length > 40 ? `\n…還有 ${list.length - 40} 位` : ""}\n\n這些是之前聯絡過、最近 3 天沒聯絡也沒下單的客人。系統沒有記錄他們以前問過哪些商品，會傳「問想找什麼商品」的溫暖版本\n會用掉 ${list.length} 則 LINE 推播額度\n\n確定要傳，請回「補發關懷 確認」`;
+    if (!list.length) return "目前沒有需要補發的客人👌（最近 3 小時有聯絡或有下單的都會跳過）";
+    if (!bm[1]) return `💌 可以補發關懷的客人共 ${list.length} 位：\n${list.slice(0, 40).map((x) => "・" + x.name).join("\n")}${list.length > 40 ? `\n…還有 ${list.length - 40} 位` : ""}\n\n這些是之前聯絡過、最近 3 小時沒聯絡也沒下單的客人。系統沒有記錄他們以前問過哪些商品，會傳「問想找什麼商品」的溫暖版本\n會用掉 ${list.length} 則 LINE 推播額度\n\n確定要傳，請回「補發關懷 確認」`;
     let ok = 0, fail = 0;
     for (const x of list.slice(0, 100)) {
       const msgs = await careMessages(env, x.uid, x.c || {});
@@ -554,7 +554,7 @@ async function ownerCommand(env, text) {
     const m = text.trim().match(/(關|關閉|停止|開|開啟)$/);
     if (m) { if (/開/.test(m[1])) await env.SESSIONS.delete("care:off"); else await env.SESSIONS.put("care:off", "1"); }
     const off = (await env.SESSIONS.get("care:off")) === "1";
-    return `💌 3 天關懷訊息：${off ? "已關閉" : "開啟中"}\n客人聯絡後 3 天內沒下單，會在 11:00～21:00 自動傳一則溫暖的問候，附上他上次問的商品（沒問過商品就問他想找什麼）\n每次聯絡只會傳一次\n\n傳「關懷 關」可以關閉、「關懷 開」重新開啟`;
+    return `💌 3 小時關懷訊息：${off ? "已關閉" : "開啟中"}\n客人聯絡後 3 小時沒下單，會在 11:00～21:00 自動傳一則溫暖的問候，附上他上次問的商品（沒問過商品就問他想找什麼）\n每次聯絡只會傳一次\n\n傳「關懷 關」可以關閉、「關懷 開」重新開啟`;
   }
   if (/^#?(匯率|今日匯率)$/.test(text.trim())) {
     const r = await getRates(env);
@@ -660,7 +660,7 @@ async function handleEvent(env, ev) {
         quickReply: { items: [["切換 VIP", "切換 VIP"], ["切換 一般會員", "切換 一般會員"], ["切換 非會員", "切換 非會員"]].map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) } }]);
     }
   }
-  // 記錄客人聯絡時間（3 天沒下單 → 關懷訊息）
+  // 記錄客人聯絡時間（3 小時沒下單 → 關懷訊息）
   const isOwnerUser = uid && env.SESSIONS && uid === (await env.SESSIONS.get("owner"));
   if (uid && !isOwnerUser) {
     await noteContact(env, uid, null);
@@ -836,8 +836,9 @@ async function handleEvent(env, ev) {
 
 
 // 每 5 分鐘檢查一次要追蹤的客人
-// ---------- 3 天關懷：客人聯絡後 3 天內沒下單 → 傳一則溫暖的問候 ----------
-const CARE_DAYS = 3;
+// ---------- 3 小時關懷：客人聯絡後 3 小時沒下單 → 傳一則溫暖的問候（晚上 21:00 後的留到隔天 11:00） ----------
+const CARE_HOURS = 3;
+const CARE_MS = CARE_HOURS * 3600e3;
 // 管理員（LINE 顯示名稱）：可以自由切換自己的會員等級
 const ADMIN_NAMES = ["James 森🦁"];
 const SHOP_BASE_URL = "https://shiny-mud-319f.ojason90816-a70.workers.dev";
@@ -1076,7 +1077,7 @@ async function runCare(env) {
     for (const k of r.keys) {
       const uid = k.name.slice(3);
       let c; try { c = JSON.parse((await env.SESSIONS.get(k.name)) || "null"); } catch (e) { c = null; }
-      if (!c || !c.at || Date.now() - c.at < CARE_DAYS * 86400e3) continue;
+      if (!c || !c.at || Date.now() - c.at < CARE_MS) continue;
       await env.SESSIONS.delete(k.name); // 每次聯絡只關懷一次
       if (uid === owner || (await env.SESSIONS.get("h:" + uid)) || (await orderedSince(env, uid, c.at))) continue;
       const msgs = await careMessages(env, uid, c);
@@ -1101,7 +1102,7 @@ async function careMessages(env, uid, c) {
   const qrItems = (list) => ({ items: list.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) });
   if (items.length) {
     const first = items[0].n.replace(/\s+/g, " ");
-    const text = `${hi}好幾天沒聊天了，最近一切都還順利嗎？☺️\n\n前幾天您問到的「${first}」${items.length > 1 ? `等 ${items.length} 款` : ""}，不知道還有沒有需要呢？\n我幫您把商品再整理一次放在下面👇 數量、起批、到貨時間有任何想問的，都可以直接跟我說，我們陪您慢慢挑，不用有壓力喔🙏\n\n決定好的話，點卡片上的「我要訂購」就能直接下單～`;
+    const text = `${hi}謝謝您稍早來找我們聊天☺️\n\n剛剛您問到的「${first}」${items.length > 1 ? `等 ${items.length} 款` : ""}，不知道還有沒有需要呢？\n我幫您把商品再整理一次放在下面👇 數量、起批、到貨時間有任何想問的，都可以直接跟我說，我們陪您慢慢挑，不用有壓力喔🙏\n\n決定好的話，點卡片上的「我要訂購」就能直接下單～`;
     const cards = await productCards(env, uid, items, "上次詢問的商品");
     const out = [{ type: "text", text }];
     if (cards) { cards.quickReply = qrItems([["想下單", "我要訂購"], ["再看看別的", "商品目錄"], ["問真人客服", "真人客服"]]); out.push(cards); }
@@ -1113,12 +1114,12 @@ async function careMessages(env, uid, c) {
     if (kb && kb.length) {
       const flex = kb[0]; delete flex.quickReply;
       flex.quickReply = qrItems([["想下單", "我要訂購"], ["看別的系列", "商品目錄"], ["問真人客服", "真人客服"]]);
-      const text = `${hi}好幾天沒聊天了，最近一切都還順利嗎？☺️\n\n前幾天看您在看「${c.topic}」的商品，不知道有沒有找到喜歡的呢？\n我把這個系列再整理給您看看👇 想問數量、起批、到貨時間，或想找其他款式，都可以直接跟我說，我們陪您慢慢挑，不用有壓力喔🙏`;
+      const text = `${hi}謝謝您稍早來找我們聊天☺️\n\n剛剛看您在看「${c.topic}」的商品，不知道有沒有找到喜歡的呢？\n我把這個系列再整理給您看看👇 想問數量、起批、到貨時間，或想找其他款式，都可以直接跟我說，我們陪您慢慢挑，不用有壓力喔🙏`;
       return [{ type: "text", text }, flex];
     }
   }
-  const topic = c.topic ? `前幾天看到您在逛「${c.topic}」，` : "";
-  const text = `${hi}之前謝謝您來找我們聊天☺️ 最近忙不忙呢？\n\n${topic}不知道最近有沒有想找的商品？吉伊卡哇、三麗鷗、寶可夢、蠟筆小新…都有不少新貨喔！\n跟我說想要的角色或商品，我馬上幫您找、幫您報價；有預算或數量的考量也可以先聊聊，我們一起慢慢挑🙏\n\n🛒 您的專屬商城：${link}`;
+  const topic = c.topic ? `剛剛看到您在逛「${c.topic}」，` : "";
+  const text = `${hi}謝謝您稍早來找我們聊天☺️\n\n${topic}不知道最近有沒有想找的商品？吉伊卡哇、三麗鷗、寶可夢、蠟筆小新…都有不少新貨喔！\n跟我說想要的角色或商品，我馬上幫您找、幫您報價；有預算或數量的考量也可以先聊聊，我們一起慢慢挑🙏\n\n🛒 您的專屬商城：${link}`;
   return [{ type: "text", text, quickReply: qrItems([["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["寶可夢", "寶可夢"], ["蠟筆小新", "蠟筆小新"], ["商品目錄", "商品目錄"], ["會員方案", "會員方案"]]) }];
 }
 // ---------- 會員到期提醒：到期前 3 天提醒續約、到期當天通知 ----------
