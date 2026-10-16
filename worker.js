@@ -21,7 +21,9 @@ const CATALOG_VERSION = "20261016-1330";
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
 const FOLLOWUP_MINUTES = 30;
-const BURST_WAIT_MS = 6000; // 連續訊息合併等待時間
+const BURST_WAIT_MS = 6000;
+const MAX_PHOTOS = 6; // 一次最多辨識幾張照片
+const MAX_CARDS = 36; // 照片對到的商品最多列幾款（12 款一組，最多 3 組） // 連續訊息合併等待時間
 const FOLLOWUP_TEXT = "請問有興趣嗎～";
 
 // ---------- 圖文選單：固定回覆（不經過 AI） ----------
@@ -409,7 +411,7 @@ function photoHits(items, d) {
     const pre = new Set(out.map((it) => fz(it.code).replace(/-[^-]+$/, "")).filter((x) => x.includes("-")));
     for (const p of pre) items.filter((it) => fz(it.code).startsWith(p + "-")).forEach(add);
   }
-  return out.slice(0, 10);
+  return out.slice(0, 12);
 }
 
 // ---------- 對話記憶（有綁 KV 才會啟用） ----------
@@ -792,26 +794,34 @@ async function handleEvent(env, ev) {
   try {
     const items = await loadCatalog(env);
     const session = await getSession(env, uid);
-    let userContent, query = text, img = null, hits = [];
-    // 同一波連續訊息：把前面的文字一起考慮；照片只取最後一張辨識
+    let userContent, query = text, img = null, hits = [], cands0 = [];
+    // 同一波連續訊息：把前面的文字一起考慮；照片全部辨識（一次最多 6 張，同時進行）
     const earlierText = burst.filter((b) => b.type === "text" && b.text).map((b) => b.text).join("\n");
     const earlierImgs = burst.filter((b) => b.type === "image");
-    if (msg.type === "text" && !text.match(/^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$/) && earlierImgs.length) {
-      img = await imageBase64(env, earlierImgs[earlierImgs.length - 1].id);
-      const d = await describePhoto(env, img);
-      hits = photoHits(items, d);
-      query = [d.jan, d.query, text].filter(Boolean).join(" ");
-    }
-
-    if (msg.type === "image") {
-      img = await imageBase64(env, msg.id);
-      const d = await describePhoto(env, img);
-      hits = photoHits(items, d);
-      query = [d.jan, d.query].filter(Boolean).join(" ");
+    const photoIds = [];
+    if (msg.type === "text" && !text.match(/^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$/)) photoIds.push(...earlierImgs.map((b) => b.id));
+    if (msg.type === "image") photoIds.push(...earlierImgs.map((b) => b.id), msg.id);
+    const ids = photoIds.slice(-MAX_PHOTOS);
+    if (ids.length) {
+      const res = await Promise.all(ids.map(async (id) => {
+        try { const im = await imageBase64(env, id); return { im, d: await describePhoto(env, im) }; } catch (e) { console.log("photo failed", e); return null; }
+      }));
+      const ok = res.filter(Boolean);
+      if (ok.length) {
+        img = ok[ok.length - 1].im;
+        const seen = new Set();
+        for (const r of ok) for (const it of photoHits(items, r.d)) if (!seen.has(it)) { seen.add(it); hits.push(it); }
+        hits = hits.slice(0, MAX_CARDS);
+        // 有照片沒對到品番時，用每張照片的辨識文字一起搜尋
+        query = [...ok.map((r) => [r.d.jan, r.d.query].filter(Boolean).join(" ")), msg.type === "text" ? text : ""].filter(Boolean).join(" ");
+        if (!hits.length && ok.length > 1) {
+          for (const r of ok) for (const it of search(items, [r.d.jan, r.d.query].filter(Boolean).join(" "), 4)) if (!seen.has(it)) { seen.add(it); cands0.push(it); }
+        }
+      }
     }
     // 回覆編號（例如「2號」）時沿用上次列出的商品
     const pickedNumber = /^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$|[1-5]\s*號/.test(text);
-    let cands = hits.length ? hits : pickedNumber && session.last.length ? session.last.map((j) => items[j]).filter(Boolean) : search(items, query);
+    let cands = hits.length ? hits : cands0.length ? cands0.slice(0, 16) : pickedNumber && session.last.length ? session.last.map((j) => items[j]).filter(Boolean) : search(items, query);
     // 文字追問（例如「這款多少」）才沿用上次的商品；客人傳了新照片就不要拿舊商品充數，免得跳出不相干的東西
     if (!cands.length && !img && session.last.length) cands = session.last.map((j) => items[j]).filter(Boolean);
 
@@ -832,7 +842,7 @@ async function handleEvent(env, ev) {
     const prevBot = session.history.filter((h) => h.role === "assistant").slice(-2).map((h) => h.content);
     if (!pickedNumber && prevBot.some((t) => similar(t, out.reply))) out.handoff = true;
     // 照片上的品番已經對到目錄 → 一定要跳卡片，不轉真人
-    if (hits.length && (out.handoff || !(out.show || []).length)) { out.handoff = false; out.show = hits.map((_, i) => i + 1); if (!out.reply) out.reply = "幫您查到照片上的商品了👇"; }
+    if (hits.length) { out.handoff = false; out.show = hits.map((_, i) => i + 1); if (!out.reply) out.reply = "幫您查到照片上的商品了👇"; } // 照片上的商品全部列出
     if (uid && (await inHandoff(env, uid))) return; // 回覆前再確認一次：已轉真人就不插話
     if (out.handoff && uid && (await inAutoHandoff(env, uid))) { await setHandoff(env, uid, "auto"); return; } // 已經轉給老闆了，不重複說「請專人回覆」
     if (out.handoff) {
@@ -844,11 +854,15 @@ async function handleEvent(env, ev) {
       await notifyOwner(env, uid, img ? "（傳了一張照片）" : text);
       return;
     }
-    const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, 10);
+    const shown = (out.show || []).map((n) => cands[n - 1]).filter((it) => it && it.img).slice(0, hits.length ? MAX_CARDS : 10);
     if (uid && env.SESSIONS && shown.length && (await inAutoHandoff(env, uid))) await env.SESSIONS.delete("h:" + uid); // 找到商品了 → 恢復正常回覆
     const lineMsgs = [];
-    const cardMsg = uid && shown.length ? await productCards(env, uid, shown, `商品報價（${shown.length} 款）`) : null;
-    if (cardMsg) lineMsgs.push(cardMsg);
+    // 一個卡片輪播最多 12 款，超過就分成好幾組（多張照片一次問很多款）
+    let cardMsg = null;
+    if (uid && shown.length) for (let i = 0; i < shown.length; i += 12) {
+      const cm = await productCards(env, uid, shown.slice(i, i + 12), `商品報價（${shown.length} 款${shown.length > 12 ? `・第 ${i / 12 + 1} 組` : ""}）`);
+      if (cm) { lineMsgs.push(cm); cardMsg = cardMsg || cm; }
+    }
     else for (const it of shown.slice(0, 3)) lineMsgs.push({ type: "image", originalContentUrl: it.img, previewImageUrl: it.img });
     const myLink = uid ? await shopLink(env, uid) : "";
     let replyText = (out.reply || "我幫您轉給專人確認喔！").replace(/(樂賣商城\s*)?\{訂購連結[:：]([^}]+)\}/g, (_, __, k) => `${myLink}&q=${encodeURIComponent(k.trim())}`).replaceAll("樂賣商城 {訂購連結}", myLink).replaceAll("{訂購連結}", myLink).replaceAll("{會員連結}", myLink + "&q=" + encodeURIComponent("會員方案"));
