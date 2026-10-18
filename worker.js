@@ -740,6 +740,12 @@ async function handleEvent(env, ev) {
   if (uid && /^(加入會員|會員|入會|VIP|加入VIP|會員方案|會員制|會員制度|會員費|VIP會員|一般會員|升級VIP|怎麼加入會員|(NT)?\$?1,?000(元)?(方案|會員)?|(NT)?\$?100(元)?(方案|會員)?)$/i.test(text.replace(/\s/g, ""))) {
     return reply(env, ev.replyToken, await membershipCards(env, uid));
   }
+  // 公開賣場的訪客按「用 LINE 下單」→ 傳來「下單 #代碼」→ 回他自己的下單頁，購物車自動帶入
+  const gcm = text.match(/^下單\s*#\s*([A-Za-z0-9]{6})$/);
+  if (uid && gcm) {
+    await rememberName(env, uid);
+    return reply(env, ev.replyToken, [{ type: "text", text: `幫您把購物車帶過來了🛒\n點下面的連結確認數量、填寫收件資料，就能送出訂單👇\n${await shopLink(env, uid)}&cart=${gcm[1].toUpperCase()}\n\n（價格會自動套用您的會員等級；這個連結是您專用的，請不要轉傳）` }]);
+  }
   // 要訂購連結
   if (uid && ORDER_WORDS.includes(text)) {
     await rememberName(env, uid);

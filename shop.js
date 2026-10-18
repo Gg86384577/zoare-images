@@ -253,6 +253,22 @@ export async function handleShop(request, env, ctx, deps) {
       dl: n.dlGroups.slice(0, 10).map((g) => ({ b: g.b, dl: g.dl, n: g.items.length, ks: pick(g.items) })),
       fresh: n.newGroups.slice(0, 12).map((g) => ({ b: g.b, ad: g.ad, n: g.items.length, ks: pick(g.items) })) });
   }
+  // 訪客購物車暫存：公開賣場選好商品 → 存一個代碼 → 透過 LINE 換成客人自己的下單頁
+  if (p === "/shop/guestcart") {
+    if (request.method === "POST") {
+      let b; try { b = await request.json(); } catch (e) { return Response.json({ ok: false, error: "資料格式錯誤" }, { status: 400 }); }
+      const c = {}, src = (b && b.cart) || {};
+      for (const k of Object.keys(src).slice(0, 80)) { const q = Math.floor(Number(src[k])); if (typeof k === "string" && k.length < 200 && q > 0 && q < 100000) c[k] = q; }
+      if (!Object.keys(c).length) return Response.json({ ok: false, error: "購物車是空的" }, { status: 400 });
+      const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let id = "";
+      const rnd = crypto.getRandomValues(new Uint8Array(6)); for (const x of rnd) id += A[x % A.length];
+      await env.SESSIONS.put("gc:" + id, JSON.stringify(c), { expirationTtl: 3 * 86400 });
+      return Response.json({ ok: true, id });
+    }
+    const id = String(url.searchParams.get("id") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    const v = id ? await env.SESSIONS.get("gc:" + id) : null;
+    return Response.json(v ? { ok: true, cart: JSON.parse(v) } : { ok: false });
+  }
   if (p === "/shop/me") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
     if (!uid) return Response.json({ ok: false, error: "連結無效，請回到 LINE 重新點訂購連結" }, { status: 401 });
@@ -643,13 +659,19 @@ const QR="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/lin
 function payHTML(t,isLP){let h=esc(t).replace(/(https?:\\/\\/[^\\s<]+)/g,u=>/qrcodepay\\.line\\.me/.test(u)?'</pre><a class="lpbtn" href="'+u+'">💚 開啟 LINE Pay 付款</a><pre>':'<a href="'+u+'">'+u+'</a>');
   if(isLP&&/qrcodepay\\.line\\.me/.test(t))h+='</pre><img class="lpqr" src="'+QR+'" alt="LINE Pay QR"><pre>';return h}
 async function init(){
-  if(!T){$("#grid").innerHTML='<div class="err">請從 ZOARÉ 的 LINE 官方帳號點「訂購連結」進來喔<br>（在 LINE 傳「訂購」就會收到專屬連結）</div>';$("#who").textContent="";return}
+  if(!T){
+    // 訪客（公開連結進來）：可以逛、加購物車，下單時再用 LINE 確認身分
+    try{ALL=await fetch("/shop/catalog").then(r=>r.json())}catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
+    ME={guest:true,tier:"none",name:"訪客",tierName:"訪客"};
+  }else{
   try{
     const [me,cat]=await Promise.all([fetch("/shop/me?t="+encodeURIComponent(T)).then(r=>r.json()),fetch("/shop/catalog").then(r=>r.json())]);
     if(!me.ok){$("#grid").innerHTML='<div class="err">'+esc(me.error)+'</div>';$("#who").textContent="";return}
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
-  $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
+  }
+  if(ME.guest)$("#who").innerHTML='<b>歡迎逛逛 ZOARÉ</b><span class="tier">訪客</span><br>顯示一般價（VIP 會員每件再便宜 NT$30）・選好後用 LINE 一鍵下單';
+  else $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
   const CO=["會員方案","吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
@@ -659,6 +681,9 @@ async function init(){
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   filter();bar();
   const Q0=new URLSearchParams(location.search).get("q");if(Q0){$("#q").value=Q0;filter()}
+  // 訪客的購物車透過 LINE 帶過來（cart=代碼）
+  const CID=new URLSearchParams(location.search).get("cart");
+  if(CID&&T){try{const r=await fetch("/shop/guestcart?id="+encodeURIComponent(CID)).then(r=>r.json());if(r.ok&&r.cart){for(const k in r.cart)if(ALL.find(x=>x.k===k))cart[k]=r.cart[k];save();bar();renderCart();$("#sheet").classList.add("on")}}catch(e){}}
   const V=new URLSearchParams(location.search).get("v");if(V==="orders")openOrders();if(V==="news")openNews();
 }
 const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）「」\\-_/|｜]/g,"");
@@ -725,6 +750,7 @@ async function openNews(){
 }
 const STC={"待付款":"s1","已回報匯款":"s2","待確認":"s1","已付款":"s2","已出貨":"s3","已取消":"s4"};
 async function openOrders(){
+  if(ME&&ME.guest){$("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">訪客看不到訂單喔<br>在 ZOARÉ 的 LINE 傳「訂購」就會收到你的專屬連結，可以查訂單</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
   $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
@@ -755,8 +781,15 @@ function renderCart(){
   '<label>付款方式</label><div class="pays">'+["轉帳","LINE Pay"].map(p=>'<label class="pay"><input type="radio" name="pay" value="'+p+'"'+((form.pay||"轉帳")===p?" checked":"")+'><span>'+(p==="轉帳"?"🏦 銀行轉帳":"💚 LINE Pay")+'</span></label>').join("")+'</div>'+
   '<label>備註（選填）</label><textarea class="f" name="note" rows="2"></textarea>'+
   '<button class="go" id="go">送出訂單</button></form>';
+  if(ME.guest){const f=$("#of");f.outerHTML='<button class="go" id="lg">💚 用 LINE 確認身分並下單</button><div style="font-size:12px;color:#6b6f75;margin-top:8px;line-height:1.6">會打開 ZOARÉ 的 LINE 官方帳號，按「傳送」後會收到你的專屬下單頁，購物車會自動帶過去，再填收件資料就完成了。<br>會員價會在專屬下單頁自動套用。</div>';$("#lg").onclick=guestCheckout}
   $("#cx").onclick=()=>$("#sheet").classList.remove("on");
-  $("#of").onsubmit=submit;
+  if(!ME.guest)$("#of").onsubmit=submit;
+}
+async function guestCheckout(){
+  const b=$("#lg");b.disabled=true;b.textContent="處理中…";
+  try{const r=await fetch("/shop/guestcart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cart})}).then(r=>r.json());
+    if(!r.ok)throw new Error(r.error||"失敗");location.href="/go?q="+encodeURIComponent("下單 #"+r.id);
+  }catch(e){b.disabled=false;b.textContent="💚 用 LINE 確認身分並下單";alert("暫時無法處理，請稍後再試")}
 }
 async function submit(e){
   e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));form=fd;try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr,pay:fd.pay}))}catch(_){}
