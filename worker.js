@@ -1300,7 +1300,7 @@ export default {
       const q = (url.searchParams.get("q") || decodeURIComponent(url.pathname.slice(4)) || "商品目錄").slice(0, 50);
       return Response.redirect(`https://line.me/R/oaMessage/${encodeURIComponent(id)}/?${encodeURIComponent(q)}`, 302);
     }
-    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi });
+    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi, ver: CATALOG_VERSION });
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");

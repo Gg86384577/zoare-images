@@ -240,7 +240,8 @@ export async function handleShop(request, env, ctx, deps) {
   const url = new URL(request.url);
   const p = url.pathname;
   if (p === "/shop" || p === "/shop/") {
-    return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    // 目錄版本放進網址：每次更新目錄，客人手機就一定抓新的商品清單（不會被快取卡住）
+    return new Response(PAGE.replaceAll("__CV__", encodeURIComponent(deps.ver || "")), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   }
   if (p === "/shop/catalog") {
     const items = slim(await deps.loadCatalog(env), deps.isExpired);
@@ -661,11 +662,11 @@ function payHTML(t,isLP){let h=esc(t).replace(/(https?:\\/\\/[^\\s<]+)/g,u=>/qrc
 async function init(){
   if(!T){
     // 訪客（公開連結進來）：可以逛、加購物車，下單時再用 LINE 確認身分
-    try{ALL=await fetch("/shop/catalog").then(r=>r.json())}catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
+    try{ALL=await fetch("/shop/catalog?v=__CV__").then(r=>r.json())}catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
     ME={guest:true,tier:"none",name:"訪客",tierName:"訪客"};
   }else{
   try{
-    const [me,cat]=await Promise.all([fetch("/shop/me?t="+encodeURIComponent(T)).then(r=>r.json()),fetch("/shop/catalog").then(r=>r.json())]);
+    const [me,cat]=await Promise.all([fetch("/shop/me?t="+encodeURIComponent(T)).then(r=>r.json()),fetch("/shop/catalog?v=__CV__").then(r=>r.json())]);
     if(!me.ok){$("#grid").innerHTML='<div class="err">'+esc(me.error)+'</div>';$("#who").textContent="";return}
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
