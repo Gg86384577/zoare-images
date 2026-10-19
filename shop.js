@@ -185,15 +185,13 @@ function slim(items, isExpired) {
 }
 
 // ---------- 訂購規則（只提醒，不擋） ----------
-// 起批數：會員＝照每款商品的起批數（整盒商品＝整盒數量；型錄沒寫的預設 3 件）；
-// 非會員＝單款 21 件起，商品起批數比 21 大就照商品（整盒商品湊成整盒倍數）
+// 起批規則（單款）：VIP＝商品起批數（型錄沒寫的 3 件）；沒有 VIP（一般會員／非會員）＝起批數的倍數、至少 20 件
+// 例：起批 2 → VIP 2／非 VIP 20；起批 3 → 3／21；起批 6 → 6／24；起批 48 → 48／48。VIP 整張訂單不同款合計需 21 件
 export function minQty(x, tier) {
   if (x.mem) return 1;
-  const own = Number(x.box) || Number(x.moq) || 0;
-  if (!x.box && own === 2 && tier !== "vip") return 20; // 起批 2 件的商品：VIP 2 件、非 VIP（一般會員／非會員）20 件
-  if (tier !== "none") return own || 3;
-  const m = Math.max(21, own);
-  return x.box ? Math.ceil(m / x.box) * x.box : m;
+  const u = Number(x.box) || Number(x.moq) || 3;
+  if (tier === "vip") return u;
+  return u >= 20 ? u : Math.ceil(20 / u) * u;
 }
 export function ruleNotes(lines, tier) {
   const notes = [];
@@ -204,7 +202,7 @@ export function ruleNotes(lines, tier) {
     if (l.box && l.q % l.box) notes.push(`${l.n}：盲盒／整箱商品請以 ${l.box} 的倍數訂購`);
     else if (l.q < mq) notes.push(`${l.n}：${tier === "vip" ? "VIP 會員" : tier === "none" ? "非會員" : "一般會員"}這款 ${mq} 件起`);
   }
-  if (tier !== "none" && total > 0 && total < 21) notes.push(`會員混批合計需 21 件起（目前 ${total} 件）`);
+  if (tier === "vip" && total > 0 && total < 21) notes.push(`VIP 混批合計需 21 件起（目前 ${total} 件）`);
   return notes;
 }
 
@@ -719,7 +717,7 @@ function card(x){
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-function step(x){if(x.mem)return 1;const own=Number(x.box)||Number(x.moq)||0;if(!x.box&&own===2&&TIER()!=="vip")return 20;if(TIER()!=="none")return own||3;const m=Math.max(21,own);return x.box?Math.ceil(m/x.box)*x.box:m}
+function step(x){if(x.mem)return 1;const u=Number(x.box)||Number(x.moq)||3;if(TIER()==="vip")return u;return u>=20?u:Math.ceil(20/u)*u}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
   const part=VIEW.slice(shown,shown+40);shown+=part.length;
@@ -743,7 +741,7 @@ function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
-  if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
+  if(t==="vip"&&total>0&&total<21)out.push("VIP 混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
@@ -1184,8 +1182,8 @@ export async function membershipCards(env, uid) {
   const link = (await shopLink(env, uid)) + "&q=" + encodeURIComponent("會員方案");
   const tier = await getTier(env, uid);
   const bubbles = [
-    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "不同款混批 21 件，每款照商品起批數", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
-    memBubble("一般會員", "NT$100／月", ["免國際運費", "不同款混批 21 件，每款照商品起批數", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
+    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "每款照商品起批數（很多款 2～3 件），整單合計 21 件", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
+    memBubble("一般會員", "NT$100／月", ["免國際運費", "起批同非會員（每款約 20 件起）", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
   ];
   const mi = await memberInfo(env, uid);
   const exp = mi.until ? `有效到 ${fmtDay(mi.until)}（還有 ${mi.days} 天）` : "";
@@ -1217,9 +1215,9 @@ ${link}
 ・看新品、快結單的商品：點「商品動態」
 ・查訂單：點「訂單查詢」`;
   const text2 = `━━ 起批數怎麼算？ ━━
-・非會員：每款 21 件起（商品本身起批數更多的照商品）
-・會員：每款只要達到商品自己的起批數，很多款 1～3 件就能訂，不同款合計 21 件就能出單
-👉 想少量多樣進貨，加入會員最划算
+・沒有 VIP：每款約 20 件起（照商品起批數的倍數，例如起批 2 件→20 件、3 件→21 件）
+・VIP 會員：每款照商品自己的起批數，很多款 2～3 件就能訂，不同款合計 21 件就能出單
+👉 想少量多樣進貨，VIP 最划算
 
 ━━ 會員方案 ━━
 👑 VIP 會員 NT$1,000／月（推薦）
