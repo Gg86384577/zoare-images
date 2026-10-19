@@ -190,6 +190,7 @@ function slim(items, isExpired) {
 export function minQty(x, tier) {
   if (x.mem) return 1;
   const own = Number(x.box) || Number(x.moq) || 0;
+  if (!x.box && own === 2 && tier !== "vip") return 20; // 起批 2 件的商品：VIP 2 件、非 VIP（一般會員／非會員）20 件
   if (tier !== "none") return own || 3;
   const m = Math.max(21, own);
   return x.box ? Math.ceil(m / x.box) * x.box : m;
@@ -201,7 +202,7 @@ export function ruleNotes(lines, tier) {
     if (l.mem) continue;
     const mq = minQty(l, tier);
     if (l.box && l.q % l.box) notes.push(`${l.n}：盲盒／整箱商品請以 ${l.box} 的倍數訂購`);
-    else if (l.q < mq) notes.push(`${l.n}：${tier === "none" ? "非會員" : "會員"}這款 ${mq} 件起`);
+    else if (l.q < mq) notes.push(`${l.n}：${tier === "vip" ? "VIP 會員" : tier === "none" ? "非會員" : "一般會員"}這款 ${mq} 件起`);
   }
   if (tier !== "none" && total > 0 && total < 21) notes.push(`會員混批合計需 21 件起（目前 ${total} 件）`);
   return notes;
@@ -718,7 +719,7 @@ function card(x){
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-function step(x){if(x.mem)return 1;const own=Number(x.box)||Number(x.moq)||0;if(TIER()!=="none")return own||3;const m=Math.max(21,own);return x.box?Math.ceil(m/x.box)*x.box:m}
+function step(x){if(x.mem)return 1;const own=Number(x.box)||Number(x.moq)||0;if(!x.box&&own===2&&TIER()!=="vip")return 20;if(TIER()!=="none")return own||3;const m=Math.max(21,own);return x.box?Math.ceil(m/x.box)*x.box:m}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
   const part=VIEW.slice(shown,shown+40);shown+=part.length;
@@ -741,7 +742,7 @@ function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
-  L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="none"?"非會員":"會員")+"這款 "+mq+" 件起")});
+  L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
   if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
@@ -857,7 +858,7 @@ function bubble(it, tier, link) {
   const price = tier === "vip" ? `VIP NT$${it.v}` : `NT$${it.g}`;
   const sub = tier === "vip" ? `一般 NT$${it.g}` : `VIP 會員 NT$${it.v}`;
   const mq = minQty({ box: packN(it), moq: moqOf(it) }, tier);
-  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : tier === "none" ? `${mq} 件起（會員 ${minQty({ box: packN(it), moq: moqOf(it) }, "vip")} 件起）` : `會員 ${mq} 件起`, /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
+  const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : tier === "vip" ? `VIP ${mq} 件起` : `${mq} 件起（VIP ${minQty({ box: packN(it), moq: moqOf(it) }, "vip")} 件起）`, /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
   const body = [
     { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
     { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },

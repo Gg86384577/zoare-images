@@ -16,7 +16,7 @@ const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const CATALOG_VERSION = "20261020-0610";
+const CATALOG_VERSION = "20261020-0615";
 const CATALOG_SHA = "b0bfa1e0b58ae0883c853e0e7b3fe118b234e114"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
@@ -71,6 +71,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 每款商品的起批數在候選商品資料的「起批」欄位，報價時一定要照那個數字講，不要每款都說 21 件。
 - 非會員：單款 21 件起；商品本身起批數超過 21 的照商品（例如起批 36 就是 36 件起）。
 - 會員（NT$100／NT$1,000）：每款照商品本身的起批數（型錄沒寫的 3 件起），整張訂單不同款合計 21 件起。不可以說「加入會員後全部一件起」。
+- 例外：商品起批數是 2 件的，只有 VIP 會員 2 件起；一般會員、非會員這款都是 20 件起。以「起批」欄位寫的為準。
 - 客人問 FuRyu（フリュー）的商品（常見是三麗鷗景品絨毛、公仔）：目錄沒有就不要報價，回「FuRyu 是廠商配貨制喔 我們可以幫您下單 但會依實際配貨數量出貨 沒配到的部分全額退款～ 我請專人跟您確認款式跟數量」，並加 #HANDOFF。目錄有同角色的其他三麗鷗商品，可以順便列出 1～3 款給客人參考。
 - 商品資料若有「訂購方式：整箱…不拆箱不混款」，這款不論是否會員都只能單款整箱訂（每款 1 箱起），報價時要講清楚每箱幾個、整箱價（單價×每箱數量），以及截單時間。
 
@@ -282,7 +283,7 @@ function itemLine(i, it) {
   if (it.spec) f.push(`規格：${it.spec}`);
   { const bm = (it.pack || "").match(/(?:整盒|整箱)\s*(\d+)\s*個/), box = bm ? +bm[1] : 0, own = box || Number(it.moq) || (/盲盒/.test(it.pack || "") ? 0 : Number(((it.pack || "").match(/\d+/) || [0])[0]));
     const nm = Math.max(21, own), non = box ? Math.ceil(nm / box) * box : nm;
-    f.push(`起批：會員 ${own || 3} 件、非會員 ${non} 件${box ? `（整盒 ${box} 個倍數）` : ""}`); }
+    f.push(!box && own === 2 ? `起批：VIP 會員 2 件、一般會員／非會員 20 件` : `起批：會員 ${own || 3} 件、非會員 ${non} 件${box ? `（整盒 ${box} 個倍數）` : ""}`); }
   if (it.pack && it.pack.includes("整箱")) f.push(`訂購方式：${it.pack}`);
   if (isExpired(it)) f.push(`狀態：已截止（不可下單）`);
   else if (it.st) f.push(`狀態：${it.st}`);
