@@ -38,14 +38,14 @@ async function buildData(env) {
     }
   }
   // 客人名單：下過單的＋傳過訊息的
-  const names = (await env.SESSIONS.list({ prefix: "n:" })).keys;
-  for (const k of names.slice(0, 300)) {
-    const uid = await env.SESSIONS.get(k.name);
-    if (uid && !cust[uid]) cust[uid] = { uid, name: k.name.slice(2), orders: 0, spent: 0, last: "" };
-  }
-  const owner = await env.SESSIONS.get("owner");
-  const custList = [];
-  for (const c of Object.values(cust)) { if (c.uid === owner) continue; c.tier = (await env.SESSIONS.get("tier:" + c.uid)) || "none"; const tx = Number(await env.SESSIONS.get("tx:" + c.uid)) || 0; if (tx && tx < Date.now()) c.tier = "none"; c.until = c.tier !== "none" && tx ? fmtDay(tx) : ""; custList.push(c); }
+  // 全部同時讀（以前一筆一筆讀，客人一多後台就很慢）
+  const [nameKeys, owner, bank, linepay, news] = await Promise.all([env.SESSIONS.list({ prefix: "n:" }), env.SESSIONS.get("owner"), env.SESSIONS.get("bank"), env.SESSIONS.get("linepay"), env.SESSIONS.get("news")]);
+  const names = nameKeys.keys.slice(0, 300);
+  const uids = await Promise.all(names.map((k) => env.SESSIONS.get(k.name)));
+  names.forEach((k, i) => { const uid = uids[i]; if (uid && !cust[uid]) cust[uid] = { uid, name: k.name.slice(2), orders: 0, spent: 0, last: "" }; });
+  const cs = Object.values(cust).filter((c) => c.uid !== owner);
+  const tinfo = await Promise.all(cs.map((c) => Promise.all([env.SESSIONS.get("tier:" + c.uid), env.SESSIONS.get("tx:" + c.uid)])));
+  const custList = cs.map((c, i) => { c.tier = tinfo[i][0] || "none"; const tx = Number(tinfo[i][1]) || 0; if (tx && tx < Date.now()) c.tier = "none"; c.until = c.tier !== "none" && tx ? fmtDay(tx) : ""; return c; });
   custList.sort((a, b) => b.spent - a.spent || (b.last || "").localeCompare(a.last || ""));
   return {
     stats: st, daily, counts,
@@ -55,7 +55,7 @@ async function buildData(env) {
       total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(),
       lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan })), form: o.form, notes: o.notes || [] })),
     customers: custList,
-    settings: { bank: (await env.SESSIONS.get("bank")) || "", linepay: (await env.SESSIONS.get("linepay")) || "", news: JSON.parse((await env.SESSIONS.get("news")) || "[]") },
+    settings: { bank: bank || "", linepay: linepay || "", news: JSON.parse(news || "[]") },
   };
 }
 

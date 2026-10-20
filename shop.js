@@ -239,7 +239,7 @@ export async function newsText(env, items, link) {
   if (n.dlGroups.length) parts.push("⏰ 即將結單\n" + n.dlGroups.slice(0, 5).map((g) => `・${g.b}（${g.items.length} 款）結單日 ${g.dl.split("（")[0]}`).join("\n"));
   if (n.newGroups.length) parts.push("🆕 最新上架\n" + n.newGroups.slice(0, 6).map((g) => `・${g.ad.slice(5).replace("-", "/")}　${g.b}　${g.items.length} 款`).join("\n"));
   if (n.restockCount) parts.push(`🔁 再販商品 ${n.restockCount} 款`);
-  if (!parts.length) parts.push("目前沒有新的商品動態喔～");
+  if (!parts.length) parts.push("目前沒有新上線的商品喔～");
   return parts.join("\n\n") + `\n\n👉 看完整動態與商品：\n${link}&v=news`;
 }
 
@@ -257,6 +257,11 @@ export async function handleShop(request, env, ctx, deps) {
   if (p === "/shop/catalog") {
     const items = slim(await deps.loadCatalog(env), deps.isExpired);
     return new Response(JSON.stringify(items), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
+  }
+  if (p === "/shop/hot") {
+    const all = await deps.loadCatalog(env);
+    const hot = await hotPicks(env, all, deps.isExpired, 40);
+    return Response.json(hot.map(keyOf), { headers: { "cache-control": "public, max-age=600" } });
   }
   if (p === "/shop/news") {
     const n = await buildNews(env, slim(await deps.loadCatalog(env), deps.isExpired));
@@ -349,7 +354,7 @@ export async function handleShop(request, env, ctx, deps) {
 async function myOrders(env, uid, n = 5) {
   const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
   const out = [];
-  for (const id of ids) { const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null"); if (o) out.push(o); }
+  for (const r of await Promise.all(ids.map((id) => env.SESSIONS.get("o:" + id)))) { const o = JSON.parse(r || "null"); if (o) out.push(o); }
   return out;
 }
 // 客人在 LINE 查訂單
@@ -517,7 +522,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     const d = new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 10).replace("-", "/");
     list.unshift({ d, t: an[1].trim().slice(0, 300) });
     await env.SESSIONS.put("news", JSON.stringify(list.slice(0, 10)));
-    return `好👌 已新增公告，客人點「商品動態」就會看到：\n${d} ${an[1].trim()}`;
+    return `好👌 已新增公告，客人點「新品上線」就會看到：\n${d} ${an[1].trim()}`;
   }
   const dn = t.match(/^刪除公告\s*(\d+)$/);
   if (dn) {
@@ -569,7 +574,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
 // ---------- 網頁 ----------
 const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ZOARÉ 批發訂購</title>
+<title>ZOARÉ 批發商城</title>
 <style>
 :root{--bg:#eceef0;--card:#fff;--ink:#161616;--sub:#6b6f75;--line:#dcdfe3;--red:#9e1b1b;--silver:#c9ccd0}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -654,7 +659,7 @@ input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);border-radiu
 <div class="info" id="info"></div>
 <div class="grid" id="grid"></div>
 <button class="more" id="more" hidden>載入更多</button>
-<div class="bar"><button id="openOrders" class="ghost">我的訂單</button><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
+<div class="bar"><button id="openOrders" class="ghost">訂單查詢</button><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
 <script>
 const T=new URLSearchParams(location.search).get("t")||"";
@@ -687,9 +692,9 @@ async function init(){
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
   const CO=["會員方案","吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
-  $("#chips").innerHTML='<button class="chip news" id="newsBtn">🆕 商品動態</button>'+brands.map(b=>'<button class="chip'+(b==="全部"?" on":"")+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
+  $("#chips").innerHTML='<button class="chip news" id="newsBtn">✨ 新品上線</button><button class="chip news" data-b="熱賣推薦">🔥 熱賣推薦</button>'+brands.map(b=>'<button class="chip'+(b==="全部"?" on":"")+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
   $("#newsBtn").onclick=openNews;
-  $("#chips").onclick=e=>{const b=e.target.dataset.b;if(!b)return;brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
+  $("#chips").onclick=async e=>{const b=e.target.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   filter();bar();
   const Q0=new URLSearchParams(location.search).get("q");if(Q0){$("#q").value=Q0;filter()}
@@ -702,7 +707,9 @@ const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）�
 let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
 // 沒空格的關鍵字也能找：「吉伊卡哇相框」＝「吉伊卡哇」＋「相框」
 function hit(h,w){if(h.includes(w))return true;if(w.length<4)return false;for(let i=2;i<=w.length-2;i++){if(h.includes(w.slice(0,i))&&hit(h,w.slice(i)))return true}return false}
+let HOT=null;
 function filter(){
+  if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=HOT.map(k=>m.get(k)).filter(Boolean);shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
   VIEW=ALL.filter(x=>(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":""))),w))));
   shown=0;$("#grid").innerHTML="";page();
@@ -746,7 +753,7 @@ $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
 async function openNews(){
-  $("#panel").innerHTML='<h2>商品動態<button class="x" id="nx">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#nx").onclick=()=>$("#sheet").classList.remove("on");
+  $("#panel").innerHTML='<h2>新品上線<button class="x" id="nx">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#nx").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/news").then(r=>r.json());
     const th=ks=>'<div class="th">'+ks.map(k=>byK(k)).filter(x=>x&&x.img).map(x=>'<img loading="lazy" src="'+esc(x.img)+'">').join("")+'</div>';
     let h='';
@@ -754,7 +761,7 @@ async function openNews(){
     if(r.dl.length)h+='<div class="nsec"><h3>⏰ 即將結單</h3>'+r.dl.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'　'+g.n+' 款</span><small class="cd">'+esc(left(g.dl))+'</small></div><div style="font-size:12px;color:#6b6f75">結單日 '+esc(g.dl.split("（")[0])+'</div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
     if(r.fresh.length)h+='<div class="nsec"><h3>🆕 最新上架</h3>'+r.fresh.map(g=>'<div class="ng"><div class="t"><span>'+esc(g.b)+'</span><small>'+esc(g.ad.slice(5).replace("-","/"))+' 上架・'+g.n+' 款</small></div>'+th(g.ks)+'<button data-go="'+esc(g.b)+'">去看看</button></div>').join("")+'</div>';
     if(r.restockCount)h+='<div class="nsec"><h3>🔁 再販商品</h3><div class="ng"><div class="t"><span>再販預定 '+r.restockCount+' 款</span></div><button data-q="再販">去看看</button></div></div>';
-    $("#panel").innerHTML='<h2>商品動態<button class="x" id="nx">×</button></h2>'+(h||'<div class="empty">目前沒有新的動態喔</div>');
+    $("#panel").innerHTML='<h2>新品上線<button class="x" id="nx">×</button></h2>'+(h||'<div class="empty">目前沒有新的動態喔</div>');
     $("#nx").onclick=()=>$("#sheet").classList.remove("on");
     $("#panel").querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{brand=b.dataset.go;$("#q").value="";document.querySelectorAll(".chip[data-b]").forEach(c=>c.classList.toggle("on",c.dataset.b===brand));filter();$("#sheet").classList.remove("on");scrollTo(0,0)});
     $("#panel").querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{brand="全部";$("#q").value=b.dataset.q;document.querySelectorAll(".chip[data-b]").forEach(c=>c.classList.toggle("on",c.dataset.b==="全部"));filter();$("#sheet").classList.remove("on");scrollTo(0,0)});
@@ -762,8 +769,8 @@ async function openNews(){
 }
 const STC={"待付款":"s1","已回報匯款":"s2","待確認":"s1","已付款":"s2","已出貨":"s3","已取消":"s4"};
 async function openOrders(){
-  if(ME&&ME.guest){$("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">訪客看不到訂單喔<br>在 ZOARÉ 的 LINE 傳「訂購」就會收到你的專屬連結，可以查訂單</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
-  $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
+  if(ME&&ME.guest){$("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">訪客看不到訂單喔<br>在 ZOARÉ 的 LINE 傳「訂購」就會收到你的專屬連結，可以查訂單</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
+  $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
       '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+
@@ -772,9 +779,9 @@ async function openOrders(){
       '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li><span>'+esc(l.n)+' ×'+l.q+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
       '<div style="font-size:12.5px;margin-top:6px;color:#444">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+'</div></details></div>').join("")
       :'<div class="empty">還沒有訂單喔</div>';
-    $("#panel").innerHTML='<h2>我的訂單<button class="x" id="ox">×</button></h2>'+body+'<p style="font-size:12px;color:#6b6f75;margin-top:12px;text-align:center">有問題直接在 LINE 跟我們說喔</p>';
+    $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2>'+body+'<p style="font-size:12px;color:#6b6f75;margin-top:12px;text-align:center">有問題直接在 LINE 跟我們說喔</p>';
     $("#ox").onclick=()=>$("#sheet").classList.remove("on");
-  }catch(e){$("#panel").innerHTML='<h2>我的訂單<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">載入失敗，請稍後再試</div>'}
+  }catch(e){$("#panel").innerHTML='<h2>訂單查詢<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">載入失敗，請稍後再試</div>'}
 }
 $("#sheet").onclick=e=>{if(e.target.id==="sheet")$("#sheet").classList.remove("on")};
 let form={};try{form=JSON.parse(localStorage.getItem("zo_form")||"{}")}catch(e){}
@@ -957,7 +964,8 @@ const lineCost = (o, l) => (l.mem ? 0 : l.cost != null ? l.cost : l.price - (o.t
 async function allOrders(env, n = 200) {
   const ids = JSON.parse((await env.SESSIONS.get("orders")) || "[]").slice(0, n);
   const out = [];
-  for (const id of ids) { const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null"); if (o) out.push(o); }
+  const raw = await Promise.all(ids.map((id) => env.SESSIONS.get("o:" + id))); // 同時讀，不要一筆一筆等
+  for (const r of raw) { const o = JSON.parse(r || "null"); if (o) out.push(o); }
   return out;
 }
 async function saveOrder(env, o) { await env.SESSIONS.put("o:" + o.id, JSON.stringify(o), { expirationTtl: 180 * 86400 }); }
