@@ -489,9 +489,9 @@ async function rememberName(env, uid) {
   return name;
 }
 // 圖文選單：用 API 建立並設為預設（優先於 LINE 官方帳號後台設定的選單）
-const RICHMENU_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_v6.jpg";
-const RICHMENU_VER = "v6-20261021"; // 改選單時換這個，排程會自動重建選單
-const RICHMENU_OWNER_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_owner_v6.jpg";
+const RICHMENU_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_v7.jpg";
+const RICHMENU_VER = "v7-20261021"; // 改選單時換這個，排程會自動重建選單
+const RICHMENU_OWNER_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_owner_v7.jpg";
 async function createMenu(env, imgUrl, name, actions) {
   const W = 2500, H = 1686, cw = [0, 833, 1667, 2500], top = 938;
   const areas = actions.map((a, i) => ({ bounds: { x: cw[i % 3], y: i < 3 ? 0 : top, width: cw[i % 3 + 1] - cw[i % 3], height: i < 3 ? top : H - top }, action: a }));
