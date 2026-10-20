@@ -16,7 +16,7 @@ const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const CATALOG_VERSION = "20261020-0935";
+const CATALOG_VERSION = "20261020-1010";
 const CATALOG_SHA = "4cdb6f47644cd89d91d8c8bd6cb625742ac7fc22"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
@@ -203,8 +203,23 @@ function applyDl(it, rules, keys) {
   if (!v || passed(v)) v = rules["*"] || "";
   it.dlx = passed(v) ? "" : v;
 }
+// 匯率：KV（機器人 9:15 自動抓）和 GitHub 的 rates.json（每日維護寫入）哪個日期新就用哪個，避免其中一邊沒更新到
+let REPO_RATES = null, REPO_RATES_AT = 0;
+async function freshRates(env) {
+  let kv = await getRates(env);
+  if (CATALOG_SHA && Date.now() - REPO_RATES_AT > 10 * 60e3) {
+    try { const r = await fetch(`https://raw.githubusercontent.com/Gg86384577/zoare-images/${CATALOG_SHA}/rates.json`, { cf: { cacheTtl: 300 } }); if (r.ok) REPO_RATES = await r.json(); } catch (e) {}
+    REPO_RATES_AT = Date.now();
+  }
+  const rp = REPO_RATES;
+  if (rp && rp.JPY && (!kv || String(rp.date || "") > String(kv.date || ""))) {
+    kv = { JPY: rp.JPY, CNY: rp.CNY || (kv && kv.CNY) || 4.804, date: rp.date, at: rp.at || rp.date };
+    if (env.SESSIONS) { try { await env.SESSIONS.put("rates", JSON.stringify(kv)); } catch (e) {} }
+  }
+  return kv;
+}
 async function loadCatalog(env) {
-  const rates = await getRates(env), rules = await getDlRules(env);
+  const rates = await freshRates(env), rules = await getDlRules(env);
   const keys = Object.keys(rules).filter((k) => k !== "*").sort((a, b) => b.length - a.length);
   const stamp = (rates ? `${rates.JPY}|${rates.CNY}` : "") + "|" + JSON.stringify(rules);
   // 每小時重新篩一次，剛過結單時間的商品馬上下架
