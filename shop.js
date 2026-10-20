@@ -1210,9 +1210,9 @@ ${link}
 
 ━━ 查報價小技巧 ━━
 ・找特定款式：加細項，例如「吉伊卡哇 相框」「小八 S娃」
-・手上有照片或條碼：直接傳照片、JAN 條碼或商品編號
-・慢慢逛：點下方選單「商品目錄」照分類看
-・看新品、快結單的商品：點「商品動態」
+・手上有照片或條碼：直接傳圖片、JAN 條碼或商品編號（圖片限我們官方 LINE／社群發佈過的商品）
+・慢慢逛：點下方選單「批發商城」，或「熱賣推薦」看大家都在買的
+・看新品、快結單的商品：點「新品上線」
 ・查訂單：點「訂單查詢」`;
   const text2 = `━━ 起批數怎麼算？ ━━
 ・非會員：每款約 20 件起（照商品起批數的倍數，例如起批 2 件→20 件、3 件→21 件）
@@ -1228,7 +1228,7 @@ ${link}
 
 💡 幫您算：每月進貨 34 件以上，VIP 每件省的 NT$30 就把月費賺回來了，運費還全免！
 點下面卡片就能直接加入，付款完成自動開通👇`;
-  const qrs = [["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["商品目錄", "商品目錄"], ["加入 VIP", "會員方案"], ["商品動態", "商品動態"]];
+  const qrs = [["🔥 熱賣推薦", "熱賣推薦"], ["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["✨ 新品上線", "新品上線"], ["加入 VIP", "會員方案"]];
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
   return [{ type: "text", text }, { type: "text", text: text2 }, ...cards];
@@ -1247,4 +1247,39 @@ export async function memExpiry(env, deps) {
     await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
     if (owner) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `⏰ ${o.lineName} 的會員方案訂單 ${o.id} 超過 3 天沒付款，已恢復為${TIER_NAME[o.prevTier || "none"]}\n之後客人付款、你傳「${o.id} 已付款」就會重新開通` }] });
   }
+}
+
+// ---------- 圖文選單：新品上線／熱賣推薦 的商品卡片 ----------
+const okItem = (it, isExpired) => it && it.img && !isExpired(it) && !/缺貨|停售|截止/.test(it.st || "") && cleanName(it);
+const famKey = (it) => { const t = String(it.n || "").split(/[/／]/)[0].trim().split(/\s+/); return (it.b || "") + "|" + t.slice(0, Math.max(1, Math.min(2, t.length - 1))).join(" "); };
+const cleanName = (it) => !/[\u30a0-\u30ff\u3040-\u309f]{2}/.test(String(it.n || ""));
+function mixBrands(list, n) { // 輪流從不同品牌挑，避免全部同一家
+  const g = new Map(); for (const it of list) { const b = it.b || ""; if (!g.has(b)) g.set(b, []); g.get(b).push(it); }
+  const lists = [...g.values()].map((l) => diverse(l, n)), out = [];
+  for (let i = 0; out.length < n && lists.some((l) => l.length > i); i++) for (const l of lists) { if (l[i]) out.push(l[i]); if (out.length >= n) break; }
+  return out;
+}
+function diverse(list, n) {
+  const seen = new Set(), out = [];
+  for (const it of list) { const k = famKey(it); if (seen.has(k)) continue; seen.add(k); out.push(it); if (out.length >= n) break; }
+  return out;
+}
+export function newPicks(items, isExpired, n = 10) {
+  return mixBrands(items.filter((it) => okItem(it, isExpired)).sort((a, b) => String(b.ad || "").localeCompare(String(a.ad || ""))).slice(0, 1500), n);
+}
+export async function hotPicks(env, items, isExpired, n = 10) {
+  const by = new Map(items.map((it) => [keyOf(it), it]));
+  const cnt = new Map();
+  try {
+    for (const o of await allOrders(env, 300)) {
+      if (o.status === "已取消") continue;
+      for (const l of o.lines || []) if (!l.mem && by.has(l.k)) cnt.set(l.k, (cnt.get(l.k) || 0) + (l.q || 1));
+    }
+  } catch (e) {}
+  const ranked = [...cnt.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => by.get(k)).filter((it) => okItem(it, isExpired));
+  const HOT = /吉伊卡哇|ちいかわ|三麗鷗|サンリオ|Hello Kitty|酷洛米|大耳狗|寶可夢|史努比|蠟筆小新|拉拉熊|角落生物/i;
+  const fill = items.filter((it) => okItem(it, isExpired) && HOT.test((it.n || "") + (it.b || "")) && /現貨|◎|○|有貨/.test(it.st || ""))
+    .sort((a, b) => { const P = /絨毛|娃娃|吊飾|鑰匙圈|公仔|收納包|斜背包/; return (P.test(b.n) - P.test(a.n)) || String(b.ad || "").localeCompare(String(a.ad || "")); });
+  const top = diverse(ranked, n);
+  return diverse([...top, ...mixBrands(fill.slice(0, 600), n)], n);
 }

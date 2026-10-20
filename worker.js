@@ -10,13 +10,13 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const CATALOG_VERSION = "20261020-1700";
+const CATALOG_VERSION = "20261021-0215";
 const CATALOG_SHA = "1217188fb976368b11bee3273c3e6433e56232c3"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
@@ -53,6 +53,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 【相同／相似商品】
 - 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號／舊商品編號（例如 272655-S）相同；舊商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
 - 客人傳照片：最多列 3 款；打字查詢：最多列 5 款。只有一款完全符合時直接報那一款。
+- 客人傳照片但目錄裡找不到時：說明「圖片詢價只能查 ZOARÉ 在官方 LINE、社群發佈過的商品，這款目前沒有在我們的商品裡」，可以推薦 1～3 款相似商品，並請客人提供商品名稱或 JAN；不要報價。
 - 狀態是「缺貨/停售」的不要列成選項，可以在最後備註「○○ 目前缺貨」。
 - 狀態是「已截止（不可下單）」的不要報價、不要列成選項，告訴客人「這款已經截止收單囉，下次開團會再通知您！」，有其他同系列還沒截止的可以推薦。
 - 沒把握是哪一款時，請客人確認，不要硬報價。
@@ -488,8 +489,9 @@ async function rememberName(env, uid) {
   return name;
 }
 // 圖文選單：用 API 建立並設為預設（優先於 LINE 官方帳號後台設定的選單）
-const RICHMENU_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_v2.jpg";
-const RICHMENU_OWNER_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_owner.jpg";
+const RICHMENU_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_v3.jpg";
+const RICHMENU_VER = "v3-20261021"; // 改選單時換這個，排程會自動重建選單
+const RICHMENU_OWNER_IMG = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/richmenu_owner_v3.jpg";
 async function createMenu(env, imgUrl, name, actions) {
   const W = 2500, H = 1686, cw = [0, 833, 1667, 2500], top = 938;
   const areas = actions.map((a, i) => ({ bounds: { x: cw[i % 3], y: i < 3 ? 0 : top, width: cw[i % 3 + 1] - cw[i % 3], height: i < 3 ? top : H - top }, action: a }));
@@ -505,10 +507,10 @@ async function createMenu(env, imgUrl, name, actions) {
 }
 async function setupRichMenu(env) {
   const msg = (t) => ({ type: "message", label: t, text: t });
-  const base = ["韓國批發", "日本批發", "中國批發", "商品目錄", "商品動態"].map(msg);
+  const base = ["批發商城", "新品上線", "熱賣推薦", "圖片詢價", "聯絡客服"].map(msg);
   const auth = { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` };
   try {
-    const id = await createMenu(env, RICHMENU_IMG, "ZOARE v2", [...base, msg("訂單查詢")]);
+    const id = await createMenu(env, RICHMENU_IMG, "ZOARE v3", [...base, msg("訂單查詢")]);
     const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${id}`, { method: "POST", headers: auth });
     if (!df.ok) return "設定預設選單失敗：" + (await df.text()).slice(0, 200);
     const keep = [id];
@@ -525,7 +527,8 @@ async function setupRichMenu(env) {
       for (const m of list.richmenus || []) if (!keep.includes(m.richMenuId) && /^ZOARE/.test(m.name))
         await fetch(`https://api.line.me/v2/bot/richmenu/${m.richMenuId}`, { method: "DELETE", headers: auth });
     } catch (e) {}
-    return "好👌 圖文選單已經更新囉（客人看到：韓國／日本／中國批發、商品目錄、商品動態、訂單查詢）" + ownerNote + "\n關掉聊天室再打開就會看到";
+    if (env.SESSIONS) await env.SESSIONS.put("menuver", RICHMENU_VER);
+    return "好👌 圖文選單已經更新囉（客人看到：批發商城、新品上線、熱賣推薦、圖片詢價、聯絡客服、訂單查詢）" + ownerNote + "\n關掉聊天室再打開就會看到";
   } catch (e) { return String(e.message || e); }
 }
 async function findUid(env, who) {
@@ -734,6 +737,39 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && /^ZO\w{10}$/i.test(text)) {
     const d = await customerOrderDetail(env, uid, text.toUpperCase());
     if (d) return reply(env, ev.replyToken, [{ type: "text", text: d }]);
+  }
+  // ---------- 新版圖文選單 ----------
+  const qrMsg = (list) => ({ items: list.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) });
+  const IPQR = [["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["寶可夢", "寶可夢"], ["史努比", "史努比"], ["蠟筆小新", "蠟筆小新"], ["角落生物", "角落生物"]];
+  if (uid && /^(批發商城|商城)$/.test(text)) {
+    await rememberName(env, uid);
+    return reply(env, ev.replyToken, [{ type: "text", text: `這是您的專屬批發商城🛒\n${await shopLink(env, uid)}\n\n可以搜尋角色、看價格和起批數、加入購物車直接下單，價格會自動套用您的會員等級～\n（連結是您專用的，請不要轉傳）\n\n不想打字的話，點下面按鈕直接看商品👇`,
+      quickReply: qrMsg([["🔥 熱賣推薦", "熱賣推薦"], ["✨ 新品上線", "新品上線"], ...IPQR, ["📷 圖片詢價", "圖片詢價"]]) }]);
+  }
+  if (uid && /^(新品上線|新品|商品動態|最新動態|動態)$/.test(text)) {
+    const items = await loadCatalog(env);
+    const cards = await productCards(env, uid, newPicks(items, isExpired, 10), "新品上線");
+    const out = [{ type: "text", text: await newsReply(env, { loadCatalog, isExpired }, await shopLink(env, uid)) }];
+    if (cards) { cards.quickReply = qrMsg([["🔥 熱賣推薦", "熱賣推薦"], ["🛒 批發商城", "批發商城"], ...IPQR.slice(0, 4), ["💬 聯絡客服", "聯絡客服"]]); out.unshift({ type: "text", text: "✨ 最新上架的商品幫您挑了幾款👇 喜歡的點「我要訂購」就能下單～" }); out.splice(1, 0, cards); }
+    return reply(env, ev.replyToken, out.slice(0, 5));
+  }
+  if (uid && /^(熱賣推薦|熱賣|熱銷|推薦)$/.test(text)) {
+    const items = await loadCatalog(env);
+    const cards = await productCards(env, uid, await hotPicks(env, items, isExpired, 10), "熱賣推薦");
+    const msgs = [{ type: "text", text: "🔥 最近大家都在買的熱門商品👇\n卡片上有價格、起批數，點「我要訂購」就能直接下單～\n想看特定角色，點下面按鈕或直接打角色名字也可以喔！" }];
+    if (cards) { cards.quickReply = qrMsg([...IPQR, ["✨ 新品上線", "新品上線"], ["🛒 批發商城", "批發商城"], ["💬 聯絡客服", "聯絡客服"]]); msgs.push(cards); }
+    else msgs[0].quickReply = qrMsg([...IPQR, ["🛒 批發商城", "批發商城"]]);
+    return reply(env, ev.replyToken, msgs);
+  }
+  if (uid && /^(圖片詢價|拍照查價|拍照詢價|圖片查價)$/.test(text)) {
+    return reply(env, ev.replyToken, [{ type: "text", text: `📷 圖片詢價\n直接傳商品圖片給我，系統會自動幫您找出商品和價格（一次最多 6 張）\n\n⚠️ 只能查詢 ZOARÉ 在官方 LINE、社群上發佈過的商品\n其他地方看到的商品圖片，可能會查不到喔\n\n也可以傳商品名稱、JAN 條碼或商品編號查詢～`,
+      quickReply: { items: [{ type: "action", action: { type: "cameraRoll", label: "從相簿選圖片" } }, { type: "action", action: { type: "camera", label: "拍照" } },
+        { type: "action", action: { type: "message", label: "🔥 熱賣推薦", text: "熱賣推薦" } }, { type: "action", action: { type: "message", label: "🛒 批發商城", text: "批發商城" } }] } }]);
+  }
+  if (uid && /^(聯絡客服|客服)$/.test(text)) {
+    await notifyOwner(env, uid, text);
+    await setHandoff(env, uid);
+    return reply(env, ev.replyToken, [{ type: "text", text: "您好～已幫您通知真人客服，請稍等一下，我們會盡快回覆您🙏\n\n想問的問題（商品、數量、運費、付款、到貨時間…）可以先直接打在這裡，客服看到會一起回覆喔！" }]);
   }
   // 商品目錄：選系列 → 選角色 → 傳商品圖片卡
   if (uid && text) {
@@ -1288,6 +1324,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 2) { try { await runNewArrivals(env); } catch (e) { console.log("newArrivals", e); } }
       if (Math.floor(hm / 5) % 12 === 3) { try { await runMemberReminders(env); } catch (e) { console.log("memberRemind", e); } }
       try { await runBootTasks(env); } catch (e) { console.log("boot", e); }
+      try { if ((await env.SESSIONS.get("menuver")) !== RICHMENU_VER && env.LINE_CHANNEL_ACCESS_TOKEN) { const r2 = await setupRichMenu(env); console.log("richmenu", r2); if (!/^好/.test(r2)) await env.SESSIONS.put("menuver", RICHMENU_VER + "-fail"); } } catch (e) { console.log("richmenu", e); }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
     })());
   },
