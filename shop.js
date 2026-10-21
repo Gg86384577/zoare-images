@@ -185,7 +185,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it) });
+      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it), ...(it.alt ? { alt: it.alt } : {}), ...(it.hid ? { hid: 1 } : {}) });
   }
   out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
@@ -634,6 +634,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .qty{display:flex;align-items:center;justify-content:space-between;margin-top:6px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .qty button{width:38px;height:34px;border:0;background:#f2f3f4;font-size:18px;color:var(--ink)}
 .qty input{width:100%;text-align:center;border:0;font-size:15px;height:34px;background:#fff;color:var(--ink)}
+.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
 .add{margin-top:6px;border:0;border-radius:10px;background:var(--ink);color:#fff;height:36px;font-size:14px}
 .more{display:block;margin:6px auto 20px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:10px 24px;font-size:14px}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#161616;color:#fff;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
@@ -706,6 +707,7 @@ async function init(){
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
   }
+  {const KM=new Map(ALL.map(x=>[x.k,x]));ALL.forEach(x=>{if(x.alt&&!x.hid){const p=KM.get(x.alt);if(p)x._xt=p.n+" "+p.jan+" 現貨"}})}
   if(ME.guest)$("#who").innerHTML='<b>歡迎逛逛 ZOARÉ</b><span class="tier">訪客</span><br>顯示一般價（VIP 會員每件再便宜 NT$30）・選好後用 LINE 一鍵下單';
   else $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
@@ -730,14 +732,19 @@ let HOT=null;
 function filter(){
   if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=HOT.map(k=>m.get(k)).filter(Boolean);shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
-  VIEW=ALL.filter(x=>(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":""))),w))));
+  VIEW=ALL.filter(x=>!x.hid&&(brand==="全部"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w))));
   shown=0;$("#grid").innerHTML="";page();
   const qv=$("#q").value.trim();
   $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
   const cq=document.getElementById("clrq");if(cq)cq.onclick=e=>{e.preventDefault();$("#q").value="";filter()};
 }
 function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m){const td=new Date(Date.now()+288e5).toISOString().slice(0,10),tw=new Date(Date.now()+1152e5).toISOString().slice(0,10),ds=m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0"),tm=m[4]||"23:59";if(ds===td)return"⏰ 今天 "+tm+" 結單";if(ds===tw)return"⏰ 明天 "+tm+" 結單";return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"")}return"結單日 "+(d?d.split("（")[0]:"長期接單")}
+function opt(y,lab,sub){return '<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+lab+'</b><small>'+esc(sub)+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
 function card(x){
+  const A=x.alt&&!x.hid?byK(x.alt):null;
+  if(A){const tg=[dlTxt(x.dl)].filter(Boolean).join("｜");
+    return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tg?'<div class="tag">'+esc(tg)+'</div>':'')+
+    '<div class="opts"><div class="oh">請選擇要等還是要現貨 👇</div>'+opt(x,"⏳ 要等・較便宜","向日本訂貨・"+step(x)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起")+'</div></div></div>'}
   const p=price(x),q=cart[x.k]||0;
   const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.sh?"📦 "+x.sh:"",x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
@@ -755,7 +762,7 @@ window.addEventListener("scroll",()=>{if(!$("#more").hidden&&innerHeight+scrollY
 const byK=k=>ALL.find(x=>x.k===k);
 function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();
   if(TIER()!==t0){document.querySelectorAll('#grid .card[data-k]').forEach(el=>{const x=byK(el.dataset.k);if(x)el.outerHTML=card(x)});return}
-  document.querySelectorAll('.card[data-k="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(k);el.querySelector(".qty,.add").outerHTML=qtyBox(x,q)})}
+  document.querySelectorAll('#grid [data-k="'+CSS.escape(k)+'"]').forEach(el=>{if(el.classList.contains("card")&&el.querySelector(".op"))return;const b=el.querySelector(".qty,.add");if(b)b.outerHTML=qtyBox(byK(k),q)})}
 document.addEventListener("click",e=>{
   const a=e.target.dataset.a;if(!a)return;const c=e.target.closest("[data-k]");if(!c)return;const k=c.dataset.k,x=byK(k),q=cart[k]||0,s=x.box||1;
   if(a==="add")setQ(k,step(x));else if(a==="+")setQ(k,q+s);else if(a==="-")setQ(k,q-s);
@@ -891,9 +898,11 @@ function bubble(it, tier, link) {
   ];
   const dlt = dlLabel(it);
   body.push({ type: "text", text: "⏰ " + dlt, size: "xs", weight: "bold", color: /今天|明天/.test(dlt) ? "#D0021B" : "#161616", margin: "sm", wrap: true });
-  const shp = shipLabel(it);
+  const shp = it._alt && !it.hid ? "這個價格需等待向日本訂貨" : shipLabel(it);
   if (shp) body.push({ type: "text", text: "📦 " + shp, size: "xxs", color: "#555555" });
   if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
+  const A = it._alt && !it.hid ? it._alt : null;
+  if (A) body.push({ type: "text", text: `⚡ 也有日本現貨：${tier === "vip" ? "VIP NT$" + A.v : "NT$" + A.g}（不用等，馬上出貨）`, size: "xs", weight: "bold", color: "#1D7A46", wrap: true, margin: "sm" });
   return { type: "bubble", size: "kilo",
     hero: { type: "image", url: it.th || it.img, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#F6F6F7" },
     body: { type: "box", layout: "vertical", spacing: "xs", contents: body },
@@ -1188,7 +1197,9 @@ export const CAT_NAMES = () => CATS.concat(WEB_CATS).map((c) => c.k);
 export async function productCards(env, uid, items, altText) {
   const tier = await getTier(env, uid);
   const link = await shopLink(env, uid);
-  const bubbles = items.filter((it) => it && it.img).slice(0, 12).map((it) => bubble(it, tier, link));
+  const seen = new Set();
+  const list = items.map((it) => (it && it.hid && it._alt ? it._alt : it)).filter((it) => it && it.img && !it.hid && !seen.has(it) && seen.add(it));
+  const bubbles = list.slice(0, 12).map((it) => bubble(it, tier, link));
   if (!bubbles.length) return null;
   return { type: "flex", altText: (altText || "商品報價").slice(0, 300), contents: { type: "carousel", contents: bubbles } };
 }
@@ -1277,7 +1288,7 @@ export async function memExpiry(env, deps) {
 }
 
 // ---------- 圖文選單：新品上線／熱賣推薦 的商品卡片 ----------
-const okItem = (it, isExpired) => it && it.img && !isExpired(it) && !/缺貨|停售|截止/.test(it.st || "") && cleanName(it);
+const okItem = (it, isExpired) => it && it.img && !it.hid && !isExpired(it) && !/缺貨|停售|截止/.test(it.st || "") && cleanName(it);
 const famKey = (it) => { const t = String(it.n || "").split(/[/／]/)[0].trim().split(/\s+/); return (it.b || "") + "|" + t.slice(0, Math.max(1, Math.min(2, t.length - 1))).join(" "); };
 const cleanName = (it) => !/[\u30a0-\u30ff\u3040-\u309f]{2}/.test(String(it.n || ""));
 function mixBrands(list, n) { // 輪流從不同品牌挑，避免全部同一家
@@ -1290,6 +1301,11 @@ function diverse(list, n) {
   const seen = new Set(), out = [];
   for (const it of list) { const k = famKey(it); if (seen.has(k)) continue; seen.add(k); out.push(it); if (out.length >= n) break; }
   return out;
+}
+// 同一款商品有「預購」和「日本現貨」兩種來源：把兩邊互相連起來（LINE 卡片一起顯示兩種價格）
+export function linkAlts(items) {
+  const m = new Map(items.map((it) => [keyOf(it), it]));
+  for (const it of items) if (it.alt) { const p = m.get(it.alt); if (p) Object.defineProperty(it, "_alt", { value: p, enumerable: false, configurable: true, writable: true }); }
 }
 export function newPicks(items, isExpired, n = 10) {
   return mixBrands(items.filter((it) => okItem(it, isExpired)).sort((a, b) => String(b.ad || "").localeCompare(String(a.ad || ""))).slice(0, 1500), n);

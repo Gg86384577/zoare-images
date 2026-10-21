@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -244,6 +244,7 @@ async function loadCatalog(env) {
   if (!res.ok) throw new Error("catalog " + res.status);
   const items = await res.json();
   for (const it of items) { it._t = it.t || norm([it.n, it.ja, it.b, it.s, it.code, it.jan].join(" ")); if (rates) priceItem(it, rates); applyDl(it, rules, keys); }
+  try { linkAlts(items); } catch (e) {}
   RAW_CATALOG = items; CATALOG = items.filter((it) => !isExpired(it)); PRICED_WITH = stamp;
   LIVE_DAY = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13);
   return CATALOG;
