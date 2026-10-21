@@ -51,7 +51,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 客人常常誤點圖文選單（例如點了「韓國批發」卻傳日本商品）。一律以客人「最後一次」點的選單為準，而且以客人實際傳的商品為主：只要候選商品裡找得到相同或相似的商品，就直接報價、列出商品，不要因為選單是韓國／中國批發就轉真人；選單和商品不一致時，可以順口說「這款是日本商品喔」。
 
 【相同／相似商品】
-- 從候選商品挑出相同或最相似的商品，編號列出讓客人選。比對順序：JAN／原廠編號／舊商品編號（例如 272655-S）相同；舊商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同 IP／角色＋同商品種類（例如同角色不同尺寸）→ 同 IP 不同種類或同種類不同角色。
+- 從候選商品挑出相同或最相似的商品，編號列出讓客人選。推薦卡片一律以角色為主：客人問的或照片上的是哪個角色，就只列那個角色的商品，不要混其他角色。比對順序：JAN／原廠編號／舊商品編號（例如 272655-S）相同；舊商品編號對到多款時，全部列出讓客人選 → 名稱相同 → 同角色＋同商品特徵（種類、造型、服裝配件、顏色、尺寸，例如同一款不同尺寸）→ 同角色＋同種類的類似款（要說明是類似款）。不同角色的商品不要推薦。
 - 客人傳照片：最多列 3 款；打字查詢：最多列 5 款。只有一款完全符合時直接報那一款。
 - 客人傳照片但目錄裡找不到時：說明「圖片詢價只能查 ZOARÉ 在官方 LINE、社群發佈過的商品，這款目前沒有在我們的商品裡」，可以推薦 1～3 款相似商品，並請客人提供商品名稱或 JAN；不要報價。
 - 狀態是「缺貨/停售」的不要列成選項，可以在最後備註「○○ 目前缺貨」。
@@ -280,12 +280,16 @@ function search(items, query, limit = 8) {
     for (let i = 0; i + 1 < part.length; i++) grams.push(part.slice(i, i + 2));
   }
   const types = TYPE_NORM.filter((g) => g.some((w) => q.includes(w)));
+  // 角色優先：問題裡有角色名，就只給這個角色的商品（不同角色不列）
+  const TW = new Set(TYPE_NORM.flat());
+  const charGroups = groups.filter((g) => !g.some((w) => TW.has(w)));
   const scored = [];
   for (const it of items) {
     let sc = 0, groupHits = 0;
     if (types.length) for (const g of TYPE_NORM) if (g.some((w) => it._t.includes(w))) sc += types.includes(g) ? 8 : -6;
     for (const g of groups) if (g.some((w) => it._t.includes(w))) { sc += 10; groupHits++; }
     if (groups.length && !groupHits) continue;
+    if (charGroups.length && !charGroups.some((g) => g.some((w) => it._t.includes(w)))) continue;
     for (const gr of grams) if (it._t.includes(gr)) sc += gr.length === 1 ? 0.5 : 2;
     if (sc > 0) scored.push([sc - ((it.st && it.st.includes("缺貨")) || isExpired(it) ? 3 : 0) - (it._t.length / 400), it]); // 同分時名稱越精簡（越接近基本款）越前面
   }
@@ -410,7 +414,7 @@ function parseJson(text) {
 // 照片 → 搜尋關鍵字
 async function describePhoto(env, img) {
   const ask = (model) => claude(env,
-    "你是商品辨識助手。看照片判斷商品，只輸出一個 JSON（不要加 ``` 或其他文字）：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）\",\"ja_text\":\"照片上印的日文商品名稱和系列名，照抄（例：サンリオキャラクターズ お出かけもこもこスタイル ミニトート）\",\"jan\":\"照片上看得到的一個 JAN 條碼數字或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT、SAOM-MT）和 13 碼 JAN 數字，最多 12 個\"],\"features\":\"外觀特徵的中文關鍵字，例如：標準款 坐姿 和服 蓬鬆 迷你 吊飾 粉紅（沒有就空字串）\",\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品：請把標題的商品名、系列名，以及每一款旁邊的「品番」、條碼下方的數字都抄下來；看不清楚的不要猜。",
+    "你是商品辨識助手。看照片判斷商品，只輸出一個 JSON（不要加 ``` 或其他文字）：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）\",\"ja_text\":\"照片上印的日文商品名稱和系列名，照抄（例：サンリオキャラクターズ お出かけもこもこスタイル ミニトート）\",\"jan\":\"照片上看得到的一個 JAN 條碼數字或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT、SAOM-MT）和 13 碼 JAN 數字，最多 12 個\"],\"character\":\"照片上商品的角色中文名（例：美樂蒂），多個用空格分開\",\"features\":\"外觀特徵的中文關鍵字，例如：標準款 坐姿 和服 蓬鬆 迷你 吊飾 粉紅（沒有就空字串）\",\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品：請把標題的商品名、系列名，以及每一款旁邊的「品番」、條碼下方的數字都抄下來；看不清楚的不要猜。",
     [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: "這是什麼商品？" }] }],
     900, model);
   let out;
@@ -420,7 +424,7 @@ async function describePhoto(env, img) {
   // JSON 壞掉或被截斷時，也從原文把品番、JAN 撈出來
   const extra = (out.match(/\b[A-Z][A-Z0-9]{1,5}-[A-Z0-9]{1,5}(?:-[A-Z0-9]{1,4})?\b|\b49\d{11}\b/g) || []);
   d.codes = [...new Set([...(Array.isArray(d.codes) ? d.codes : []), ...extra])].slice(0, 16);
-  d.query = [d.ja_text, d.query, d.features].filter(Boolean).join(" ");
+  d.query = [d.character, d.ja_text, d.query, d.features].filter(Boolean).join(" ");
   if (env.SESSIONS) await env.SESSIONS.put("lastphoto", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + "\n" + JSON.stringify(d).slice(0, 900), { expirationTtl: 7 * 86400 }).catch(() => {});
   return d;
 }
@@ -905,7 +909,7 @@ async function handleEvent(env, ev) {
     // 照片沒對到品番：把候選商品的圖片一起給模型比對，找出長得一樣的那款
     const visual = img && !hits.length ? cands.slice(0, 30).filter((it) => it.th || it.img) : [];
     userContent = img
-      ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt + (visual.length ? `\n\n下面是候選商品的圖片（編號對應上面的候選清單）。請跟客人的照片比對外型、顏色、角色、種類；長得一樣或幾乎一樣的就列出報價並 #SHOW 那些編號（同一款不同尺寸也可以一起列）；都不像才說目錄裡沒有。` : "") },
+      ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt + (visual.length ? `\n\n下面是候選商品的圖片（編號對應上面的候選清單）。比對方式：①先看角色，只考慮跟照片同一個角色的商品，其他角色一律不列；②再比對這個角色商品的特徵：商品種類（娃娃／吊飾／包包…）、造型姿勢、服裝配件、顏色、材質、尺寸標示，找出跟照片一模一樣的那款，#SHOW 那些編號（同一款不同尺寸可以一起列）；③同角色但造型不一樣的不要當成同一款。都沒有一模一樣的，就說目前沒有這款，最多再列 2～3 款「同角色、同種類」的類似款並在文字裡寫清楚是類似款。` : "") },
         ...visual.flatMap((it) => [{ type: "text", text: `候選 ${cands.indexOf(it) + 1}` }, { type: "image", source: { type: "url", url: it.th || it.img } }])]
       : prompt;
 
