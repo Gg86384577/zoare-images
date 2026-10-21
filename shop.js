@@ -634,7 +634,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .qty{display:flex;align-items:center;justify-content:space-between;margin-top:6px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .qty button{width:38px;height:34px;border:0;background:#f2f3f4;font-size:18px;color:var(--ink)}
 .qty input{width:100%;text-align:center;border:0;font-size:15px;height:34px;background:#fff;color:var(--ink)}
-.dsep{grid-column:1/-1;font-weight:800;font-size:14px;padding:6px 2px 0;color:var(--ink)}.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
+.dsep{grid-column:1/-1;font-weight:800;font-size:14px;padding:6px 2px 0;color:var(--ink)}.vsub{font-size:12px;color:#6b6f75;margin:-2px 0 4px}.vg{background:#fff;border-radius:12px;padding:10px;margin-top:8px}.vh{display:flex;gap:10px;align-items:center}.vh img{width:56px;height:56px;object-fit:contain;background:#f6f6f7;border-radius:8px}.vrow .t small{color:#6b6f75}.add.sel{background:#9e1b1b}.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
 .add{margin-top:6px;border:0;border-radius:10px;background:var(--ink);color:#fff;height:36px;font-size:14px}
 .more{display:block;margin:6px auto 20px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:10px 24px;font-size:14px}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#161616;color:#fff;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
@@ -717,10 +717,12 @@ async function init(){
   $("#newsBtn").onclick=openNews;
   $("#chips").onclick=async e=>{const b=e.target.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
+  buildFam();
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
    Object.keys(byD).sort().reverse().forEach(d=>{const g={},ord=[];byD[d].forEach(x=>{if(!g[x.b]){g[x.b]=[];ord.push(x.b)}g[x.b].push(x)});let more=true;for(let i=0;more;i++){more=false;ord.forEach(b=>{if(g[b][i]){NEWV.push(g[b][i]);more=true}})}})}
+  NEWV=grp(NEWV);
   filter();bar();
-  const Q0=new URLSearchParams(location.search).get("q");if(Q0){$("#q").value=Q0;filter()}
+  const Q0=new URLSearchParams(location.search).get("q");if(Q0){$("#q").value=Q0;filter();if(VIEW.length===1&&VIEW[0]._f)openVar(VIEW[0]._f)}
   // 訪客的購物車透過 LINE 帶過來（cart=代碼）
   const CID=new URLSearchParams(location.search).get("cart");
   if(CID&&T){try{const r=await fetch("/shop/guestcart?id="+encodeURIComponent(CID)).then(r=>r.json());if(r.ok&&r.cart){for(const k in r.cart)if(ALL.find(x=>x.k===k))cart[k]=r.cart[k];save();bar();renderCart();$("#sheet").classList.add("on")}}catch(e){}}
@@ -732,18 +734,41 @@ let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
 function hit(h,w){if(h.includes(w))return true;if(w.length<4)return false;for(let i=2;i<=w.length-2;i++){if(h.includes(w.slice(0,i))&&hit(h,w.slice(i)))return true}return false}
 let HOT=null;
 function filter(){
-  if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=HOT.map(k=>m.get(k)).filter(Boolean);shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
+  if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=grp(HOT.map(k=>m.get(k)).filter(Boolean));shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
   if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
-  VIEW=ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w))));
+  VIEW=grp(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w)))));
   shown=0;$("#grid").innerHTML="";page();
   const qv=$("#q").value.trim();
   $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"&&brand!=="新品上架"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
   const cq=document.getElementById("clrq");if(cq)cq.onclick=e=>{e.preventDefault();$("#q").value="";filter()};
 }
 function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m){const td=new Date(Date.now()+288e5).toISOString().slice(0,10),tw=new Date(Date.now()+1152e5).toISOString().slice(0,10),ds=m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0"),tm=m[4]||"23:59";if(ds===td)return"⏰ 今天 "+tm+" 結單";if(ds===tw)return"⏰ 明天 "+tm+" 結單";return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"")}return"結單日 "+(d?d.split("（")[0]:"長期接單")}
+const VCH=["Hello Kitty","凱蒂貓","美樂蒂","酷洛米","大耳狗喜拿","大耳狗","布丁狗","帕恰狗","人魚漢頓","山姆企鵝","大眼蛙","酷企鵝","雙子星","優莎娜","琵亞諾","巧克力貓","小麥粉","栗子兔","吉伊卡哇","吉伊","小八","烏薩奇","兔兔","小桃","飛鼠","栗子饅頭","海獺","史努比","糊塗塌客","皮卡丘","蛋黃哥"];
+const VSZ=new Set(["SS","S","M","L","LL","XL","3L","A","B","C","D","E","F","G","H","RD","PK","BL","BK","YE","GR","WH","BR","PU","GY","BE","NV","OR","LB","LP","DB","紅","粉","粉紅","藍","水藍","黑","白","黃","綠","紫","棕","灰","米","橘","金","銀","淺藍","深藍","紅色","粉色","藍色","黑色","白色","黃色","綠色","紫色","棕色","灰色"]);
+let FAM={};
+function famOf(x){const n=x.n,i=Math.max(n.lastIndexOf("/"),n.lastIndexOf("／"));if(i>0)return[n.slice(0,i).trim(),n.slice(i+1).trim()];
+  let base=n;const vs=[];const m=base.match(/[（(]([^（）()]{1,20})[)）]\\s*$/);if(m){vs.push(m[1]);base=base.slice(0,m.index)}
+  const s=(x.s||"").trim();if(s&&base.includes(s)&&base.trim()!==s){base=base.split(s).join(" ");vs.push(s)}
+  for(const c of VCH)if(base.includes(c)){base=base.split(c).join(" ");vs.push(c)}
+  const keep=[];base.split(" ").forEach(t=>{if(!t)return;if(VSZ.has(t.toUpperCase())||/^[0-9.]+(cm|mm|ml)$/i.test(t))vs.push(t);else keep.push(t)});
+  return[keep.join(" "),vs.join(" ")]}
+function buildFam(){FAM={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const[b,v]=famOf(x);x._v=v||x.n;if(b.length>=2){x._f=x.b+"|"+b;x._fb=b;(FAM[x._f]=FAM[x._f]||[]).push(x)}});
+  for(const k in FAM)if(FAM[k].length<2){FAM[k].forEach(x=>{delete x._f});delete FAM[k]}}
+function grp(list){const seen=new Set(),out=[];for(const x of list){if(x._f){if(seen.has(x._f))continue;seen.add(x._f)}out.push(x)}return out}
+function gsel(k){let n=0;FAM[k].forEach(y=>{n+=cart[y.k]||0;if(y.alt)n+=cart[y.alt]||0});return n}
+function gcard(x){const L=FAM[x._f],ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps),sel=gsel(x._f),hasA=L.some(y=>y.alt);
+  return '<div class="card" data-g="'+esc(x._f)+'" data-r="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x._fb)+'</div><div class="tag">共 '+L.length+' 種規格／款式'+(hasA?'・部分有現貨':'')+'</div><div class="pr"><b>'+fmt(mn)+(mx>mn?'～'+fmt(mx):'')+'</b></div><button class="add'+(sel?' sel':'')+'">'+(sel?'已選 '+sel+' 件・修改':'選擇規格')+'</button></div></div>'}
+function vrow(y){const A=y.alt?byK(y.alt):null,im=y.img?'<img src="'+esc(y.img)+'">':'';
+  if(A)return '<div class="vg"><div class="vh">'+im+'<b>'+esc(y._v)+'</b></div>'+opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起")+'</div>';
+  return '<div class="row vrow" data-k="'+esc(y.k)+'">'+im+'<div class="t">'+esc(y._v)+'<br><small>'+fmt(price(y))+'・'+(y.box?"整盒 "+y.box+" 個":step(y)+" 件起")+(y.sh?"・"+esc(y.sh):"")+'</small></div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
+function openVar(k){const L=FAM[k];if(!L)return;
+  $("#panel").innerHTML='<h2>'+esc(L[0]._fb)+'<button class="x" id="vx">×</button></h2><div class="vsub">'+esc(L[0].b)+'・共 '+L.length+' 種，選好每款要的數量</div>'+L.map(vrow).join("")+'<button class="go" id="vok" style="width:100%;margin-top:12px">選好了</button>';
+  $("#sheet").classList.add("on");const done=()=>{$("#sheet").classList.remove("on");document.querySelectorAll('#grid .card[data-g="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(el.dataset.r);if(x)el.outerHTML=card(x)})};$("#vx").onclick=done;$("#vok").onclick=done}
+document.addEventListener("click",e=>{if(e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");if(g)openVar(g.dataset.g)});
 function opt(y,lab,sub){return '<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+lab+'</b><small>'+esc(sub)+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
 function card(x){
+  if(x._f&&FAM[x._f])return gcard(x);
   const A=x.alt&&!x.hid?byK(x.alt):null;
   if(A){const tg=[dlTxt(x.dl)].filter(Boolean).join("｜");
     return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tg?'<div class="tag">'+esc(tg)+'</div>':'')+
@@ -765,14 +790,14 @@ $("#more").onclick=page;
 window.addEventListener("scroll",()=>{if(!$("#more").hidden&&innerHeight+scrollY>document.body.offsetHeight-600)page()});
 const byK=k=>ALL.find(x=>x.k===k);
 function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();
-  if(TIER()!==t0){document.querySelectorAll('#grid .card[data-k]').forEach(el=>{const x=byK(el.dataset.k);if(x)el.outerHTML=card(x)});return}
-  document.querySelectorAll('#grid [data-k="'+CSS.escape(k)+'"]').forEach(el=>{if(el.classList.contains("card")&&el.querySelector(".op"))return;const b=el.querySelector(".qty,.add");if(b)b.outerHTML=qtyBox(byK(k),q)})}
+  if(TIER()!==t0){document.querySelectorAll('#grid .card').forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)});document.querySelectorAll('#panel .vrow[data-k],#panel .op[data-k]').forEach(el=>{const y=byK(el.dataset.k),b=el.querySelector(".qty,.add");if(y&&b)b.outerHTML=qtyBox(y,cart[y.k]||0)});return}
+  document.querySelectorAll('#grid [data-k="'+CSS.escape(k)+'"],#panel .vrow[data-k="'+CSS.escape(k)+'"],#panel .op[data-k="'+CSS.escape(k)+'"]').forEach(el=>{if(el.classList.contains("card")&&el.querySelector(".op"))return;const b=el.querySelector(".qty,.add");if(b)b.outerHTML=qtyBox(byK(k),q)})}
 document.addEventListener("click",e=>{
   const a=e.target.dataset.a;if(!a)return;const c=e.target.closest("[data-k]");if(!c)return;const k=c.dataset.k,x=byK(k),q=cart[k]||0,s=x.box||1;
   if(a==="add")setQ(k,step(x));else if(a==="+")setQ(k,q+s);else if(a==="-")setQ(k,q-s);
-  if(c.classList.contains("row"))renderCart();
+  if(c.classList.contains("row")&&!c.classList.contains("vrow"))renderCart();
 });
-document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const c=e.target.closest("[data-k]");setQ(c.dataset.k,Number(e.target.value));if(c.classList.contains("row"))renderCart()}});
+document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const c=e.target.closest("[data-k]");setQ(c.dataset.k,Number(e.target.value));if(c.classList.contains("row")&&!c.classList.contains("vrow"))renderCart()}});
 function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:cart[k],sub:price(x)*cart[k]}}).filter(Boolean)}
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
