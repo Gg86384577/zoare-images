@@ -272,7 +272,7 @@ function search(items, query, limit = 8) {
   const groups = [];
   for (const g of ALIAS_NORM) {
     const hit = g.find((w) => w && q.includes(w));
-    if (hit) { groups.push(g); rest = rest.split(hit).join(" "); }
+    if (hit) { groups.push(g); for (const x of g) if (x) rest = rest.split(x).join(" "); } // 同一組的中日文名稱都拿掉，避免日文名稱重複加分
   }
   const grams = [];
   for (const part of rest.split(" ")) {
@@ -287,7 +287,7 @@ function search(items, query, limit = 8) {
     for (const g of groups) if (g.some((w) => it._t.includes(w))) { sc += 10; groupHits++; }
     if (groups.length && !groupHits) continue;
     for (const gr of grams) if (it._t.includes(gr)) sc += gr.length === 1 ? 0.5 : 2;
-    if (sc > 0) scored.push([sc - ((it.st && it.st.includes("缺貨")) || isExpired(it) ? 3 : 0), it]);
+    if (sc > 0) scored.push([sc - ((it.st && it.st.includes("缺貨")) || isExpired(it) ? 3 : 0) - (it._t.length / 400), it]); // 同分時名稱越精簡（越接近基本款）越前面
   }
   scored.sort((a, b) => b[0] - a[0]);
   const best = scored.length ? scored[0][0] : 0;
