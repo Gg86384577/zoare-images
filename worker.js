@@ -191,6 +191,11 @@ async function updateRates(env, notify = true) {
   }
   return rates;
 }
+// 商城商品清單的快取鑰匙：目錄版本＋匯率＋結單規則＋小時（任何一個變了就重算）
+async function catStamp(env) {
+  const r = await freshRates(env), rules = await getDlRules(env);
+  return [CATALOG_VERSION, r ? r.JPY + "|" + r.CNY : "", JSON.stringify(rules), new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13)].join("|");
+}
 // 結單日規則（老闆用「結單 品牌 日期」設定）：KV dlrules = { "*": 預設, "<品牌或關鍵字>": 日期或文字 }
 async function getDlRules(env) {
   try { return env.SESSIONS ? JSON.parse((await env.SESSIONS.get("dlrules")) || "{}") : {}; } catch (e) { return {}; }
@@ -1356,7 +1361,7 @@ export default {
       const q = (url.searchParams.get("q") || decodeURIComponent(url.pathname.slice(4)) || "商品目錄").slice(0, 50);
       return Response.redirect(`https://line.me/R/oaMessage/${encodeURIComponent(id)}/?${encodeURIComponent(q)}`, 302);
     }
-    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi, ver: CATALOG_VERSION });
+    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi, ver: CATALOG_VERSION, catStamp });
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");

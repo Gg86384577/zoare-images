@@ -84,7 +84,8 @@ function packN(it) {
   const m = (it.pack || "").match(/(?:整盒|整箱)\s*(\d+)\s*個/);
   return m ? Number(m[1]) : 0;
 }
-let SLIM = null, SLIM_SRC = null;
+let SLIM = null, SLIM_SRC = null, SLIM_TXT = null, SLIM_TXT_KEY = "";
+function hashStr(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + s.length.toString(36); }
 const MEMBER_ITEMS = [
   { k: "MEMBER|VIP", n: "VIP 會員（月費）國際＋國內運費全免・VIP 專屬價", b: "ZOARÉ 會員方案", s: "", g: 1000, v: 1000, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_vip.jpg", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "vip" },
   { k: "MEMBER|GEN", n: "一般會員（月費）只免國際運費", b: "ZOARÉ 會員方案", s: "", g: 100, v: 100, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_gen.jpg", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "member" },
@@ -138,9 +139,12 @@ const WEB_CATS = [
   { k: "J's Planning", w: ["j's planning"] },
   { k: "幽遊白書", w: ["幽遊白書", "幽☆遊☆白書", "幽助", "飛影", "藏馬", "蔵馬", "桑原"] },
 ];
+let CAT_LC = null;
 function catsOf(it) {
+  if (!CAT_LC) CAT_LC = CATS.concat(WEB_CATS).map((c) => [c.k, c.w.map((w) => w.toLowerCase())]);
   const h = ((it.n || "") + " " + (it.ja || "") + " " + (it.b || "") + " " + (it.s || "")).toLowerCase();
-  const out = CATS.concat(WEB_CATS).filter((c) => c.w.some((w) => h.includes(w.toLowerCase()))).map((c) => c.k);
+  const out = [];
+  for (const [k, ws] of CAT_LC) for (const w of ws) if (h.includes(w)) { out.push(k); break; }
   return out.length ? out : ["其他"];
 }
 // 到貨／發售時間：把各家型錄寫法統一成客人看得懂的一句（看不出來就不顯示）
@@ -259,8 +263,19 @@ export async function handleShop(request, env, ctx, deps) {
     return new Response(PAGE.replaceAll("__CV__", encodeURIComponent(deps.ver || "")), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   }
   if (p === "/shop/catalog") {
-    const items = slim(await deps.loadCatalog(env), deps.isExpired);
-    return new Response(JSON.stringify(items), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
+    // 商品清單很大：算好的結果存成文字（記憶體＋KV），同一版本／匯率／結單規則只算一次，避免每台伺服器都重算而逾時
+    const hdr = { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" };
+    let key = "";
+    try { if (deps.catStamp) key = "slimc:" + hashStr(await deps.catStamp(env)); } catch (e) {}
+    if (key && SLIM_TXT && SLIM_TXT_KEY === key) return new Response(SLIM_TXT, { headers: hdr });
+    let txt = null;
+    if (key && env.SESSIONS) { try { txt = await env.SESSIONS.get(key); } catch (e) {} }
+    if (!txt) {
+      txt = JSON.stringify(slim(await deps.loadCatalog(env), deps.isExpired));
+      if (key && env.SESSIONS) { const put = env.SESSIONS.put(key, txt, { expirationTtl: 7200 }).catch(() => {}); if (ctx && ctx.waitUntil) ctx.waitUntil(put); }
+    }
+    if (key) { SLIM_TXT = txt; SLIM_TXT_KEY = key; }
+    return new Response(txt, { headers: hdr });
   }
   if (p === "/shop/hot") {
     const all = await deps.loadCatalog(env);
