@@ -251,6 +251,8 @@ async function loadCatalog(env) {
 }
 
 const ALIAS_NORM = ALIASES.map((g) => g.map(norm));
+// 商品種類：客人問「娃娃」就優先給娃娃，不要給同角色的袋子、文具
+const TYPE_NORM = [["娃娃", "玩偶", "ぬいぐるみ", "ヌイグルミ", "布偶", "絨毛娃娃"], ["吊飾", "掛件", "マスコット", "鑰匙圈", "キーホルダー", "チャーム", "鑰匙扣"], ["包", "袋", "バッグ", "ポーチ", "トート"], ["貼紙", "シール", "ステッカー"], ["杯", "マグ", "コップ"], ["筆", "ペン", "文具"], ["公仔", "フィギュア"], ["抱枕", "クッション"]].map((g) => g.map(norm));
 
 function search(items, query, limit = 8) {
   const q = norm(query);
@@ -277,9 +279,11 @@ function search(items, query, limit = 8) {
     if (part.length === 1) grams.push(part);
     for (let i = 0; i + 1 < part.length; i++) grams.push(part.slice(i, i + 2));
   }
+  const types = TYPE_NORM.filter((g) => g.some((w) => q.includes(w)));
   const scored = [];
   for (const it of items) {
     let sc = 0, groupHits = 0;
+    if (types.length) for (const g of TYPE_NORM) if (g.some((w) => it._t.includes(w))) sc += types.includes(g) ? 8 : -6;
     for (const g of groups) if (g.some((w) => it._t.includes(w))) { sc += 10; groupHits++; }
     if (groups.length && !groupHits) continue;
     for (const gr of grams) if (it._t.includes(gr)) sc += gr.length === 1 ? 0.5 : 2;
@@ -406,7 +410,7 @@ function parseJson(text) {
 // 照片 → 搜尋關鍵字
 async function describePhoto(env, img) {
   const ask = (model) => claude(env,
-    "你是商品辨識助手。看照片判斷商品，只輸出一個 JSON（不要加 ``` 或其他文字）：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）\",\"ja_text\":\"照片上印的日文商品名稱和系列名，照抄（例：サンリオキャラクターズ お出かけもこもこスタイル ミニトート）\",\"jan\":\"照片上看得到的一個 JAN 條碼數字或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT、SAOM-MT）和 13 碼 JAN 數字，最多 12 個\"],\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品：請把標題的商品名、系列名，以及每一款旁邊的「品番」、條碼下方的數字都抄下來；看不清楚的不要猜。",
+    "你是商品辨識助手。看照片判斷商品，只輸出一個 JSON（不要加 ``` 或其他文字）：{\"query\":\"角色或IP的中文名 日文名 商品種類（例：酷洛米 クロミ 娃娃 ぬいぐるみ）\",\"ja_text\":\"照片上印的日文商品名稱和系列名，照抄（例：サンリオキャラクターズ お出かけもこもこスタイル ミニトート）\",\"jan\":\"照片上看得到的一個 JAN 條碼數字或型號，沒有就空字串\",\"codes\":[\"照片上看得到的所有品番／型號（例：SAOM-MT-KT、SAOM-MT）和 13 碼 JAN 數字，最多 12 個\"],\"features\":\"外觀特徵的中文關鍵字，例如：標準款 坐姿 和服 蓬鬆 迷你 吊飾 粉紅（沒有就空字串）\",\"is_product\":true}\n照片常常是廠商目錄的一整頁，上面有好幾款商品：請把標題的商品名、系列名，以及每一款旁邊的「品番」、條碼下方的數字都抄下來；看不清楚的不要猜。",
     [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: "這是什麼商品？" }] }],
     900, model);
   let out;
@@ -416,7 +420,7 @@ async function describePhoto(env, img) {
   // JSON 壞掉或被截斷時，也從原文把品番、JAN 撈出來
   const extra = (out.match(/\b[A-Z][A-Z0-9]{1,5}-[A-Z0-9]{1,5}(?:-[A-Z0-9]{1,4})?\b|\b49\d{11}\b/g) || []);
   d.codes = [...new Set([...(Array.isArray(d.codes) ? d.codes : []), ...extra])].slice(0, 16);
-  d.query = [d.ja_text, d.query].filter(Boolean).join(" ");
+  d.query = [d.ja_text, d.query, d.features].filter(Boolean).join(" ");
   if (env.SESSIONS) await env.SESSIONS.put("lastphoto", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + "\n" + JSON.stringify(d).slice(0, 900), { expirationTtl: 7 * 86400 }).catch(() => {});
   return d;
 }
@@ -888,7 +892,7 @@ async function handleEvent(env, ev) {
     }
     // 回覆編號（例如「2號」）時沿用上次列出的商品
     const pickedNumber = /^\s*(第\s*)?[1-5一二三四五]\s*(號|个|個|款)?\s*$|[1-5]\s*號/.test(text);
-    let cands = hits.length ? hits : cands0.length ? cands0.slice(0, 16) : pickedNumber && session.last.length ? session.last.map((j) => items[j]).filter(Boolean) : search(items, query);
+    let cands = hits.length ? hits : cands0.length ? cands0.slice(0, 16) : pickedNumber && session.last.length ? session.last.map((j) => items[j]).filter(Boolean) : search(items, query, img ? 30 : 8);
     // 文字追問（例如「這款多少」）才沿用上次的商品；客人傳了新照片就不要拿舊商品充數，免得跳出不相干的東西
     if (!cands.length && !img && session.last.length) cands = session.last.map((j) => items[j]).filter(Boolean);
 
@@ -898,8 +902,11 @@ async function handleEvent(env, ev) {
     const burstNote = burst.length ? `（客人剛剛連續傳了 ${burst.length + 1} 則訊息${earlierImgs.length ? `，其中 ${earlierImgs.length + (msg.type === "image" ? 1 : 0)} 張照片` : ""}${earlierText ? "，前面的文字：" + earlierText : ""}；請合併成一則回覆）\n` : "";
     const lastMenu = uid && env.SESSIONS ? await env.SESSIONS.get("org:" + uid) : null;
     const prompt = `${lastMenu ? `客人最後一次點的選單：${lastMenu}（客人常常誤點，只以最後一次為準；判斷時以客人實際傳的商品為主）\n` : ""}客人名稱：${name}${session.history.length ? "（對話進行中，不要再打招呼）" : "（這是對話第一則，可以打招呼）"}\n${burstNote}客人${img ? (text ? "傳了照片並說：" + text + "（照片辨識結果：" + query + "）" : "傳了一張照片（照片辨識結果：" + query + "）") : "說：" + text}\n\n${hits.length ? `照片上抄到的品番已經對到目錄，下面 ${hits.length} 款就是客人照片上的商品，請全部列出報價（show 全部編號）\n` : ""}候選商品（依相關度排序）：\n${candText}\n\n上一次列給客人的商品：\n${lastText}`;
+    // 照片沒對到品番：把候選商品的圖片一起給模型比對，找出長得一樣的那款
+    const visual = img && !hits.length ? cands.slice(0, 30).filter((it) => it.th || it.img) : [];
     userContent = img
-      ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt }]
+      ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: prompt + (visual.length ? `\n\n下面是候選商品的圖片（編號對應上面的候選清單）。請跟客人的照片比對外型、顏色、角色、種類；長得一樣或幾乎一樣的就列出報價並 #SHOW 那些編號（同一款不同尺寸也可以一起列）；都不像才說目錄裡沒有。` : "") },
+        ...visual.flatMap((it) => [{ type: "text", text: `候選 ${cands.indexOf(it) + 1}` }, { type: "image", source: { type: "url", url: it.th || it.img } }])]
       : prompt;
 
     const messages = [...session.history, { role: "user", content: userContent }];
