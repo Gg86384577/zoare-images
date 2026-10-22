@@ -310,14 +310,14 @@ export async function handleShop(request, env, ctx, deps) {
     if (!uid) return Response.json({ ok: false, error: "連結無效，請回到 LINE 重新點訂購連結" }, { status: 401 });
     const tier = await getTier(env, uid);
     const mi = await memberInfo(env, uid);
-    return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier], until: mi.until ? fmtDay(mi.until) : "", days: mi.days });
+    return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier], until: mi.until ? fmtDay(mi.until) : "", days: mi.days, coupons: await couponView(env, uid), camp: activeCampaign() });
   }
   if (p === "/shop/orders") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
     if (!uid) return Response.json({ ok: false, error: "連結無效" }, { status: 401 });
     const list = await myOrders(env, uid, 20);
     return Response.json({ ok: true, orders: list.map((o) => ({ id: o.id, at: o.at, status: o.status, paid5: o.paid5 || "", track: o.track || "", pay: o.form.pay || "轉帳",
-      total: o.total, qty: o.qty, tier: TIER_NAME[o.tier], lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub })), form: o.form })),
+      total: o.total, qty: o.qty, tier: TIER_NAME[o.tier], discount: o.coupon ? o.coupon.amt : 0, earned: o.earned ? o.earned.amt : 0, lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub })), form: o.form })),
       bank: (await env.SESSIONS.get("bank")) || "", linepay: (await env.SESSIONS.get("linepay")) || "" });
   }
   if (p === "/shop/order" && request.method === "POST") {
@@ -337,20 +337,39 @@ export async function handleShop(request, env, ctx, deps) {
       const q = Math.floor(Number(r.q));
       if (!it || !(q > 0) || q > 100000) continue;
       const price = tier === "vip" ? it.v : it.g;
-      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "" });
+      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [] });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
     const f = body.form || {};
     const clean = (s, n = 100) => String(s || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
     const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: clean(f.ship, 20), addr: clean(f.addr, 150), note: clean(f.note, 300), pay: f.pay === "LINE Pay" ? "LINE Pay" : "轉帳" };
     if (!form.name || !form.phone || !form.ship || !form.addr) return Response.json({ ok: false, error: "請填寫收件人、電話、寄送方式與門市／地址" }, { status: 400 });
-    const total = lines.reduce((a, l) => a + l.sub, 0);
+    const sumAll = lines.reduce((a, l) => a + l.sub, 0);
     const qty = lines.reduce((a, l) => a + l.q, 0);
     const d = new Date(Date.now() + 8 * 3600e3);
     const id = "ZO" + d.toISOString().slice(2, 10).replace(/-/g, "") + Math.random().toString(36).slice(2, 6).toUpperCase();
+    // 使用折抵券
+    let total = sumAll, coupon = null, cps = null;
+    if (body.coupon) {
+      const view = await couponView(env, uid), c = view.find((x) => x.id === body.coupon);
+      if (!c || c.status !== "可使用") return Response.json({ ok: false, error: "這張折抵券目前不能使用（可能已使用、過期或來源訂單還沒付款）" }, { status: 400 });
+      if (sumAll < c.min) return Response.json({ ok: false, error: `這張折抵券要訂單滿 NT$${c.min.toLocaleString()} 才能使用` }, { status: 400 });
+      coupon = { id: c.id, amt: c.amt }; total = sumAll - c.amt;
+      cps = await getCoupons(env, uid); const cc = cps.find((x) => x.id === c.id); if (cc) cc.used = id;
+    }
+    // 活動送折抵券（付款後生效）
+    const camp = activeCampaign(), earn = campaignEarn(lines, camp);
     const notes = ruleNotes(lines, tier);
     const lineName = await deps.displayName(env, uid);
     const order = { id, uid, lineName, tier, lines, total, qty, form, notes, status: "待付款", at: d.toISOString().slice(0, 16).replace("T", " ") };
+    if (coupon) { order.coupon = coupon; order.subtotal = sumAll; }
+    if (earn.amt) {
+      cps = cps || (await getCoupons(env, uid));
+      const today = twDay(), cid = "CP" + Math.random().toString(36).slice(2, 8).toUpperCase();
+      cps.unshift({ id: cid, amt: earn.amt, min: earn.amt * camp.minX, name: camp.name, src: id, at: today, exp: addDays(today, camp.days), used: "" });
+      order.earned = { id: cid, amt: earn.amt, base: earn.base, camp: camp.name };
+    }
+    if (cps) await saveCoupons(env, uid, cps);
     if (wantMem) {
       const pi = await memberInfo(env, uid);
       order.memGranted = wantMem; order.prevTier = prevTier; order.prevUntil = pi.until;
@@ -365,11 +384,47 @@ export async function handleShop(request, env, ctx, deps) {
     const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]");
     idx.unshift(id); await env.SESSIONS.put("orders", JSON.stringify(idx.slice(0, 200)));
     ctx.waitUntil(notifyOrder(env, deps, order, bank));
-    return Response.json({ ok: true, id, total, qty, notes, bank, tierName: TIER_NAME[tier], upgraded: tier !== prevTier });
+    return Response.json({ ok: true, id, total, qty, notes, bank, tierName: TIER_NAME[tier], upgraded: tier !== prevTier, discount: coupon ? coupon.amt : 0, earned: order.earned ? order.earned.amt : 0 });
   }
   return new Response("Not found", { status: 404 });
 }
 
+// ---------- 折抵券（下次訂購使用） ----------
+// 活動：期間內「指定系列＋整箱（入數的倍數）」的訂單金額達標，就送折抵券；付款後生效，30 天內使用，下次訂單滿券面 5 倍可折抵
+export const CAMPAIGNS = [
+  { id: "SR1025", name: "三麗鷗整箱回饋", from: "2026-10-22", to: "2026-10-25", cat: "三麗鷗", tiers: [[30000, 1000], [20000, 600], [10000, 300], [3000, 100]], days: 30, minX: 5 },
+];
+const twDay = (ms = Date.now()) => new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
+const addDays = (day, n) => new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+export function caseN(it) { const m = String((it && (it.pk || it.pack)) || "").match(/(?:入数|入數|装箱数|裝箱數)\s*(\d+)/); return m ? +m[1] : 0; }
+export function activeCampaign(day = twDay()) { return CAMPAIGNS.find((c) => day >= c.from && day <= c.to) || null; }
+// 這張訂單符合活動的金額（只算指定系列、整箱數量的品項）→ 可以拿到多少折抵券
+export function campaignEarn(lines, camp) {
+  if (!camp) return { amt: 0, base: 0 };
+  let base = 0;
+  for (const l of lines) { const n = l.cs || 0; if (!l.mem && n > 0 && l.q >= n && l.q % n === 0 && (l.c || []).includes(camp.cat)) base += l.sub; }
+  const t = camp.tiers.find(([min]) => base >= min);
+  return { amt: t ? t[1] : 0, base, next: camp.tiers.slice().reverse().find(([min]) => base < min) || null };
+}
+async function getCoupons(env, uid) { try { return JSON.parse((await env.SESSIONS.get("cp:" + uid)) || "[]"); } catch (e) { return []; } }
+async function saveCoupons(env, uid, list) { await env.SESSIONS.put("cp:" + uid, JSON.stringify(list.slice(0, 60))); }
+// 每張券的狀態：付款後生效／可使用／已使用／已過期／已失效（來源訂單取消）
+export async function couponView(env, uid) {
+  const list = await getCoupons(env, uid), today = twDay();
+  const src = await Promise.all(list.map((c) => env.SESSIONS.get("o:" + c.src)));
+  return list.map((c, i) => {
+    const o = JSON.parse(src[i] || "null"), st = o ? o.status : "";
+    const status = c.used ? "已使用" : st === "已取消" ? "已失效" : c.exp < today ? "已過期" : ["已付款", "已出貨"].includes(st) ? "可使用" : "付款後生效";
+    return { id: c.id, amt: c.amt, min: c.min, name: c.name, exp: c.exp, at: c.at, src: c.src, used: c.used || "", status };
+  });
+}
+export async function couponText(env, uid, link) {
+  const v = await couponView(env, uid), camp = activeCampaign();
+  const ok = v.filter((c) => c.status === "可使用"), wait = v.filter((c) => c.status === "付款後生效");
+  let t = ok.length || wait.length ? "🎟 您的折抵券\n\n" + [...ok, ...wait].map((c) => `・NT$${c.amt} 折抵券（${c.name}）\n　${c.status === "可使用" ? "✅ 可使用" : "⏳ 付款後生效"}・訂單滿 NT$${c.min.toLocaleString()} 可用・有效到 ${c.exp.slice(5).replace("-", "/")}`).join("\n") : "目前沒有可使用的折抵券喔";
+  if (camp) t += `\n\n🎀 ${camp.name}進行中（${camp.from.slice(5).replace("-", "/")}～${camp.to.slice(5).replace("-", "/")}）\n${camp.cat}商品整箱下單：${camp.tiers.slice().reverse().map(([a, b]) => `滿 $${a.toLocaleString()} 送 $${b.toLocaleString()}`).join("、")}`;
+  return t + `\n\n下單時在購物車選擇折抵券就會自動扣除👇\n${link}`;
+}
 async function myOrders(env, uid, n = 5) {
   const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
   const out = [];
@@ -395,7 +450,7 @@ async function payInfo(env, pay) {
 const payHow = (pay) => pay === "LINE Pay" ? "付款後請回到 LINE 傳「付款截圖」給我們" : "轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」給我們";
 function orderText(o, withRules = true) {
   const items = o.lines.map((l) => `・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
-  return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）\n運費：${o.tier === "vip" ? "VIP 免運" : "由客服確認後通知"}` +
+  return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　${o.coupon ? `小計 NT$${(o.subtotal || o.total + o.coupon.amt).toLocaleString()}\n🎟 折抵券 −NT$${o.coupon.amt}\n` : ""}合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）${o.earned ? `\n🎁 ${o.earned.camp}：付款後送 NT$${o.earned.amt} 折抵券（下次使用）` : ""}\n運費：${o.tier === "vip" ? "VIP 免運" : "由客服確認後通知"}` +
     `\n付款方式：${o.form.pay || "轉帳"}` +
     (withRules && o.notes.length ? `\n\n⚠️ 訂購規則提醒：\n${o.notes.slice(0, 8).map((n) => "・" + n).join("\n")}` : "");
 }
@@ -569,7 +624,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     if (om[2]) {
       o.statusBefore = o.status;
       o.status = om[2] === "取消" ? "已取消" : om[2];
-      if (o.status === "已取消") await revertMem(env, o);
+      if (o.status === "已取消") { await revertMem(env, o); if (o.coupon) { const cps = await getCoupons(env, o.uid); const cc = cps.find((x) => x.id === o.coupon.id && x.used === o.id); if (cc) { cc.used = ""; await saveCoupons(env, o.uid, cps); } } }
       if (om[3]) o.track = om[3].trim().slice(0, 60);
       if (o.status === "已付款") {
         o.paidAt = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
@@ -634,7 +689,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .qty{display:flex;align-items:center;justify-content:space-between;margin-top:6px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .qty button{width:38px;height:34px;border:0;background:#f2f3f4;font-size:18px;color:var(--ink)}
 .qty input{width:100%;text-align:center;border:0;font-size:15px;height:34px;background:#fff;color:var(--ink)}
-.dsep{grid-column:1/-1;font-weight:800;font-size:14px;padding:6px 2px 0;color:var(--ink)}.vsub{font-size:12px;color:#6b6f75;margin:-2px 0 4px}.vg{background:#fff;border-radius:12px;padding:10px;margin-top:8px}.vh{display:flex;gap:10px;align-items:center}.vh img{width:56px;height:56px;object-fit:contain;background:#f6f6f7;border-radius:8px}.vrow .t small{color:#6b6f75}.add.sel{background:#9e1b1b}.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
+.dsep{grid-column:1/-1;font-weight:800;font-size:14px;padding:6px 2px 0;color:var(--ink)}.vsub{font-size:12px;color:#6b6f75;margin:-2px 0 4px}.vg{background:#fff;border-radius:12px;padding:10px;margin-top:8px}.vh{display:flex;gap:10px;align-items:center}.vh img{width:56px;height:56px;object-fit:contain;background:#f6f6f7;border-radius:8px}.vrow .t small{color:#6b6f75}.add.sel{background:#9e1b1b}.cp{display:flex;gap:12px;align-items:center;background:#fff;border-radius:14px;padding:12px;margin-top:8px;border:2px dashed #ff8fb0}.cp.off{opacity:.55;border-color:#ccc}.cpa{font-weight:900;font-size:22px;color:#e0507d;min-width:96px;text-align:center}.cpt small{color:#6b6f75}.camp{background:#fff0f5;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.6;color:#5a3442}.camp small{color:#8a6070}.cpb{background:#fff;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px}.cpo{display:block;margin-top:6px}.cpo small{color:#6b6f75}.cpo.dis{color:#aaa}.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
 .add{margin-top:6px;border:0;border-radius:10px;background:var(--ink);color:#fff;height:36px;font-size:14px}
 .more{display:block;margin:6px auto 20px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:10px 24px;font-size:14px}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#161616;color:#fff;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
@@ -713,8 +768,8 @@ async function init(){
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
   const CO=["會員方案","吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
-  $("#chips").innerHTML='<button class="chip news on" data-b="新品上架">✨ 新品上架</button><button class="chip news" data-b="熱賣推薦">🔥 熱賣推薦</button><button class="chip news" id="newsBtn">📢 最新動態</button>'+brands.map(b=>'<button class="chip'+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
-  $("#newsBtn").onclick=openNews;
+  $("#chips").innerHTML='<button class="chip news on" data-b="新品上架">✨ 新品上架</button><button class="chip news" data-b="熱賣推薦">🔥 熱賣推薦</button><button class="chip news" id="newsBtn">📢 最新動態</button>'+(ME.guest?'':'<button class="chip news" id="cpBtn">🎟 我的優惠券</button>')+brands.map(b=>'<button class="chip'+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
+  $("#newsBtn").onclick=openNews;if(!ME.guest)$("#cpBtn").onclick=openCoupons;
   $("#chips").onclick=async e=>{const b=e.target.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   buildFam();
@@ -840,14 +895,27 @@ async function openOrders(){
 }
 $("#sheet").onclick=e=>{if(e.target.id==="sheet")$("#sheet").classList.remove("on")};
 let form={};try{form=JSON.parse(localStorage.getItem("zo_form")||"{}")}catch(e){}
+let CPSEL="";
+const CST={"可使用":"#1f6b33","付款後生效":"#8a5a00","已使用":"#888","已過期":"#888","已失效":"#888"};
+function cpCard(c){return '<div class="cp'+(c.status==="可使用"||c.status==="付款後生效"?'':' off')+'"><div class="cpa">NT$'+c.amt+'</div><div class="cpt"><b>'+esc(c.name)+' 折抵券</b><br><small>訂單滿 NT$'+c.min.toLocaleString()+' 可用・有效到 '+esc(c.exp.slice(5).replace("-","/"))+'</small><br><span style="color:'+(CST[c.status]||"#888")+';font-weight:700;font-size:12px">'+esc(c.status==="付款後生效"?"⏳ 訂單 "+c.src+" 付款後生效":c.status==="已使用"?"已使用（"+c.used+"）":c.status)+'</span></div></div>'}
+function campLine(){const C=ME&&ME.camp;if(!C)return"";const tl=C.tiers.slice().reverse().map(t=>"滿 $"+t[0].toLocaleString()+" 送 $"+t[1].toLocaleString()).join("・");return '<div class="camp">🎀 <b>'+esc(C.name)+'</b>（'+C.from.slice(5).replace("-","/")+'～'+C.to.slice(5).replace("-","/")+'）<br>'+esc(C.cat)+'商品整箱下單（數量是入數的倍數）：'+tl+'<br><small>付款後生效，30 天內下次訂購使用，訂單滿券面 5 倍可折抵</small></div>'}
+function openCoupons(){const L=(ME.coupons||[]);
+  $("#panel").innerHTML='<h2>我的優惠券<button class="x" id="cpx">×</button></h2>'+campLine()+(L.length?L.map(cpCard).join(""):'<div class="empty">目前還沒有折抵券喔</div>');
+  $("#sheet").classList.add("on");$("#cpx").onclick=()=>$("#sheet").classList.remove("on")}
+function caseN(x){const m=String(x.pk||"").match(/(?:入数|入數|装箱数|裝箱數)\\s*(\\d+)/);return m?+m[1]:0}
+function campEarn(L){const C=ME&&ME.camp;if(!C)return null;let base=0;L.forEach(({x,q,sub})=>{const n=caseN(x);if(!x.mem&&n>0&&q>=n&&q%n===0&&(x.c||[]).includes(C.cat))base+=sub});const t=C.tiers.find(t=>base>=t[0]),nx=C.tiers.slice().reverse().find(t=>base<t[0]);return{base,amt:t?t[1]:0,next:nx}}
 function renderCart(){
   const L=lines();
   if(!L.length){$("#panel").innerHTML='<h2>購物車<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">還沒有商品喔</div>';return}
-  const N=notes(L),total=L.reduce((a,l)=>a+l.sub,0),n=L.reduce((a,l)=>a+l.q,0);
+  const N=notes(L),sum0=L.reduce((a,l)=>a+l.sub,0),n=L.reduce((a,l)=>a+l.q,0);
+  const UC=ME.guest?[]:(ME.coupons||[]).filter(c=>c.status==="可使用");let sel=UC.find(c=>c.id===CPSEL);if(sel&&sum0<sel.min){sel=null;CPSEL=""}
+  const total=sum0-(sel?sel.amt:0),E=ME.guest?null:campEarn(L);
+  const cpHTML=(UC.length?'<div class="cpb"><b>🎟 使用折抵券</b><label class="cpo"><input type="radio" name="cpsel" value=""'+(sel?"":" checked")+'> 不使用</label>'+UC.map(c=>'<label class="cpo'+(sum0<c.min?" dis":"")+'"><input type="radio" name="cpsel" value="'+esc(c.id)+'"'+(sel&&sel.id===c.id?" checked":"")+(sum0<c.min?" disabled":"")+'> 折 NT$'+c.amt+'<small>（滿 NT$'+c.min.toLocaleString()+' 可用・到 '+esc(c.exp.slice(5).replace("-","/"))+'）'+(sum0<c.min?' 還差 NT$'+(c.min-sum0).toLocaleString():'')+'</small></label>').join("")+'</div>':'')+
+    (E&&(E.amt||E.base)?'<div class="camp">🎀 '+esc(ME.camp.name)+'：本單整箱'+esc(ME.camp.cat)+'金額 '+fmt(E.base)+(E.amt?'，<b>付款後送 NT$'+E.amt+' 折抵券</b>':'')+(E.next?'<br><small>再加 '+fmt(E.next[0]-E.base)+' 整箱'+esc(ME.camp.cat)+'商品，就送 NT$'+E.next[1]+'</small>':'')+'</div>':(ME.camp&&!ME.guest?'<div class="camp">🎀 '+esc(ME.camp.name)+'進行中：'+esc(ME.camp.cat)+'商品整箱下單送折抵券（購物車目前沒有符合的整箱商品）</div>':''));
   $("#panel").innerHTML='<h2>購物車<button class="x" id="cx">×</button></h2>'+
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
   (N.length?'<div class="warn"><b>訂購規則提醒</b>（可以照樣送出，客服會再跟你確認）<br>'+N.map(esc).join("<br>")+'</div>':'')+
-  '<div class="tot">共 '+L.length+' 款 '+n+' 件<br>合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：'+(TIER()==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
+  cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：'+(TIER()==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
   '<form id="of"><label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
   '<label>寄送方式</label><select class="f" name="ship" required>'+["7-11 店到店","全家店到店","萊爾富店到店","宅配","其他"].map(s=>'<option'+(form.ship===s?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
@@ -858,6 +926,7 @@ function renderCart(){
   if(ME.guest){const f=$("#of");f.outerHTML='<button class="go" id="lg">💚 用 LINE 確認身分並下單</button><div style="font-size:12px;color:#6b6f75;margin-top:8px;line-height:1.6">會打開 ZOARÉ 的 LINE 官方帳號，按「傳送」後會收到你的專屬下單頁，購物車會自動帶過去，再填收件資料就完成了。<br>會員價會在專屬下單頁自動套用。</div>';$("#lg").onclick=guestCheckout}
   $("#cx").onclick=()=>$("#sheet").classList.remove("on");
   if(!ME.guest)$("#of").onsubmit=submit;
+  document.querySelectorAll('input[name="cpsel"]').forEach(r=>r.onchange=()=>{const f=$("#of");if(f)form=Object.assign(form||{},Object.fromEntries(new FormData(f)));CPSEL=r.value;renderCart()});
 }
 async function guestCheckout(){
   const b=$("#lg");b.disabled=true;b.textContent="處理中…";
@@ -869,10 +938,11 @@ async function submit(e){
   e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));form=fd;try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr,pay:fd.pay}))}catch(_){}
   const btn=$("#go");btn.disabled=true;btn.textContent="送出中…";
   try{
-    const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,items:lines().map(l=>({k:l.x.k,q:l.q})),form:fd})}).then(r=>r.json());
+    const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,items:lines().map(l=>({k:l.x.k,q:l.q})),form:fd,coupon:CPSEL||""})}).then(r=>r.json());
     if(!r.ok)throw new Error(r.error||"送出失敗");
+    CPSEL="";try{const me2=await fetch("/shop/me?t="+encodeURIComponent(T)).then(r=>r.json());if(me2.ok){ME.coupons=me2.coupons;ME.camp=me2.camp}}catch(_){}
     cart={};save();bar();document.querySelectorAll(".qty").forEach(el=>{const c=el.closest(".card");if(c)el.outerHTML=qtyBox(byK(c.dataset.k),0)});
-    $("#panel").innerHTML='<div class="done"><div style="font-size:44px">✅</div><h3>訂單已送出</h3><div>訂單編號 <b>'+esc(r.id)+'</b><br>共 '+r.qty+' 件　合計 <b>'+fmt(r.total)+'</b></div>'+
+    $("#panel").innerHTML='<div class="done"><div style="font-size:44px">✅</div><h3>訂單已送出</h3><div>訂單編號 <b>'+esc(r.id)+'</b><br>共 '+r.qty+' 件　'+(r.discount?'（已折抵 '+fmt(r.discount)+'）':'')+'合計 <b>'+fmt(r.total)+'</b></div>'+(r.earned?'<div class="camp" style="margin-top:10px">🎁 恭喜！這張訂單付款後會送你 <b>NT$'+r.earned+' 折抵券</b>，下次訂購就能用（在「🎟 我的優惠券」查看）</div>':'')+
     (r.bank?'<pre>'+(fd.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'\\n'+payHTML(r.bank,fd.pay==="LINE Pay")+'\\n\\n'+(fd.pay==="LINE Pay"?"付款後請回到 LINE 傳「付款截圖」":"轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」")+'，系統會自動對帳</pre>':'<pre>我們確認庫存後，會在 LINE 傳付款資料給你喔～</pre>')+
     (r.notes.length?'<div class="warn">'+r.notes.map(esc).join("<br>")+'<br>客服會再跟你確認數量</div>':'')+
     '<p style="margin-top:12px;color:#6b6f75;font-size:13px">訂單明細也已經傳到你的 LINE 囉</p><button class="go" style="width:100%;margin-top:14px" onclick="sheet.classList.remove(\\'on\\')">繼續逛</button></div>';

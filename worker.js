@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -743,6 +743,10 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && text) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
     if (pr) return reply(env, ev.replyToken, [{ type: "text", text: pr }]);
+  }
+  // 查自己的折抵券
+  if (uid && env.SESSIONS && /^(我的)?(優惠券|優惠卷|折抵券|折抵卷|折價券)$/.test(text)) {
+    return reply(env, ev.replyToken, [{ type: "text", text: await couponText(env, uid, await shopLink(env, uid)) }]);
   }
   // 查自己的訂單：「訂單查詢」「我的訂單」或直接傳訂單編號
   if (uid && env.SESSIONS && /^(訂單查詢|我的訂單|查訂單|訂單)$/.test(text)) {
