@@ -689,7 +689,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .qty{display:flex;align-items:center;justify-content:space-between;margin-top:6px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .qty button{width:38px;height:34px;border:0;background:#f2f3f4;font-size:18px;color:var(--ink)}
 .qty input{width:100%;text-align:center;border:0;font-size:15px;height:34px;background:#fff;color:var(--ink)}
-.dsep{grid-column:1/-1;font-weight:800;font-size:14px;padding:6px 2px 0;color:var(--ink)}.vsub{font-size:12px;color:#6b6f75;margin:-2px 0 4px}.vg{background:#fff;border-radius:12px;padding:10px;margin-top:8px}.vh{display:flex;gap:10px;align-items:center}.vh img{width:56px;height:56px;object-fit:contain;background:#f6f6f7;border-radius:8px}.vrow .t small{color:#6b6f75}.add.sel{background:#9e1b1b}.cp{display:flex;gap:12px;align-items:center;background:#fff;border-radius:14px;padding:12px;margin-top:8px;border:2px dashed #ff8fb0}.cp.off{opacity:.55;border-color:#ccc}.cpa{font-weight:900;font-size:22px;color:#e0507d;min-width:96px;text-align:center}.cpt small{color:#6b6f75}.camp{background:#fff0f5;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.6;color:#5a3442}.camp small{color:#8a6070}.cpb{background:#fff;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px}.cpo{display:block;margin-top:6px}.cpo small{color:#6b6f75}.cpo.dis{color:#aaa}.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
+.dsep{grid-column:1/-1;font-weight:800;font-size:14px;padding:6px 2px 0;color:var(--ink)}.vsub{font-size:12px;color:#6b6f75;margin:-2px 0 4px}.vg{background:#fff;border-radius:12px;padding:10px;margin-top:8px}.vh{display:flex;gap:10px;align-items:center}.vrow img,.vh img{width:72px!important;height:72px!important;}.vh img{width:56px;height:56px;object-fit:contain;background:#f6f6f7;border-radius:8px}.vrow .t small{color:#6b6f75}.add.sel{background:#9e1b1b}.cp{display:flex;gap:12px;align-items:center;background:#fff;border-radius:14px;padding:12px;margin-top:8px;border:2px dashed #ff8fb0}.cp.off{opacity:.55;border-color:#ccc}.cpa{font-weight:900;font-size:22px;color:#e0507d;min-width:96px;text-align:center}.cpt small{color:#6b6f75}.camp{background:#fff0f5;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.6;color:#5a3442}.camp small{color:#8a6070}.cpb{background:#fff;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px}.cpo{display:block;margin-top:6px}.cpo small{color:#6b6f75}.cpo.dis{color:#aaa}.opts{margin-top:6px}.oh{font-size:11px;color:#9e1b1b;font-weight:700;margin-bottom:2px}.op{display:grid;grid-template-columns:1fr auto;gap:0 6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 7px;margin-top:6px}.op .ol b{display:block;font-size:12px}.op .ol small{display:block;font-size:10px;color:#6b6f75}.op .opr{font-weight:800;font-size:15px}.op .qty,.op .add{grid-column:1/3}
 .add{margin-top:6px;border:0;border-radius:10px;background:var(--ink);color:#fff;height:36px;font-size:14px}
 .more{display:block;margin:6px auto 20px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:10px 24px;font-size:14px}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#161616;color:#fff;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
@@ -702,6 +702,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .st.s1{background:#fff1d6;color:#8a5a00}.st.s2{background:#e3effc;color:#1d4f8f}.st.s3{background:#e2f4e6;color:#1f6b33}.st.s4{background:#eee;color:#888}
 .ord details{margin-top:6px}.ord summary{color:var(--sub);font-size:12.5px}
 .ord ul{list-style:none;margin-top:6px;border-top:1px dashed var(--line);padding-top:6px}.ord li{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
+.lb{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;color:#fff}.lb.on{display:flex}.lb img{max-width:100%;max-height:68vh;object-fit:contain;background:#fff;border-radius:12px}.lbt{margin-top:10px;font-size:15px;font-weight:700;text-align:center}.lbb{display:flex;gap:10px;margin-top:12px;align-items:center}.lbb button{border:0;border-radius:12px;height:44px;min-width:44px;font-size:22px;background:#333;color:#fff}.lbb .lbs{background:#fff;color:#161616;font-size:16px;font-weight:700;padding:0 20px}.lb small{margin-top:10px;color:#bbb;font-size:12px}.lbc{position:absolute;top:12px;right:14px;border:0;background:none;color:#fff;font-size:34px}.zm{cursor:zoom-in}
 .sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.45);display:none}
 .sheet.on{display:block}
 .panel{position:absolute;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:18px 18px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
@@ -736,6 +737,7 @@ input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);border-radiu
 <button class="more" id="more" hidden>載入更多</button>
 <div class="bar"><button id="openOrders" class="ghost">訂單查詢</button><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
+<div class="lb" id="lb"><button class="lbc" id="lbc">×</button><img id="lbi" alt=""><div class="lbt" id="lbt"></div><div class="lbb"><button id="lbp">‹</button><button class="lbs" id="lbs">⬇️ 儲存照片</button><button id="lbn">›</button></div><small>儲存沒反應的話，長按圖片也可以存到手機</small></div>
 <script>
 const T=new URLSearchParams(location.search).get("t")||"";
 const $=s=>document.querySelector(s);
@@ -809,16 +811,28 @@ function famOf(x){const n=x.n,i=Math.max(n.lastIndexOf("/"),n.lastIndexOf("／")
   const keep=[];base.split(" ").forEach(t=>{if(!t)return;if(VSZ.has(t.toUpperCase())||/^[0-9.]+(cm|mm|ml)$/i.test(t))vs.push(t);else keep.push(t)});
   return[keep.join(" "),vs.join(" ")]}
 function buildFam(){FAM={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const[b,v]=famOf(x);x._v=v||x.n;if(b.length>=2){x._f=x.b+"|"+b;x._fb=b;(FAM[x._f]=FAM[x._f]||[]).push(x)}});
-  for(const k in FAM)if(FAM[k].length<2){FAM[k].forEach(x=>{delete x._f});delete FAM[k]}}
+  const SR={SS:1,S:2,M:3,L:4,LL:5,XL:6,"3L":7};const sk=x=>{const t=(x._v||"").split(" ");let r=0;const rest=t.filter(w=>{const u=w.toUpperCase();if(SR[u]){r=SR[u];return false}return true}).join(" ");return [rest,r]};
+  for(const k in FAM){if(FAM[k].length<2){FAM[k].forEach(x=>{delete x._f});delete FAM[k];continue}FAM[k].sort((a,b)=>{const A=sk(a),B=sk(b);return A[0]<B[0]?-1:A[0]>B[0]?1:A[1]-B[1]})}}
 function grp(list){const seen=new Set(),out=[];for(const x of list){if(x._f){if(seen.has(x._f))continue;seen.add(x._f)}out.push(x)}return out}
 function gsel(k){let n=0;FAM[k].forEach(y=>{n+=cart[y.k]||0;if(y.alt)n+=cart[y.alt]||0});return n}
 function gcard(x){const L=FAM[x._f],ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps),sel=gsel(x._f),hasA=L.some(y=>y.alt);
   return '<div class="card" data-g="'+esc(x._f)+'" data-r="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x._fb)+'</div><div class="tag">共 '+L.length+' 種規格／款式'+(hasA?'・部分有現貨':'')+'</div><div class="pr"><b>'+fmt(mn)+(mx>mn?'～'+fmt(mx):'')+'</b></div><button class="add'+(sel?' sel':'')+'">'+(sel?'已選 '+sel+' 件・修改':'選擇規格')+'</button></div></div>'}
-function vrow(y){const A=y.alt?byK(y.alt):null,im=y.img?'<img src="'+esc(y.img)+'">':'';
+function vrow(y){const A=y.alt?byK(y.alt):null,im=y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'">':'';
   if(A)return '<div class="vg"><div class="vh">'+im+'<b>'+esc(y._v)+'</b></div>'+opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起")+'</div>';
   return '<div class="row vrow" data-k="'+esc(y.k)+'">'+im+'<div class="t">'+esc(y._v)+'<br><small>'+fmt(price(y))+'・'+(y.box?"整盒 "+y.box+" 個":step(y)+" 件起")+(y.sh?"・"+esc(y.sh):"")+'</small></div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
+let LB=null;
+function openLB(L,i){LB={L,i};$("#lb").classList.add("on");showLB()}
+function showLB(){const x=LB.L[LB.i];$("#lbi").src=x.img;$("#lbt").textContent=(x._v&&x._f?x._fb+"／"+x._v:x.n)+(LB.L.length>1?"（"+(LB.i+1)+"/"+LB.L.length+"）":"");$("#lbp").style.visibility=$("#lbn").style.visibility=LB.L.length>1?"visible":"hidden"}
+async function saveLB(){const x=LB.L[LB.i],nm=((x._v&&x._f?x._fb+"_"+x._v:x.n)||"zoare").split("").map(c=>'/:*?"<>| '.indexOf(c)>=0||c.charCodeAt(0)===92?"_":c).join("").slice(0,60)+".jpg";
+  try{const b=await fetch(x.img,{mode:"cors"}).then(r=>{if(!r.ok)throw 0;return r.blob()});const f=new File([b],nm,{type:b.type||"image/jpeg"});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}
+    const u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=nm;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)
+  }catch(e){if(e&&e.name==="AbortError")return;window.open(x.img,"_blank")}}
+$("#lbc").onclick=()=>$("#lb").classList.remove("on");$("#lb").onclick=e=>{if(e.target.id==="lb")$("#lb").classList.remove("on")};
+$("#lbp").onclick=()=>{LB.i=(LB.i-1+LB.L.length)%LB.L.length;showLB()};$("#lbn").onclick=()=>{LB.i=(LB.i+1)%LB.L.length;showLB()};$("#lbs").onclick=saveLB;
+document.addEventListener("click",e=>{const z=e.target.closest&&e.target.closest("img.zm");if(z){e.stopPropagation();const y=byK(z.dataset.z);if(!y)return;const L=y._f&&FAM[y._f]?FAM[y._f]:[y];openLB(L,Math.max(0,L.indexOf(y)))}},true);
 function openVar(k){const L=FAM[k];if(!L)return;
-  $("#panel").innerHTML='<h2>'+esc(L[0]._fb)+'<button class="x" id="vx">×</button></h2><div class="vsub">'+esc(L[0].b)+'・共 '+L.length+' 種，選好每款要的數量</div>'+L.map(vrow).join("")+'<button class="go" id="vok" style="width:100%;margin-top:12px">選好了</button>';
+  $("#panel").innerHTML='<h2>'+esc(L[0]._fb)+'<button class="x" id="vx">×</button></h2><div class="vsub">'+esc(L[0].b)+'・共 '+L.length+' 種，選好每款要的數量・點圖片可以放大、儲存照片</div>'+L.map(vrow).join("")+'<button class="go" id="vok" style="width:100%;margin-top:12px">選好了</button>';
   $("#sheet").classList.add("on");const done=()=>{$("#sheet").classList.remove("on");document.querySelectorAll('#grid .card[data-g="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(el.dataset.r);if(x)el.outerHTML=card(x)})};$("#vx").onclick=done;$("#vok").onclick=done}
 document.addEventListener("click",e=>{if(e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");if(g)openVar(g.dataset.g)});
 function opt(y,lab,sub){return '<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+lab+'</b><small>'+esc(sub)+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
@@ -830,7 +844,7 @@ function card(x){
     '<div class="opts"><div class="oh">請選擇要等還是要現貨 👇</div>'+opt(x,"⏳ 要等・較便宜","向日本訂貨・"+step(x)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起")+'</div></div></div>'}
   const p=price(x),q=cart[x.k]||0;
   const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.sh?"📦 "+x.sh:"",x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
-  return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
+  return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img class="zm" data-z="'+esc(x.k)+'" loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
 function step(x){if(x.mem)return 1;const u=Number(x.box)||Number(x.moq)||3;if(TIER()!=="none")return u;return u>=20?u:Math.ceil(20/u)*u}
