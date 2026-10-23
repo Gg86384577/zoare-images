@@ -702,6 +702,16 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .st.s1{background:#fff1d6;color:#8a5a00}.st.s2{background:#e3effc;color:#1d4f8f}.st.s3{background:#e2f4e6;color:#1f6b33}.st.s4{background:#eee;color:#888}
 .ord details{margin-top:6px}.ord summary{color:var(--sub);font-size:12.5px}
 .ord ul{list-style:none;margin-top:6px;border-top:1px dashed var(--line);padding-top:6px}.ord li{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
+.panel.vmode{padding:0;background:#fff}.vtop{position:sticky;top:0;z-index:3;height:0;display:flex;justify-content:flex-end}.vx{margin:10px 12px 0 0;border:0;background:rgba(255,255,255,.92);border-radius:50%;width:38px;height:38px;font-size:24px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.vhero{position:relative;background:linear-gradient(180deg,#f7f7f8,#efeff1);height:min(46vh,380px);display:flex;align-items:center;justify-content:center;border-radius:18px 18px 0 0}.vhero img{max-width:88%;max-height:90%;object-fit:contain}.vz{position:absolute;right:12px;bottom:12px;background:rgba(22,22,22,.72);color:#fff;font-size:12px;border-radius:999px;padding:5px 11px;pointer-events:none}
+.vinfo{padding:14px 16px 2px}.vb{font-size:12px;color:var(--sub)}.vtt{font-size:19px;font-weight:800;margin:3px 0 4px;line-height:1.3}.vpr{font-size:22px;font-weight:800;color:var(--red)}
+.vsec{padding:12px 16px 0}.vh2{font-weight:800;font-size:15px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline}.vh2 span{color:var(--sub);font-weight:400;font-size:12px}
+.vgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.vt{border:1.5px solid var(--line);border-radius:12px;padding:5px 5px 6px;text-align:center;background:#fff;cursor:pointer}.vt.on{border-color:var(--ink);box-shadow:0 0 0 1.5px var(--ink) inset}
+.vti{position:relative;aspect-ratio:1/1;background:#f6f6f7;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}.vti img{max-width:100%;max-height:100%;object-fit:contain}.vti b{position:absolute;top:3px;right:3px;background:var(--red);color:#fff;font-size:11px;border-radius:999px;padding:1px 7px}.vti i{position:absolute;left:3px;top:3px;font-style:normal;background:#1f6b33;color:#fff;font-size:10px;border-radius:6px;padding:1px 5px}
+.vtn{font-size:12px;font-weight:700;margin-top:5px;line-height:1.25;height:2.5em;overflow:hidden}.vtp{font-size:12px;color:var(--sub)}
+.vdet{margin:16px 16px 0;background:var(--bg);border-radius:16px;padding:14px}.vdn{font-weight:800;font-size:17px}.vdm{font-size:12px;color:var(--sub);margin:3px 0 2px}.vdet .op{background:#fff;border:0}
+.vbar{position:sticky;bottom:0;z-index:3;background:#fff;border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:12px;margin-top:16px}.vbar #vsum{flex:1;font-size:14px;line-height:1.3}.vbar #vsum small{color:var(--sub)}.vbar .go{margin:0;padding:0 28px}
+@media(min-width:640px){.vgrid{grid-template-columns:repeat(6,minmax(0,1fr))}}
 .lb{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;color:#fff}.lb.on{display:flex}.lb img{max-width:100%;max-height:68vh;object-fit:contain;background:#fff;border-radius:12px}.lbt{margin-top:10px;font-size:15px;font-weight:700;text-align:center}.lbb{display:flex;gap:10px;margin-top:12px;align-items:center}.lbb button{border:0;border-radius:12px;height:44px;min-width:44px;font-size:22px;background:#333;color:#fff}.lbb .lbs{background:#fff;color:#161616;font-size:16px;font-weight:700;padding:0 20px}.lb small{margin-top:10px;color:#bbb;font-size:12px}.lbc{position:absolute;top:12px;right:14px;border:0;background:none;color:#fff;font-size:34px}.zm{cursor:zoom-in}
 .sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.45);display:none}
 .sheet.on{display:block}
@@ -832,9 +842,23 @@ async function saveLB(){const x=LB.L[LB.i],nm=((x._v&&x._f?x._fb+"_"+x._v:x.n)||
 $("#lbc").onclick=()=>$("#lb").classList.remove("on");$("#lb").onclick=e=>{if(e.target.id==="lb")$("#lb").classList.remove("on")};
 $("#lbp").onclick=()=>{LB.i=(LB.i-1+LB.L.length)%LB.L.length;showLB()};$("#lbn").onclick=()=>{LB.i=(LB.i+1)%LB.L.length;showLB()};$("#lbs").onclick=saveLB;
 document.addEventListener("click",e=>{const z=e.target.closest&&e.target.closest("img.zm");if(z){e.stopPropagation();const y=byK(z.dataset.z);if(!y)return;const L=y._f&&FAM[y._f]?FAM[y._f]:[y];openLB(L,Math.max(0,L.indexOf(y)))}},true);
-function openVar(k){const L=FAM[k];if(!L)return;
-  $("#panel").innerHTML='<h2>'+esc(L[0]._fb)+'<button class="x" id="vx">×</button></h2><div class="vsub">'+esc(L[0].b)+'・共 '+L.length+' 種，選好每款要的數量・點圖片可以放大、儲存照片</div>'+L.map(vrow).join("")+'<button class="go" id="vok" style="width:100%;margin-top:12px">選好了</button>';
-  $("#sheet").classList.add("on");const done=()=>{$("#sheet").classList.remove("on");document.querySelectorAll('#grid .card[data-g="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(el.dataset.r);if(x)el.outerHTML=card(x)})};$("#vx").onclick=done;$("#vok").onclick=done}
+let VK=null,VI=0;
+function vRefresh(k){document.querySelectorAll('#grid .card[data-g="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(el.dataset.r);if(x)el.outerHTML=card(x)})}
+function vClose(){const k=VK;VK=null;$("#panel").classList.remove("vmode");$("#sheet").classList.remove("on");if(k)vRefresh(k)}
+function openVar(k,i){const L=FAM[k];if(!L)return;VK=k;VI=i!=null?i:Math.max(0,L.findIndex(y=>cart[y.k]||(y.alt&&cart[y.alt])));
+  const ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps);
+  $("#panel").classList.add("vmode");
+  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vb">'+esc(L[0].b)+'</div><div class="vtt">'+esc(L[0]._fb)+'</div><div class="vpr">'+fmt(mn)+(mx>mn?' ～ '+fmt(mx):'')+'</div></div><div class="vsec"><div class="vh2">選擇款式・規格<span>共 '+L.length+' 種</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div><div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
+  $("#sheet").classList.add("on");$("#panel").scrollTop=0;$("#vx").onclick=vClose;$("#vok").onclick=vClose;
+  $("#vgrid").onclick=e=>{const t=e.target.closest("[data-vi]");if(!t)return;VI=+t.dataset.vi;renderVar();const d=$("#vdet");if(d)d.scrollIntoView({behavior:"smooth",block:"nearest"})};
+  renderVar()}
+function renderVar(){const L=FAM[VK];if(!L)return;const y=L[VI]||L[0],A=y.alt?byK(y.alt):null;
+  $("#vhero").innerHTML=(y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'" alt="">':'')+'<span class="vz">🔍 點圖放大・儲存照片</span>';
+  $("#vgrid").innerHTML=L.map((z,i)=>{const n=(cart[z.k]||0)+(z.alt?cart[z.alt]||0:0);return '<div class="vt'+(i===VI?' on':'')+'" data-vi="'+i+'"><div class="vti">'+(z.img?'<img loading="lazy" src="'+esc(z.img)+'" alt="">':'')+(n?'<b>'+n+'</b>':'')+(z.alt?'<i>現貨</i>':'')+'</div><div class="vtn">'+esc(z._v)+'</div><div class="vtp">'+fmt(price(z))+'</div></div>'}).join("");
+  const sub=y.box?"整盒 "+y.box+" 個・只能整盒訂":step(y)+" 件起";
+  $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div><div class="vdm">'+esc(sub)+(y.sh?"・📦 "+esc(y.sh):"")+'</div>'+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
+  let n=0,amt=0;L.forEach(z=>[z.k,z.alt].forEach(k=>{if(k&&cart[k]){const w=byK(k);if(w){n+=cart[k];amt+=price(w)*cart[k]}}}));
+  $("#vsum").innerHTML=n?'這款已選 <b>'+n+'</b> 件<br><small>'+fmt(amt)+'</small>':'<small>點上面的款式，再按「加入」</small>'}
 document.addEventListener("click",e=>{if(e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");if(g)openVar(g.dataset.g)});
 function opt(y,lab,sub){return '<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+lab+'</b><small>'+esc(sub)+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
 function card(x){
@@ -859,7 +883,7 @@ function page(){
 $("#more").onclick=page;
 window.addEventListener("scroll",()=>{if(!$("#more").hidden&&innerHeight+scrollY>document.body.offsetHeight-600)page()});
 const byK=k=>ALL.find(x=>x.k===k);
-function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();
+function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();if(VK)setTimeout(renderVar,0);
   if(TIER()!==t0){document.querySelectorAll('#grid .card').forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)});document.querySelectorAll('#panel .vrow[data-k],#panel .op[data-k]').forEach(el=>{const y=byK(el.dataset.k),b=el.querySelector(".qty,.add");if(y&&b)b.outerHTML=qtyBox(y,cart[y.k]||0)});return}
   document.querySelectorAll('#grid [data-k="'+CSS.escape(k)+'"],#panel .vrow[data-k="'+CSS.escape(k)+'"],#panel .op[data-k="'+CSS.escape(k)+'"]').forEach(el=>{if(el.classList.contains("card")&&el.querySelector(".op"))return;const b=el.querySelector(".qty,.add");if(b)b.outerHTML=qtyBox(byK(k),q)})}
 document.addEventListener("click",e=>{
@@ -877,7 +901,7 @@ function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
-async function openNews(){
+async function openNews(){$("#panel").classList.remove("vmode");VK=null;
   $("#panel").innerHTML='<h2>新品上線<button class="x" id="nx">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#nx").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/news").then(r=>r.json());
     const th=ks=>'<div class="th">'+ks.map(k=>byK(k)).filter(x=>x&&x.img).map(x=>'<img loading="lazy" src="'+esc(x.img)+'">').join("")+'</div>';
@@ -893,7 +917,7 @@ async function openNews(){
   }catch(e){$("#panel").querySelector(".empty").textContent="載入失敗，請稍後再試"}
 }
 const STC={"待付款":"s1","已回報匯款":"s2","待確認":"s1","已付款":"s2","已出貨":"s3","已取消":"s4"};
-async function openOrders(){
+async function openOrders(){$("#panel").classList.remove("vmode");VK=null;
   if(ME&&ME.guest){$("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">訪客看不到訂單喔<br>在 ZOARÉ 的 LINE 傳「訂購」就會收到你的專屬連結，可以查訂單</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
   $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
@@ -908,18 +932,18 @@ async function openOrders(){
     $("#ox").onclick=()=>$("#sheet").classList.remove("on");
   }catch(e){$("#panel").innerHTML='<h2>訂單查詢<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">載入失敗，請稍後再試</div>'}
 }
-$("#sheet").onclick=e=>{if(e.target.id==="sheet")$("#sheet").classList.remove("on")};
+$("#sheet").onclick=e=>{if(e.target.id==="sheet"){if(VK)vClose();else $("#sheet").classList.remove("on")}};
 let form={};try{form=JSON.parse(localStorage.getItem("zo_form")||"{}")}catch(e){}
 let CPSEL="";
 const CST={"可使用":"#1f6b33","付款後生效":"#8a5a00","已使用":"#888","已過期":"#888","已失效":"#888"};
 function cpCard(c){return '<div class="cp'+(c.status==="可使用"||c.status==="付款後生效"?'':' off')+'"><div class="cpa">NT$'+c.amt+'</div><div class="cpt"><b>'+esc(c.name)+' 折抵券</b><br><small>訂單滿 NT$'+c.min.toLocaleString()+' 可用・有效到 '+esc(c.exp.slice(5).replace("-","/"))+'</small><br><span style="color:'+(CST[c.status]||"#888")+';font-weight:700;font-size:12px">'+esc(c.status==="付款後生效"?"⏳ 訂單 "+c.src+" 付款後生效":c.status==="已使用"?"已使用（"+c.used+"）":c.status)+'</span></div></div>'}
 function campLine(){const C=ME&&ME.camp;if(!C)return"";const tl=C.tiers.slice().reverse().map(t=>"滿 $"+t[0].toLocaleString()+" 送 $"+t[1].toLocaleString()).join("・");return '<div class="camp">🎀 <b>'+esc(C.name)+'</b>（'+C.from.slice(5).replace("-","/")+'～'+C.to.slice(5).replace("-","/")+'）<br>'+esc([].concat(C.cat).join('、'))+'商品不用整箱，訂單達指定金額就送：'+tl+'<br><small>付款後生效，30 天內下次訂購使用，訂單滿券面 5 倍可折抵</small></div>'}
-function openCoupons(){const L=(ME.coupons||[]);
+function openCoupons(){$("#panel").classList.remove("vmode");VK=null;const L=(ME.coupons||[]);
   $("#panel").innerHTML='<h2>我的優惠券<button class="x" id="cpx">×</button></h2>'+campLine()+(L.length?L.map(cpCard).join(""):'<div class="empty">目前還沒有折抵券喔</div>');
   $("#sheet").classList.add("on");$("#cpx").onclick=()=>$("#sheet").classList.remove("on")}
 function caseN(x){const m=String(x.pk||"").match(/(?:入数|入數|装箱数|裝箱數)\\s*(\\d+)/);return m?+m[1]:0}
 function campEarn(L){const C=ME&&ME.camp;if(!C)return null;let base=0;L.forEach(({x,q,sub})=>{if(!x.mem&&(x.c||[]).some(c=>[].concat(C.cat).includes(c)))base+=sub});const t=C.tiers.find(t=>base>=t[0]),nx=C.tiers.slice().reverse().find(t=>base<t[0]);return{base,amt:t?t[1]:0,next:nx}}
-function renderCart(){
+function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   const L=lines();
   if(!L.length){$("#panel").innerHTML='<h2>購物車<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">還沒有商品喔</div>';return}
   const N=notes(L),sum0=L.reduce((a,l)=>a+l.sub,0),n=L.reduce((a,l)=>a+l.q,0);
