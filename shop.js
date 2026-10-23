@@ -213,7 +213,7 @@ export function ruleNotes(lines, tier) {
     if (l.box && l.q % l.box) notes.push(`${l.n}：盲盒／整箱商品請以 ${l.box} 的倍數訂購`);
     else if (l.q < mq) notes.push(`${l.n}：${tier === "vip" ? "VIP 會員" : tier === "none" ? "非會員" : "一般會員"}這款 ${mq} 件起`);
   }
-  if (tier !== "none" && total > 0 && total < 21) notes.push(`會員混批合計需 21 件起（目前 ${total} 件）`);
+  if (total > 0 && total < 21) notes.push(`整張訂單合計需 21 件起才出貨（目前 ${total} 件）`);
   return notes;
 }
 
@@ -343,6 +343,8 @@ export async function handleShop(request, env, ctx, deps) {
       lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [] });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
+    const pcs = lines.filter((l) => !l.mem).reduce((a, l) => a + l.q, 0);
+    if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `整張訂單商品合計要 21 件以上才能出貨（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上` }, { status: 400 });
     const badQ = lines.filter((l) => !l.mem && fixQty(l, tier, l.q) !== l.q);
     if (badQ.length) return Response.json({ ok: false, error: "下列商品數量需為起批數或起批數的倍數，請調整後再送出：\n" + badQ.slice(0, 8).map((l) => `・${l.n}：${l.q} 件 → 請改成 ${fixQty(l, tier, l.q)} 件`).join("\n") }, { status: 400 });
     const f = body.form || {};
@@ -906,7 +908,7 @@ function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
-  if(t!=="none"&&total>0&&total<21)out.push("會員混批合計需 21 件起（目前 "+total+" 件）");return out}
+  if(total>0&&total<21)out.push("整張訂單合計需 21 件起才出貨（目前 "+total+" 件，還差 "+(21-total)+" 件）");return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
@@ -962,7 +964,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
     (E&&(E.amt||E.base)?'<div class="camp">🎀 '+esc(ME.camp.name)+'：本單'+esc([].concat(ME.camp.cat).join('、'))+'金額 '+fmt(E.base)+(E.amt?'，<b>付款後送 NT$'+E.amt+' 折抵券</b>':'')+(E.next?'<br><small>再加 '+fmt(E.next[0]-E.base)+' '+esc([].concat(ME.camp.cat).join('、'))+'商品，就送 NT$'+E.next[1]+'</small>':'')+'</div>':(ME.camp&&!ME.guest?'<div class="camp">🎀 '+esc(ME.camp.name)+'進行中：'+esc([].concat(ME.camp.cat).join('、'))+'商品滿額送折抵券（購物車目前沒有符合的商品）</div>':''));
   $("#panel").innerHTML='<h2>購物車<button class="x" id="cx">×</button></h2>'+
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
-  (N.length?'<div class="warn"><b>訂購規則提醒</b>（可以照樣送出，客服會再跟你確認）<br>'+N.map(esc).join("<br>")+'</div>':'')+
+  (N.length?'<div class="warn"><b>訂購規則提醒</b><br>'+N.map(esc).join("<br>")+'</div>':'')+
   cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：'+(TIER()==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
   '<form id="of"><label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
@@ -974,6 +976,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   if(ME.guest){const f=$("#of");f.outerHTML='<button class="go" id="lg">💚 用 LINE 確認身分並下單</button><div style="font-size:12px;color:#6b6f75;margin-top:8px;line-height:1.6">會打開 ZOARÉ 的 LINE 官方帳號，按「傳送」後會收到你的專屬下單頁，購物車會自動帶過去，再填收件資料就完成了。<br>會員價會在專屬下單頁自動套用。</div>';$("#lg").onclick=guestCheckout}
   $("#cx").onclick=()=>$("#sheet").classList.remove("on");
   if(!ME.guest)$("#of").onsubmit=submit;
+  {const pc=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);if(pc>0&&pc<21){const b=$("#go")||$("#lg");if(b){b.disabled=true;b.style.opacity=".45";b.textContent="還差 "+(21-pc)+" 件才能送出（整單 21 件起）"}}}
   document.querySelectorAll('input[name="cpsel"]').forEach(r=>r.onchange=()=>{const f=$("#of");if(f)form=Object.assign(form||{},Object.fromEntries(new FormData(f)));CPSEL=r.value;renderCart()});
 }
 async function guestCheckout(){
@@ -1400,7 +1403,7 @@ ${link}
 ・看新品、快結單的商品：點「新品上線」
 ・查訂單：點「訂單查詢」`;
   const text2 = `━━ 起批數怎麼算？ ━━
-・非會員：每款約 20 件起（照商品起批數的倍數，例如起批 2 件→20 件、3 件→21 件）
+・非會員：每款約 20 件起（照商品起批數的倍數，例如起批 2 件→20 件、3 件→21 件），整張訂單合計 21 件起
 ・會員（VIP／一般）：每款照商品自己的起批數，很多款 2～3 件就能訂，不同款合計 21 件就能出單
 👉 想少量多樣進貨，加入會員最划算
 
