@@ -201,6 +201,9 @@ export function minQty(x, tier) {
   if (tier !== "none") return u;
   return u >= 20 ? u : Math.ceil(20 / u) * u;
 }
+// 每款數量規則（強制）：要 ≥ 起批數，而且是單位（入數／整盒數）的倍數
+export function qtyUnit(x) { return x.mem ? 1 : Number(x.box) || Number(x.moq) || 3; }
+export function fixQty(x, tier, q) { q = Math.floor(Number(q) || 0); if (q <= 0) return 0; const u = qtyUnit(x), m = minQty(x, tier); return Math.max(m, Math.ceil(q / u) * u); }
 export function ruleNotes(lines, tier) {
   const notes = [];
   const total = lines.filter((l) => !l.mem).reduce((a, l) => a + l.q, 0);
@@ -340,6 +343,8 @@ export async function handleShop(request, env, ctx, deps) {
       lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [] });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
+    const badQ = lines.filter((l) => !l.mem && fixQty(l, tier, l.q) !== l.q);
+    if (badQ.length) return Response.json({ ok: false, error: "下列商品數量需為起批數或起批數的倍數，請調整後再送出：\n" + badQ.slice(0, 8).map((l) => `・${l.n}：${l.q} 件 → 請改成 ${fixQty(l, tier, l.q)} 件`).join("\n") }, { status: 400 });
     const f = body.form || {};
     const clean = (s, n = 100) => String(s || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
     const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: clean(f.ship, 20), addr: clean(f.addr, 150), note: clean(f.note, 300), pay: f.pay === "LINE Pay" ? "LINE Pay" : "轉帳" };
@@ -712,6 +717,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .vdet{margin:16px 16px 0;background:var(--bg);border-radius:16px;padding:14px}.vdn{font-weight:800;font-size:17px}.vdm{font-size:12px;color:var(--sub);margin:3px 0 2px}.vdet .op{background:#fff;border:0}
 .vbar{position:sticky;bottom:0;z-index:3;background:#fff;border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:12px;margin-top:16px}.vbar #vsum{flex:1;font-size:14px;line-height:1.3}.vbar #vsum small{color:var(--sub)}.vbar .go{margin:0;padding:0 28px}
 @media(min-width:640px){.vgrid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:rgba(22,22,22,.92);color:#fff;font-size:14px;border-radius:12px;padding:10px 16px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;max-width:86vw;text-align:center}.toast.on{opacity:1}
 .lb{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;color:#fff}.lb.on{display:flex}.lb img{max-width:100%;max-height:68vh;object-fit:contain;background:#fff;border-radius:12px}.lbt{margin-top:10px;font-size:15px;font-weight:700;text-align:center}.lbb{display:flex;gap:10px;margin-top:12px;align-items:center}.lbb button{border:0;border-radius:12px;height:44px;min-width:44px;font-size:22px;background:#333;color:#fff}.lbb .lbs{background:#fff;color:#161616;font-size:16px;font-weight:700;padding:0 20px}.lb small{margin-top:10px;color:#bbb;font-size:12px}.lbc{position:absolute;top:12px;right:14px;border:0;background:none;color:#fff;font-size:34px}.zm{cursor:zoom-in}
 .sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.45);display:none}
 .sheet.on{display:block}
@@ -872,6 +878,9 @@ function card(x){
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img class="zm" data-z="'+esc(x.k)+'" loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div><div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
+function unit(x){return x.mem?1:Number(x.box)||Number(x.moq)||3}
+function fixQ(x,q){q=Math.floor(Number(q)||0);if(q<=0)return 0;const u=unit(x),m=step(x);return Math.max(m,Math.ceil(q/u)*u)}
+let TT=null;function toast(t){let el=document.getElementById("toast");if(!el){el=document.createElement("div");el.id="toast";el.className="toast";document.body.appendChild(el)}el.textContent=t;el.classList.add("on");clearTimeout(TT);TT=setTimeout(()=>el.classList.remove("on"),2600)}
 function step(x){if(x.mem)return 1;const u=Number(x.box)||Number(x.moq)||3;if(TIER()!=="none")return u;return u>=20?u:Math.ceil(20/u)*u}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
@@ -884,14 +893,14 @@ $("#more").onclick=page;
 window.addEventListener("scroll",()=>{if(!$("#more").hidden&&innerHeight+scrollY>document.body.offsetHeight-600)page()});
 const byK=k=>ALL.find(x=>x.k===k);
 function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();if(VK)setTimeout(renderVar,0);
-  if(TIER()!==t0){document.querySelectorAll('#grid .card').forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)});document.querySelectorAll('#panel .vrow[data-k],#panel .op[data-k]').forEach(el=>{const y=byK(el.dataset.k),b=el.querySelector(".qty,.add");if(y&&b)b.outerHTML=qtyBox(y,cart[y.k]||0)});return}
+  if(TIER()!==t0){let ch=0;for(const kk in cart){const y=byK(kk);if(y&&!y.mem){const f=fixQ(y,cart[kk]);if(f!==cart[kk]){cart[kk]=f;ch++}}}if(ch){save();bar();toast("身分改變，已自動調整 "+ch+" 款的數量為起批數的倍數")}document.querySelectorAll('#grid .card').forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)});document.querySelectorAll('#panel .vrow[data-k],#panel .op[data-k]').forEach(el=>{const y=byK(el.dataset.k),b=el.querySelector(".qty,.add");if(y&&b)b.outerHTML=qtyBox(y,cart[y.k]||0)});return}
   document.querySelectorAll('#grid [data-k="'+CSS.escape(k)+'"],#panel .vrow[data-k="'+CSS.escape(k)+'"],#panel .op[data-k="'+CSS.escape(k)+'"]').forEach(el=>{if(el.classList.contains("card")&&el.querySelector(".op"))return;const b=el.querySelector(".qty,.add");if(b)b.outerHTML=qtyBox(byK(k),q)})}
 document.addEventListener("click",e=>{
-  const a=e.target.dataset.a;if(!a)return;const c=e.target.closest("[data-k]");if(!c)return;const k=c.dataset.k,x=byK(k),q=cart[k]||0,s=x.box||1;
-  if(a==="add")setQ(k,step(x));else if(a==="+")setQ(k,q+s);else if(a==="-")setQ(k,q-s);
+  const a=e.target.dataset.a;if(!a)return;const c=e.target.closest("[data-k]");if(!c)return;const k=c.dataset.k,x=byK(k),q=cart[k]||0,u=unit(x);
+  if(a==="add")setQ(k,step(x));else if(a==="+")setQ(k,q?fixQ(x,q+u):step(x));else if(a==="-")setQ(k,q-u<step(x)?0:q-u);
   if(c.classList.contains("row")&&!c.classList.contains("vrow"))renderCart();
 });
-document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const c=e.target.closest("[data-k]");setQ(c.dataset.k,Number(e.target.value));if(c.classList.contains("row")&&!c.classList.contains("vrow"))renderCart()}});
+document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const c=e.target.closest("[data-k]"),x=byK(c.dataset.k),raw=Math.floor(Number(e.target.value)||0),f=fixQ(x,raw);if(f!==raw&&raw>0)toast("這款要 "+step(x)+" 件起、以 "+unit(x)+" 件為單位，已調整為 "+f+" 件");setQ(c.dataset.k,f);e.target.value=f||"";if(c.classList.contains("row")&&!c.classList.contains("vrow"))renderCart()}});
 function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:cart[k],sub:price(x)*cart[k]}}).filter(Boolean)}
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
