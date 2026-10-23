@@ -801,14 +801,15 @@ function filter(){
   const cq=document.getElementById("clrq");if(cq)cq.onclick=e=>{e.preventDefault();$("#q").value="";filter()};
 }
 function dlTxt(d){const m=(d||"").match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}:\\d{2}))?/);if(m){const td=new Date(Date.now()+288e5).toISOString().slice(0,10),tw=new Date(Date.now()+1152e5).toISOString().slice(0,10),ds=m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0"),tm=m[4]||"23:59";if(ds===td)return"⏰ 今天 "+tm+" 結單";if(ds===tw)return"⏰ 明天 "+tm+" 結單";return"結單日 "+(+m[2])+"/"+(+m[3])+(m[4]&&m[4]!=="23:59"?" "+m[4]:"")}return"結單日 "+(d?d.split("（")[0]:"長期接單")}
-const VCH=["Hello Kitty","凱蒂貓","美樂蒂","酷洛米","大耳狗喜拿","大耳狗","布丁狗","帕恰狗","人魚漢頓","山姆企鵝","大眼蛙","酷企鵝","雙子星","優莎娜","琵亞諾","巧克力貓","小麥粉","栗子兔","吉伊卡哇","吉伊","小八","烏薩奇","兔兔","小桃","飛鼠","栗子饅頭","海獺","史努比","糊塗塌客","皮卡丘","蛋黃哥"];
+const VCT=new Set(["XO","TX","KR","HG","PC","PN","CN","KU","MM","KT","AP","MP","US","MA","MN","SB","LT"]);
+const VCH=["鴨鴨Pekkle","小羊琵亞諾","Hello Kitty","凱蒂貓","美樂蒂","酷洛米","大耳狗喜拿","大耳狗","布丁狗","帕恰狗","人魚漢頓","山姆企鵝","大眼蛙","酷企鵝","雙子星","優莎娜","琵亞諾","巧克力貓","小麥粉","栗子兔","吉伊卡哇","吉伊","小八","烏薩奇","兔兔","小桃","飛鼠","栗子饅頭","海獺","史努比","糊塗塌客","皮卡丘","蛋黃哥"];
 const VSZ=new Set(["SS","S","M","L","LL","XL","3L","A","B","C","D","E","F","G","H","RD","PK","BL","BK","YE","GR","WH","BR","PU","GY","BE","NV","OR","LB","LP","DB","紅","粉","粉紅","藍","水藍","黑","白","黃","綠","紫","棕","灰","米","橘","金","銀","淺藍","深藍","紅色","粉色","藍色","黑色","白色","黃色","綠色","紫色","棕色","灰色"]);
 let FAM={};
 function famOf(x){const n=x.n,i=Math.max(n.lastIndexOf("/"),n.lastIndexOf("／"));if(i>0)return[n.slice(0,i).trim(),n.slice(i+1).trim()];
   let base=n;const vs=[];const m=base.match(/[（(]([^（）()]{1,20})[)）]\\s*$/);if(m){vs.push(m[1]);base=base.slice(0,m.index)}
   const s=(x.s||"").trim();if(s&&base.includes(s)&&base.trim()!==s){base=base.split(s).join(" ");vs.push(s)}
   for(const c of VCH)if(base.includes(c)){base=base.split(c).join(" ");vs.push(c)}
-  const keep=[];base.split(" ").forEach(t=>{if(!t)return;if(VSZ.has(t.toUpperCase())||/^[0-9.]+(cm|mm|ml)$/i.test(t))vs.push(t);else keep.push(t)});
+  const keep=[];base.split(" ").forEach(t=>{if(!t)return;if(VSZ.has(t.toUpperCase())||VCT.has(t)||/^[0-9.]+(cm|mm|ml)$/i.test(t))vs.push(t);else keep.push(t)});
   return[keep.join(" "),vs.join(" ")]}
 function buildFam(){FAM={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const[b,v]=famOf(x);x._v=v||x.n;if(b.length>=2){x._f=x.b+"|"+b;x._fb=b;(FAM[x._f]=FAM[x._f]||[]).push(x)}});
   const SR={SS:1,S:2,M:3,L:4,LL:5,XL:6,"3L":7};const sk=x=>{const t=(x._v||"").split(" ");let r=0;const rest=t.filter(w=>{const u=w.toUpperCase();if(SR[u]){r=SR[u];return false}return true}).join(" ");return [rest,r]};
