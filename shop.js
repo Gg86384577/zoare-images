@@ -390,19 +390,19 @@ export async function handleShop(request, env, ctx, deps) {
 }
 
 // ---------- 折抵券（下次訂購使用） ----------
-// 活動：期間內「指定系列＋整箱（入數的倍數）」的訂單金額達標，就送折抵券；付款後生效，30 天內使用，下次訂單滿券面 5 倍可折抵
+// 活動：期間內「指定系列」商品的訂單金額（不用整箱）達標，就送折抵券；付款後生效，30 天內使用，下次訂單滿券面 5 倍可折抵
 export const CAMPAIGNS = [
-  { id: "SR1025", name: "三麗鷗・吉伊卡哇整箱回饋", from: "2026-10-22", to: "2026-10-25", cat: ["三麗鷗", "吉伊卡哇"], tiers: [[30000, 1000], [20000, 600], [10000, 300], [3000, 100]], days: 30, minX: 5 },
+  { id: "SR1025", name: "三麗鷗・吉伊卡哇滿額回饋", from: "2026-10-22", to: "2026-10-25", cat: ["三麗鷗", "吉伊卡哇"], tiers: [[30000, 1000], [20000, 600], [10000, 300], [3000, 100]], days: 30, minX: 5 },
 ];
 const twDay = (ms = Date.now()) => new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
 const addDays = (day, n) => new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 export function caseN(it) { const m = String((it && (it.pk || it.pack)) || "").match(/(?:入数|入數|装箱数|裝箱數)\s*(\d+)/); return m ? +m[1] : 0; }
 export function activeCampaign(day = twDay()) { return CAMPAIGNS.find((c) => day >= c.from && day <= c.to) || null; }
-// 這張訂單符合活動的金額（只算指定系列、整箱數量的品項）→ 可以拿到多少折抵券
+// 這張訂單符合活動的金額（只算指定系列的品項）→ 可以拿到多少折抵券
 export function campaignEarn(lines, camp) {
   if (!camp) return { amt: 0, base: 0 };
   let base = 0;
-  for (const l of lines) { const n = l.cs || 0; if (!l.mem && n > 0 && l.q >= n && l.q % n === 0 && (l.c || []).some((c) => [].concat(camp.cat).includes(c))) base += l.sub; }
+  for (const l of lines) { if (!l.mem && (l.c || []).some((c) => [].concat(camp.cat).includes(c))) base += l.sub; }
   const t = camp.tiers.find(([min]) => base >= min);
   return { amt: t ? t[1] : 0, base, next: camp.tiers.slice().reverse().find(([min]) => base < min) || null };
 }
@@ -422,7 +422,7 @@ export async function couponText(env, uid, link) {
   const v = await couponView(env, uid), camp = activeCampaign();
   const ok = v.filter((c) => c.status === "可使用"), wait = v.filter((c) => c.status === "付款後生效");
   let t = ok.length || wait.length ? "🎟 您的折抵券\n\n" + [...ok, ...wait].map((c) => `・NT$${c.amt} 折抵券（${c.name}）\n　${c.status === "可使用" ? "✅ 可使用" : "⏳ 付款後生效"}・訂單滿 NT$${c.min.toLocaleString()} 可用・有效到 ${c.exp.slice(5).replace("-", "/")}`).join("\n") : "目前沒有可使用的折抵券喔";
-  if (camp) t += `\n\n🎀 ${camp.name}進行中（${camp.from.slice(5).replace("-", "/")}～${camp.to.slice(5).replace("-", "/")}）\n${[].concat(camp.cat).join("、")}商品整箱下單：${camp.tiers.slice().reverse().map(([a, b]) => `滿 $${a.toLocaleString()} 送 $${b.toLocaleString()}`).join("、")}`;
+  if (camp) t += `\n\n🎀 ${camp.name}進行中（${camp.from.slice(5).replace("-", "/")}～${camp.to.slice(5).replace("-", "/")}）\n${[].concat(camp.cat).join("、")}商品訂單滿額：${camp.tiers.slice().reverse().map(([a, b]) => `滿 $${a.toLocaleString()} 送 $${b.toLocaleString()}`).join("、")}`;
   return t + `\n\n下單時在購物車選擇折抵券就會自動扣除👇\n${link}`;
 }
 async function myOrders(env, uid, n = 5) {
@@ -898,12 +898,12 @@ let form={};try{form=JSON.parse(localStorage.getItem("zo_form")||"{}")}catch(e){
 let CPSEL="";
 const CST={"可使用":"#1f6b33","付款後生效":"#8a5a00","已使用":"#888","已過期":"#888","已失效":"#888"};
 function cpCard(c){return '<div class="cp'+(c.status==="可使用"||c.status==="付款後生效"?'':' off')+'"><div class="cpa">NT$'+c.amt+'</div><div class="cpt"><b>'+esc(c.name)+' 折抵券</b><br><small>訂單滿 NT$'+c.min.toLocaleString()+' 可用・有效到 '+esc(c.exp.slice(5).replace("-","/"))+'</small><br><span style="color:'+(CST[c.status]||"#888")+';font-weight:700;font-size:12px">'+esc(c.status==="付款後生效"?"⏳ 訂單 "+c.src+" 付款後生效":c.status==="已使用"?"已使用（"+c.used+"）":c.status)+'</span></div></div>'}
-function campLine(){const C=ME&&ME.camp;if(!C)return"";const tl=C.tiers.slice().reverse().map(t=>"滿 $"+t[0].toLocaleString()+" 送 $"+t[1].toLocaleString()).join("・");return '<div class="camp">🎀 <b>'+esc(C.name)+'</b>（'+C.from.slice(5).replace("-","/")+'～'+C.to.slice(5).replace("-","/")+'）<br>'+esc([].concat(C.cat).join('、'))+'商品整箱下單（數量是入數的倍數）：'+tl+'<br><small>付款後生效，30 天內下次訂購使用，訂單滿券面 5 倍可折抵</small></div>'}
+function campLine(){const C=ME&&ME.camp;if(!C)return"";const tl=C.tiers.slice().reverse().map(t=>"滿 $"+t[0].toLocaleString()+" 送 $"+t[1].toLocaleString()).join("・");return '<div class="camp">🎀 <b>'+esc(C.name)+'</b>（'+C.from.slice(5).replace("-","/")+'～'+C.to.slice(5).replace("-","/")+'）<br>'+esc([].concat(C.cat).join('、'))+'商品不用整箱，訂單達指定金額就送：'+tl+'<br><small>付款後生效，30 天內下次訂購使用，訂單滿券面 5 倍可折抵</small></div>'}
 function openCoupons(){const L=(ME.coupons||[]);
   $("#panel").innerHTML='<h2>我的優惠券<button class="x" id="cpx">×</button></h2>'+campLine()+(L.length?L.map(cpCard).join(""):'<div class="empty">目前還沒有折抵券喔</div>');
   $("#sheet").classList.add("on");$("#cpx").onclick=()=>$("#sheet").classList.remove("on")}
 function caseN(x){const m=String(x.pk||"").match(/(?:入数|入數|装箱数|裝箱數)\\s*(\\d+)/);return m?+m[1]:0}
-function campEarn(L){const C=ME&&ME.camp;if(!C)return null;let base=0;L.forEach(({x,q,sub})=>{const n=caseN(x);if(!x.mem&&n>0&&q>=n&&q%n===0&&(x.c||[]).some(c=>[].concat(C.cat).includes(c)))base+=sub});const t=C.tiers.find(t=>base>=t[0]),nx=C.tiers.slice().reverse().find(t=>base<t[0]);return{base,amt:t?t[1]:0,next:nx}}
+function campEarn(L){const C=ME&&ME.camp;if(!C)return null;let base=0;L.forEach(({x,q,sub})=>{if(!x.mem&&(x.c||[]).some(c=>[].concat(C.cat).includes(c)))base+=sub});const t=C.tiers.find(t=>base>=t[0]),nx=C.tiers.slice().reverse().find(t=>base<t[0]);return{base,amt:t?t[1]:0,next:nx}}
 function renderCart(){
   const L=lines();
   if(!L.length){$("#panel").innerHTML='<h2>購物車<button class="x" onclick="sheet.classList.remove(\\'on\\')">×</button></h2><div class="empty">還沒有商品喔</div>';return}
@@ -911,7 +911,7 @@ function renderCart(){
   const UC=ME.guest?[]:(ME.coupons||[]).filter(c=>c.status==="可使用");let sel=UC.find(c=>c.id===CPSEL);if(sel&&sum0<sel.min){sel=null;CPSEL=""}
   const total=sum0-(sel?sel.amt:0),E=ME.guest?null:campEarn(L);
   const cpHTML=(UC.length?'<div class="cpb"><b>🎟 使用折抵券</b><label class="cpo"><input type="radio" name="cpsel" value=""'+(sel?"":" checked")+'> 不使用</label>'+UC.map(c=>'<label class="cpo'+(sum0<c.min?" dis":"")+'"><input type="radio" name="cpsel" value="'+esc(c.id)+'"'+(sel&&sel.id===c.id?" checked":"")+(sum0<c.min?" disabled":"")+'> 折 NT$'+c.amt+'<small>（滿 NT$'+c.min.toLocaleString()+' 可用・到 '+esc(c.exp.slice(5).replace("-","/"))+'）'+(sum0<c.min?' 還差 NT$'+(c.min-sum0).toLocaleString():'')+'</small></label>').join("")+'</div>':'')+
-    (E&&(E.amt||E.base)?'<div class="camp">🎀 '+esc(ME.camp.name)+'：本單整箱'+esc([].concat(ME.camp.cat).join('、'))+'金額 '+fmt(E.base)+(E.amt?'，<b>付款後送 NT$'+E.amt+' 折抵券</b>':'')+(E.next?'<br><small>再加 '+fmt(E.next[0]-E.base)+' 整箱'+esc([].concat(ME.camp.cat).join('、'))+'商品，就送 NT$'+E.next[1]+'</small>':'')+'</div>':(ME.camp&&!ME.guest?'<div class="camp">🎀 '+esc(ME.camp.name)+'進行中：'+esc([].concat(ME.camp.cat).join('、'))+'商品整箱下單送折抵券（購物車目前沒有符合的整箱商品）</div>':''));
+    (E&&(E.amt||E.base)?'<div class="camp">🎀 '+esc(ME.camp.name)+'：本單'+esc([].concat(ME.camp.cat).join('、'))+'金額 '+fmt(E.base)+(E.amt?'，<b>付款後送 NT$'+E.amt+' 折抵券</b>':'')+(E.next?'<br><small>再加 '+fmt(E.next[0]-E.base)+' '+esc([].concat(ME.camp.cat).join('、'))+'商品，就送 NT$'+E.next[1]+'</small>':'')+'</div>':(ME.camp&&!ME.guest?'<div class="camp">🎀 '+esc(ME.camp.name)+'進行中：'+esc([].concat(ME.camp.cat).join('、'))+'商品滿額送折抵券（購物車目前沒有符合的商品）</div>':''));
   $("#panel").innerHTML='<h2>購物車<button class="x" id="cx">×</button></h2>'+
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
   (N.length?'<div class="warn"><b>訂購規則提醒</b>（可以照樣送出，客服會再跟你確認）<br>'+N.map(esc).join("<br>")+'</div>':'')+
