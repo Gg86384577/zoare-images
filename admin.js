@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
+import { cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -47,8 +47,9 @@ async function buildData(env) {
   const tinfo = await Promise.all(cs.map((c) => Promise.all([env.SESSIONS.get("tier:" + c.uid), env.SESSIONS.get("tx:" + c.uid)])));
   const custList = cs.map((c, i) => { c.tier = tinfo[i][0] || "none"; const tx = Number(tinfo[i][1]) || 0; if (tx && tx < Date.now()) c.tier = "none"; c.until = c.tier !== "none" && tx ? fmtDay(tx) : ""; return c; });
   custList.sort((a, b) => b.spent - a.spent || (b.last || "").localeCompare(a.last || ""));
+  const carts = await cartList(env);
   return {
-    stats: st, daily, counts,
+    carts, stats: st, daily, counts,
     members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
@@ -118,7 +119,7 @@ label.l{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 4px}
 </style></head><body>
 <header><div class="logo">ZOARÉ<small>商家後台</small></div><button class="rf" id="rf">↻ 更新</button></header>
 <main id="m"><div class="err">載入中…</div></main>
-<nav id="nav"><button data-v="home" class="on"><b>◫</b>總覽</button><button data-v="orders"><b>☰</b>訂單</button><button data-v="cust"><b>☺</b>客人</button><button data-v="sales"><b>↗</b>銷售</button><button data-v="set"><b>⚙</b>設定</button></nav>
+<nav id="nav"><button data-v="home" class="on"><b>◫</b>總覽</button><button data-v="orders"><b>☰</b>訂單</button><button data-v="cust"><b>☺</b>客人</button><button data-v="carts"><b>🛒</b>購物車</button><button data-v="sales"><b>↗</b>銷售</button><button data-v="set"><b>⚙</b>設定</button></nav>
 <script>
 const T=new URLSearchParams(location.search).get("t")||"";
 const $=s=>document.querySelector(s);
@@ -131,7 +132,11 @@ async function load(){const r=await api("/admin/api/data");if(!r.ok){$("#m").inn
 async function cmd(text,reload=true){const r=await api("/admin/api/cmd",{text});toast(r.result||"完成");if(reload)await load();return r}
 $("#rf").onclick=load;
 $("#nav").onclick=e=>{const b=e.target.closest("button");if(!b)return;V=b.dataset.v;document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));render();scrollTo(0,0)};
-function render(){({home,orders,cust,sales,set})[V]()}
+function render(){({home,orders,cust,sales,set,carts})[V]()}
+function ago(t){const m=Math.floor((Date.now()-t)/6e4);return m<60?m+" 分鐘前":m<1440?Math.floor(m/60)+" 小時前":Math.floor(m/1440)+" 天前"}
+function carts(){const L=D.carts||[];
+  $("#m").innerHTML='<div class="card"><h3>購物車還沒結帳（'+L.length+' 位）</h3><p class="meta">只記錄用專屬連結進商城的客人。放超過 6 小時沒結帳，機器人會在 11:00～21:00 自動提醒一次（LINE 傳「購物車提醒 關」可以關掉）。</p></div>'+
+  (L.length?L.map(c=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(c.name||"（未知）")+'</b>　<small class="meta">'+esc(c.tier==="vip"?"VIP":c.tier==="member"?"一般會員":"非會員")+'・'+ago(c.at)+'更新'+(c.reminded?'・已提醒':'')+'</small></span><b>'+fmt(c.total)+'</b></div>'+c.lines.map(l=>'<div class="meta" style="padding:2px 0">・'+esc(l.n)+' ×'+l.q+'　'+fmt(l.price*l.q)+'</div>').join("")+'<div class="meta" style="margin-top:6px">共 '+c.lines.length+' 款 '+c.qty+' 件</div></div>').join(""):'<div class="card"><p class="meta">目前沒有客人的購物車有東西</p></div>')}
 function kc(t,v,s){return '<div class="kc"><small>'+t+'</small><b>'+v+'</b>'+(s?'<i>'+s+'</i>':'')+'</div>'}
 function home(){const s=D.stats,c=D.counts;const max=Math.max(1,...Object.values(D.daily));
   $("#m").innerHTML='<div class="k">'+kc("今日銷售額",fmt(s.today.rev),"淨利 "+fmt(s.today.profit))+kc("本月銷售額",fmt(s.month.rev),"淨利 "+fmt(s.month.profit))+kc("本月訂單",s.month.n+" 筆",s.month.pcs+" 件")+kc("待處理",(c["待付款"]+c["已回報匯款"]+c["待確認"]+c["已付款"])+" 筆","待出貨 "+c["已付款"]+" 筆")+'</div>'+

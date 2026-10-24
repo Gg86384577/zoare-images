@@ -308,6 +308,18 @@ export async function handleShop(request, env, ctx, deps) {
     const v = id ? await env.SESSIONS.get("gc:" + id) : null;
     return Response.json(v ? { ok: true, cart: JSON.parse(v) } : { ok: false });
   }
+  // 購物車追蹤（只記會員專屬連結的客人；加入、修改、清空都會同步）
+  if (p === "/shop/cart" && request.method === "POST") {
+    let body; try { body = await request.json(); } catch (e) { return Response.json({ ok: false }, { status: 400 }); }
+    const uid = await verifyToken(env, body.t);
+    if (!uid) return Response.json({ ok: false }, { status: 401 });
+    const map = new Map(slim(await deps.loadCatalog(env), deps.isExpired).map((x) => [x.k, x]));
+    const tier = await getTier(env, uid);
+    const lines = [];
+    for (const [k, q0] of Object.entries(body.cart || {}).slice(0, 300)) { const it = map.get(k), q = Math.floor(Number(q0)); if (it && q > 0 && q <= 100000) lines.push({ k, n: it.n, b: it.b, q, price: tier === "vip" ? it.v : it.g }); }
+    await saveCartTrack(env, uid, lines, await deps.displayName(env, uid), tier);
+    return Response.json({ ok: true });
+  }
   if (p === "/shop/me") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
     if (!uid) return Response.json({ ok: false, error: "連結無效，請回到 LINE 重新點訂購連結" }, { status: 401 });
@@ -391,6 +403,7 @@ export async function handleShop(request, env, ctx, deps) {
     const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]");
     idx.unshift(id); await env.SESSIONS.put("orders", JSON.stringify(idx.slice(0, 200)));
     ctx.waitUntil(notifyOrder(env, deps, order, bank));
+    ctx.waitUntil(saveCartTrack(env, uid, [], "", tier).catch(() => {}));
     return Response.json({ ok: true, id, total, qty, notes, bank, tierName: TIER_NAME[tier], upgraded: tier !== prevTier, discount: coupon ? coupon.amt : 0, earned: order.earned ? order.earned.amt : 0 });
   }
   return new Response("Not found", { status: 404 });
@@ -431,6 +444,39 @@ export async function couponText(env, uid, link) {
   let t = ok.length || wait.length ? "🎟 您的折抵券\n\n" + [...ok, ...wait].map((c) => `・NT$${c.amt} 折抵券（${c.name}）\n　${c.status === "可使用" ? "✅ 可使用" : "⏳ 付款後生效"}・訂單滿 NT$${c.min.toLocaleString()} 可用・有效到 ${c.exp.slice(5).replace("-", "/")}`).join("\n") : "目前沒有可使用的折抵券喔";
   if (camp) t += `\n\n🎀 ${camp.name}進行中（${camp.from.slice(5).replace("-", "/")}～${camp.to.slice(5).replace("-", "/")}）\n${[].concat(camp.cat).join("、")}商品訂單滿額：${camp.tiers.slice().reverse().map(([a, b]) => `滿 $${a.toLocaleString()} 送 $${b.toLocaleString()}`).join("、")}`;
   return t + `\n\n下單時在購物車選擇折抵券就會自動扣除👇\n${link}`;
+}
+async function saveCartTrack(env, uid, lines, name, tier) {
+  const idx = JSON.parse((await env.SESSIONS.get("carts")) || "[]").filter((u) => u !== uid);
+  if (!lines.length) { await env.SESSIONS.delete("ct:" + uid); await env.SESSIONS.put("carts", JSON.stringify(idx)); return; }
+  const prev = JSON.parse((await env.SESSIONS.get("ct:" + uid)) || "null");
+  const now = Date.now();
+  await env.SESSIONS.put("ct:" + uid, JSON.stringify({ uid, name: name || "", tier, lines, total: lines.reduce((a, l) => a + l.price * l.q, 0), qty: lines.reduce((a, l) => a + l.q, 0), at: now, since: prev ? prev.since : now, reminded: prev && prev.reminded && prev.sig === sigOf(lines) ? prev.reminded : 0, sig: sigOf(lines) }), { expirationTtl: 30 * 86400 });
+  idx.unshift(uid); await env.SESSIONS.put("carts", JSON.stringify(idx.slice(0, 300)));
+}
+const sigOf = (lines) => lines.map((l) => l.k + ":" + l.q).sort().join(",");
+export async function cartList(env) {
+  const idx = JSON.parse((await env.SESSIONS.get("carts")) || "[]");
+  const rows = await Promise.all(idx.map((u) => env.SESSIONS.get("ct:" + u)));
+  return rows.map((r) => JSON.parse(r || "null")).filter(Boolean).sort((a, b) => b.at - a.at);
+}
+const agoTxt = (ms) => { const m = Math.floor((Date.now() - ms) / 60000); return m < 60 ? `${m} 分鐘前` : m < 1440 ? `${Math.floor(m / 60)} 小時前` : `${Math.floor(m / 1440)} 天前`; };
+export async function cartReport(env) {
+  const L = await cartList(env);
+  if (!L.length) return "🛒 目前沒有客人的購物車有東西\n（只記錄用專屬連結進商城的客人；訪客的購物車只存在他自己手機）";
+  return `🛒 購物車還沒結帳的客人（${L.length} 位）\n\n` + L.slice(0, 20).map((c) => `👤 ${c.name || "（未知）"}｜${TIER_NAME[c.tier] || ""}｜${agoTxt(c.at)}更新${c.reminded ? "｜已提醒" : ""}\n` + c.lines.slice(0, 8).map((l) => `・${l.n} ×${l.q}`).join("\n") + (c.lines.length > 8 ? `\n…還有 ${c.lines.length - 8} 款` : "") + `\n共 ${c.lines.length} 款 ${c.qty} 件・NT$${c.total.toLocaleString()}`).join("\n\n") + (L.length > 20 ? `\n\n…還有 ${L.length - 20} 位，請看後台「購物車」` : "");
+}
+// 放了 6 小時以上沒結帳 → 提醒一次（11:00～21:00 才傳；內容改了會重新計時）
+export async function runCartReminders(env, deps) {
+  const h = new Date(Date.now() + 8 * 3600e3).getUTCHours();
+  if (h < 11 || h >= 21 || (await env.SESSIONS.get("cartremind")) === "off") return;
+  for (const c of await cartList(env)) {
+    if (c.reminded || Date.now() - c.at < 6 * 3600e3) continue;
+    const link = await shopLink(env, c.uid);
+    const text = `${c.name ? c.name + " " : ""}您好～您的購物車裡還有 ${c.lines.length} 款商品（${c.qty} 件）還沒結帳喔🛒\n\n${c.lines.slice(0, 5).map((l) => "・" + l.n + " ×" + l.q).join("\n")}${c.lines.length > 5 ? "\n…" : ""}\n\n部分商品有結單日或數量限制，要下單的話點這裡繼續👇\n${link}\n有任何問題直接跟我們說～`;
+    const r = await deps.lineApi(env, "/v2/bot/message/push", { to: c.uid, messages: [{ type: "text", text }] });
+    c.reminded = Date.now(); await env.SESSIONS.put("ct:" + c.uid, JSON.stringify(c), { expirationTtl: 30 * 86400 });
+    if (!r || !r.ok) console.log("cart remind failed", c.uid);
+  }
 }
 async function myOrders(env, uid, n = 5) {
   const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
@@ -577,6 +623,8 @@ async function payStats(env) {
 
 // 老闆指令：訂單列表／單筆查詢／匯款資料
 export async function shopOwnerCommand(env, text, deps = {}) {
+  if (/^(購物車|客人購物車|誰加購物車)$/.test(text)) return await cartReport(env);
+  if (/^購物車提醒\s*(開|關|開啟|關閉)$/.test(text)) { const off = /關/.test(text); await env.SESSIONS.put("cartremind", off ? "off" : "on"); return off ? "好👌 已關閉購物車提醒" : "好👌 已開啟購物車提醒：客人放了 6 小時沒結帳，會在 11:00～21:00 傳一則提醒（每次只提醒一次）"; }
   const t = text.trim();
   const om2 = await ownerOrders(env, t, deps);
   if (om2) return om2;
@@ -762,7 +810,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let ME=null,ALL=[],VIEW=[],NEWV=[],shown=0,brand="新品上架",cart={},lastAd=null;
 try{cart=JSON.parse(localStorage.getItem("zo_cart")||"{}")}catch(e){}
-const save=()=>{try{localStorage.setItem("zo_cart",JSON.stringify(cart))}catch(e){}};
+let CSY=null;const save=()=>{try{localStorage.setItem("zo_cart",JSON.stringify(cart))}catch(e){};if(T){clearTimeout(CSY);CSY=setTimeout(()=>{fetch("/shop/cart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,cart}),keepalive:true}).catch(()=>{})},1500)}};
 const TN={vip:"VIP 會員",member:"一般會員",none:"非會員"};
 function TIER(){if(!ME)return"none";if(cart["MEMBER|VIP"]||ME.tier==="vip")return"vip";if(cart["MEMBER|GEN"]||ME.tier==="member")return"member";return"none"}
 const price=x=>TIER()==="vip"?x.v:x.g;
