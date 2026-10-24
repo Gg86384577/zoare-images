@@ -840,6 +840,7 @@ async function init(){
   $("#newsBtn").onclick=openNews;if(!ME.guest)$("#cpBtn").onclick=openCoupons;
   $("#chips").onclick=async e=>{const b=e.target.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
+  if(T&&Object.keys(cart).length)save(); // 打開商城時就把手機裡原本的購物車同步上來
   buildFam();
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
    Object.keys(byD).sort().reverse().forEach(d=>{const g={},ord=[];byD[d].forEach(x=>{if(!g[x.b]){g[x.b]=[];ord.push(x.b)}g[x.b].push(x)});let more=true;for(let i=0;more;i++){more=false;ord.forEach(b=>{if(g[b][i]){NEWV.push(g[b][i]);more=true}})}})}
