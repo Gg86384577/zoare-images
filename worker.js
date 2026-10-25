@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -771,6 +771,15 @@ async function handleEvent(env, ev) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
     if (pr) return reply(env, ev.replyToken, [{ type: "text", text: pr }]);
   }
+  // 群發連結「/go/湊單 廠商名」→ 回覆專屬連結，直接打開該廠商的商品
+  { const gm = String(text || "").match(/^(?:湊單|廠商)\s+(.+)$/);
+    if (uid && env.SESSIONS && gm && !/^提醒/.test(gm[1])) {
+      const P = await getPools(env), key = gm[1].trim().toLowerCase();
+      const names = [...new Set([...Object.keys(P.pools || {}), ...(await loadCatalog(env)).map((x) => mfrOf(x.b))])];
+      const m = names.find((n) => n.toLowerCase() === key) || names.find((n) => n.toLowerCase().includes(key));
+      if (m) { const p = (P.pools || {})[m], pct = p ? p.pct : 0;
+        return reply(env, ev.replyToken, [{ type: "text", text: `📦 ${m} 目前湊單 ${pct}%${pct < 100 ? `，還差 ${100 - pct}%` : "，已湊滿準備叫貨"}\n（門檻 NT$20,000，以批發進價計算，同一家廠商的商品都能一起湊，湊滿後約 2～3 週到貨）\n\n👉 點這裡直接看 ${m} 的所有商品：\n${await mfrLink(env, uid, m)}` }]); }
+    } }
   // 教學影片
   if (uid && /^(教學|教學影片|使用教學|怎麼買|怎麼下單|如何下單|購買流程|下單流程|操作流程|影片)[？?]?$/.test(text || "")) {
     return reply(env, ev.replyToken, [{ type: "text", text: "這是 ZOARÉ 批發商城的使用教學影片👇\n從 LINE 選單點「批發商城」開始，一步一步帶您：選規格、加入購物車、送出訂單、付款回報、查湊單進度，到貨後選先寄或等齊、出貨通知和運費券。\n\n⏱ 提醒：同一廠商湊滿 NT$20,000 才向日本叫貨，湊滿後約 2～3 週到貨～" }, introVideoMsg()]);
