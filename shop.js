@@ -495,7 +495,7 @@ export const poolNeed = (rate) => Math.max(POOL_NT, Math.ceil(POOL_MIN * (rate |
 const MFR = [[/^309 /, "三麗鷗 309"], [/^CRUX/, "CRUX"], [/^Nakajima/, "Nakajima"], [/^T's Factory/, "T's Factory"], [/^Kamio/, "Kamio"], [/^J's Planning/, "J's Planning"],
   [/^萬代/, "萬代南夢宮"], [/^角色雜貨・背包|^企鵝家族/, "Unic"], [/^OST/, "OST"], [/^A Planning/, "A Planning"], [/^Sun Arrow/, "Sun Arrow"], [/^Hatakeyama/, "畠山"],
   [/^森本/, "森本產業"], [/^日本現貨/, "中央煽賣"], [/^RE-MENT/, "RE-MENT"], [/^三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列)|^幽遊白書/, "K-company"], [/^Marimo/, "Marimo Craft"],
-  [/^San-X/, "San-X"], [/^Ensky/, "Ensky"], [/^GPS/, "GPS"], [/^NIC/, "NIC"], [/^Smiski/, "Dreams"], [/^Tomantoys/, "Tomantoys"]];
+  [/^San-X/, "San-X"], [/^Ensky/, "Ensky"], [/^GPS/, "GPS"], [/^NIC/, "NIC"], [/^Smiski/, "Dreams"], [/^Tomantoys/, "Tomantoys"], [/^景品 FuRyu/, "FuRyu 景品"], [/^景品 SEGA/, "SEGA 景品"], [/^景品 Eikoh/, "Eikoh 景品"]];
 export function mfrOf(b) { b = String(b || ""); for (const [r, n] of MFR) if (r.test(b)) return n; return b.split(" ")[0] || "其他"; }
 async function cnyRate(env) { try { const r = JSON.parse((await env.SESSIONS.get("rates")) || "null"); if (r && r.CNY) return r.CNY; } catch (e) {} return 4.9; }
 const lineCostNT = (o, l) => (l.mem ? 0 : (l.cost != null ? l.cost : l.price - (o.tier === "vip" ? 50 : 80))) * l.q;
