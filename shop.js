@@ -193,13 +193,14 @@ function slim(items, isExpired) {
 }
 
 // ---------- 訂購規則（只提醒，不擋） ----------
-// 起批規則（單款）：會員（VIP／一般）＝商品起批數（型錄沒寫的 3 件）；起批金額：非 VIP 同一廠商要滿人民幣 4,000 元，VIP 不限（依廠商湊單、需等待）；
-// 非會員＝起批數的倍數、至少 20 件。例：起批 2 → 會員 2／非會員 20；起批 3 → 3／21；起批 6 → 6／24；起批 48 → 48／48
+// 起批規則：非會員＝每款起批數的倍數、至少 21 件；一般會員＝每款照起批數、整張訂單混批合計 21 件；VIP＝每款照起批數、不限總件數。
+// 三種方案都一樣：已付款訂單依廠商累積滿人民幣 4,000 元才向日本叫貨（不同客人的訂單合併計算），先付款先寄。
+// 例：起批 2 → 會員 2／非會員 22；起批 3 → 3／21；起批 6 → 6／24；起批 48 → 48／48
 export function minQty(x, tier) {
   if (x.mem) return 1;
   const u = Number(x.box) || Number(x.moq) || 3;
   if (tier !== "none") return u;
-  return u >= 20 ? u : Math.ceil(20 / u) * u;
+  return u >= 21 ? u : Math.ceil(21 / u) * u;
 }
 // 每款數量規則（強制）：要 ≥ 起批數，而且是單位（入數／整盒數）的倍數
 export function qtyUnit(x) { return x.mem ? 1 : Number(x.box) || Number(x.moq) || 3; }
@@ -213,7 +214,8 @@ export function ruleNotes(lines, tier) {
     if (l.box && l.q % l.box) notes.push(`${l.n}：盲盒／整箱商品請以 ${l.box} 的倍數訂購`);
     else if (l.q < mq) notes.push(`${l.n}：${tier === "vip" ? "VIP 會員" : tier === "none" ? "非會員" : "一般會員"}這款 ${mq} 件起`);
   }
-  if (tier === "vip" && total > 0) notes.push(`VIP 少量訂購：依廠商湊單，同一廠商累積滿人民幣 ${POOL_MIN.toLocaleString()} 元才向日本叫貨，需要等待`);
+  if (tier === "member" && total > 0 && total < 21) notes.push(`一般會員整張訂單混批合計需 21 件（目前 ${total} 件）`);
+  if (total > 0) notes.push(`依廠商湊單：同一廠商的已付款訂單累積滿人民幣 ${POOL_MIN.toLocaleString()} 元才向日本叫貨，先付款先寄`);
   return notes;
 }
 
@@ -361,12 +363,7 @@ export async function handleShop(request, env, ctx, deps) {
       lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
-    if (tier !== "vip") {
-      const rate = await cnyRate(env), by = {};
-      for (const l of lines) if (!l.mem) by[l.m] = (by[l.m] || 0) + (l.cost * l.q) / rate;
-      const short = Object.entries(by).filter(([, v]) => v < POOL_MIN);
-      if (short.length) return Response.json({ ok: false, error: "非 VIP 會員：同一家廠商的商品要滿人民幣 " + POOL_MIN.toLocaleString() + " 元（以進價計）才能下單。\n" + short.map(([m, v]) => `・${m}：目前約 ¥${Math.round(v).toLocaleString()}，還差約 ¥${Math.ceil(POOL_MIN - v).toLocaleString()} 元人民幣（約 NT$${Math.ceil((POOL_MIN - v) * rate).toLocaleString()} 以上）`).join("\n") + "\n\n加入 VIP 會員就能少量下單（依廠商湊單、需等待）" }, { status: 400 });
-    }
+    if (tier === "member") { const pcs = lines.filter((l) => !l.mem).reduce((x, l) => x + l.q, 0); if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `一般會員整張訂單混批合計要 21 件以上（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上\n\n加入 VIP 會員就沒有總件數限制，可以真正少量叫貨` }, { status: 400 }); }
     const badQ = lines.filter((l) => !l.mem && fixQty(l, tier, l.q) !== l.q);
     if (badQ.length) return Response.json({ ok: false, error: "下列商品數量需為起批數或起批數的倍數，請調整後再送出：\n" + badQ.slice(0, 8).map((l) => `・${l.n}：${l.q} 件 → 請改成 ${fixQty(l, tier, l.q)} 件`).join("\n") }, { status: 400 });
     const f = body.form || {};
@@ -513,7 +510,8 @@ export async function computePools(env, deps = {}) {
       if ((o.paidAt || o.at) < p.since) p.since = o.paidAt || o.at;
     }
   }
-  for (const m in pools) { pools[m].cny = Math.round(pools[m].cny); pools[m].pct = Math.min(100, Math.floor((pools[m].cny / POOL_MIN) * 100)); }
+  const tAt = new Map(orders.map((o) => [o.id, o.paidAt || o.at]));
+  for (const m in pools) { pools[m].orders.sort((a, b) => String(tAt.get(a)).localeCompare(String(tAt.get(b)))); pools[m].cny = Math.round(pools[m].cny); pools[m].pct = Math.min(100, Math.floor((pools[m].cny / POOL_MIN) * 100)); }
   const prev = JSON.parse((await env.SESSIONS.get("pools")) || "{}"), notified = prev.notified || {};
   const owner = await env.SESSIONS.get("owner");
   for (const m in pools) {
@@ -537,7 +535,7 @@ export async function orderMfrStatus(env, o) {
     else if (o.status === "已取消") out.push({ m, s: "已取消" });
     else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨" + (o.po[m].at ? "（" + o.po[m].at.slice(5, 10).replace("-", "/") + "）" : "") });
     else if (o.status !== "已付款") out.push({ m, s: "付款後開始湊單" });
-    else { const p = P[m]; out.push({ m, s: p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）` }); }
+    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）`) + qn }); }
   }
   return out;
 }
@@ -1018,7 +1016,7 @@ document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest
 function unit(x){return x.mem?1:Number(x.box)||Number(x.moq)||3}
 function fixQ(x,q){q=Math.floor(Number(q)||0);if(q<=0)return 0;const u=unit(x),m=step(x);return Math.max(m,Math.ceil(q/u)*u)}
 let TT=null;function toast(t){let el=document.getElementById("toast");if(!el){el=document.createElement("div");el.id="toast";el.className="toast";document.body.appendChild(el)}el.textContent=t;el.classList.add("on");clearTimeout(TT);TT=setTimeout(()=>el.classList.remove("on"),2600)}
-function step(x){if(x.mem)return 1;const u=Number(x.box)||Number(x.moq)||3;if(TIER()!=="none")return u;return u>=20?u:Math.ceil(20/u)*u}
+function step(x){if(x.mem)return 1;const u=Number(x.box)||Number(x.moq)||3;if(TIER()!=="none")return u;return u>=21?u:Math.ceil(21/u)*u}
 function qtyBox(x,q){return q?'<div class="qty"><button data-a="-">−</button><input inputmode="numeric" value="'+q+'"><button data-a="+">＋</button></div>':'<button class="add" data-a="add">加入（'+step(x)+' 件）</button>'}
 function page(){
   const part=VIEW.slice(shown,shown+40);shown+=part.length;
@@ -1043,8 +1041,8 @@ function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.
   $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
-  if(t!=="vip")mfShort(L).forEach(([m,v])=>out.push("非 VIP："+m+" 的商品要滿人民幣 "+POOL.min.toLocaleString()+" 元才能下單（目前約 ¥"+Math.round(v).toLocaleString()+"，還差約 NT$"+Math.ceil((POOL.min-v)*POOL.rate).toLocaleString()+" 以上）"));
-  else if(total>0)out.push("VIP 可少量訂購：依廠商湊單，同一廠商累積滿人民幣 "+POOL.min.toLocaleString()+" 元才向日本叫貨，需要等待");return out}
+  if(t==="member"&&total>0&&total<21)out.push("一般會員整張訂單混批合計需 21 件（目前 "+total+" 件，還差 "+(21-total)+" 件）");
+  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];out.push("依廠商湊單：同一廠商的已付款訂單累積滿人民幣 "+POOL.min.toLocaleString()+" 元才向日本叫貨，先付款先寄（"+ms.map(m=>m+" 目前 "+(POOL.pct[m]||0)+"%").join("、")+"）")}return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
@@ -1100,7 +1098,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
     (E&&(E.amt||E.base)?'<div class="camp">🎀 '+esc(ME.camp.name)+'：本單'+esc([].concat(ME.camp.cat).join('、'))+'金額 '+fmt(E.base)+(E.amt?'，<b>付款後送 NT$'+E.amt+' 折抵券</b>':'')+(E.next?'<br><small>再加 '+fmt(E.next[0]-E.base)+' '+esc([].concat(ME.camp.cat).join('、'))+'商品，就送 NT$'+E.next[1]+'</small>':'')+'</div>':(ME.camp&&!ME.guest?'<div class="camp">🎀 '+esc(ME.camp.name)+'進行中：'+esc([].concat(ME.camp.cat).join('、'))+'商品滿額送折抵券（購物車目前沒有符合的商品）</div>':''));
   $("#panel").innerHTML='<h2>購物車<button class="x" id="cx">×</button></h2>'+
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
-  (N.length?'<div class="warn"><b>訂購規則提醒</b>（VIP 可少量下單、依廠商湊單）<br>'+N.map(esc).join("<br>")+'</div>':'')+
+  (N.length?'<div class="warn"><b>訂購規則提醒</b><br>'+N.map(esc).join("<br>")+'</div>':'')+
   cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：'+(TIER()==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
   '<form id="of"><label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
@@ -1112,7 +1110,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   if(ME.guest){const f=$("#of");f.outerHTML='<button class="go" id="lg">💚 用 LINE 確認身分並下單</button><div style="font-size:12px;color:#6b6f75;margin-top:8px;line-height:1.6">會打開 ZOARÉ 的 LINE 官方帳號，按「傳送」後會收到你的專屬下單頁，購物車會自動帶過去，再填收件資料就完成了。<br>會員價會在專屬下單頁自動套用。</div>';$("#lg").onclick=guestCheckout}
   $("#cx").onclick=()=>$("#sheet").classList.remove("on");
   if(!ME.guest)$("#of").onsubmit=submit;
-  {const sh=TIER()==="vip"?[]:mfShort(L);if(sh.length){const b=$("#go")||$("#lg");if(b){b.disabled=true;b.style.opacity=".45";b.textContent=sh.length+" 家廠商未滿人民幣 "+POOL.min.toLocaleString()+" 元，無法送出"}}}
+  {const pc=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);if(TIER()==="member"&&pc>0&&pc<21){const b=$("#go")||$("#lg");if(b){b.disabled=true;b.style.opacity=".45";b.textContent="還差 "+(21-pc)+" 件才能送出（一般會員混批 21 件）"}}}
   document.querySelectorAll('input[name="cpsel"]').forEach(r=>r.onchange=()=>{const f=$("#of");if(f)form=Object.assign(form||{},Object.fromEntries(new FormData(f)));CPSEL=r.value;renderCart()});
 }
 async function guestCheckout(){
@@ -1506,8 +1504,8 @@ export async function membershipCards(env, uid) {
   const link = (await shopLink(env, uid)) + "&q=" + encodeURIComponent("會員方案");
   const tier = await getTier(env, uid);
   const bubbles = [
-    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "可少量下單：每款照商品起批數（很多款 2～3 件），不用湊起批金額（依廠商湊單、需等待）", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
-    memBubble("一般會員", "NT$100／月", ["免國際運費", "每款照商品起批數（很多款 2～3 件）", "同一廠商要滿人民幣 4,000 元才能下單"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
+    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "真正少量叫貨：每款照商品起批數（很多款 2～3 件），沒有總件數限制（依廠商湊單、需等待）", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
+    memBubble("一般會員", "NT$100／月", ["免國際運費", "每款照商品起批數（很多款 2～3 件），不同款混批 21 件", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
   ];
   const mi = await memberInfo(env, uid);
   const exp = mi.until ? `有效到 ${fmtDay(mi.until)}（還有 ${mi.days} 天）` : "";
@@ -1539,9 +1537,10 @@ ${link}
 ・看新品、快結單的商品：點「新品上線」
 ・查訂單：點「訂單查詢」`;
   const text2 = `━━ 起批數怎麼算？ ━━
-・非會員：每款約 20 件起（照商品起批數的倍數，例如起批 2 件→20 件、3 件→21 件），同一廠商要滿人民幣 4,000 元才能下單
-・一般會員：每款照商品起批數（很多款 2～3 件），同一廠商要滿人民幣 4,000 元才能下單
-・VIP 會員：每款照商品起批數就能少量下單，不用湊金額（依廠商湊單、需等待）
+・非會員：每款 21 件起（照商品起批數的倍數，例如起批 3 件→21 件、2 件→22 件）
+・一般會員：每款照商品起批數（很多款 2～3 件），不同款混批合計 21 件
+・VIP 會員：每款照商品起批數就能少量下單，沒有總件數限制
+・所有訂單都依廠商湊單（同一廠商累積滿人民幣 4,000 元才向日本叫貨），先付款先寄
 👉 想少量多樣進貨，加入會員最划算
 
 ━━ 會員方案 ━━
