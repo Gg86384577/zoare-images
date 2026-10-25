@@ -487,6 +487,38 @@ export async function runCartReminders(env, deps) {
     if (!r || !r.ok) console.log("cart remind failed", c.uid);
   }
 }
+// ---------- 湊單邀請：還沒湊滿的廠商，LINE 提醒買過／加過購物車的客人一起湊 ----------
+// 每家廠商最多 3 天發一次、每位客人最多 1 天收一則；11:00～21:00 才發；LINE 傳「湊單提醒 關」可關掉
+export async function mfrLink(env, uid, m) { return (await shopLink(env, uid)) + "&mf=" + encodeURIComponent(m); }
+export async function runPoolReminders(env, deps, opt = {}) {
+  const h = new Date(Date.now() + 8 * 3600e3).getUTCHours();
+  if (!opt.force && (h < 11 || h >= 21 || (await env.SESSIONS.get("poolremind")) === "off")) return { sent: 0 };
+  const P = await getPools(env), need = P.need || POOL_NT, owner = await env.SESSIONS.get("owner");
+  const orders = await allOrders(env, 500), fans = {};
+  const add = (m, uid) => { if (uid && uid !== owner) (fans[m] = fans[m] || new Set()).add(uid); };
+  for (const o of orders) if (o.status !== "已取消") for (const l of o.lines || []) if (!l.mem) add(l.m || mfrOf(l.b), o.uid);
+  try { for (const c of await cartList(env)) for (const l of c.lines || []) add(l.m || mfrOf(l.b), c.uid); } catch (e) {}
+  let sent = 0; const done = [];
+  const ms = Object.entries(P.pools || {}).filter(([m, p]) => (opt.only ? m === opt.only : true) && p.nt < need && (opt.force || p.pct >= 20)).sort((a, b) => b[1].pct - a[1].pct);
+  for (const [m, p] of ms) {
+    if (!opt.force && Date.now() - Number((await env.SESSIONS.get("pr:m:" + m)) || 0) < 3 * 86400e3) continue;
+    const gap = Math.max(0, need - p.nt); let n = 0;
+    for (const uid of fans[m] || []) {
+      if (!opt.force && Date.now() - Number((await env.SESSIONS.get("pr:u:" + uid)) || 0) < 86400e3) continue;
+      const mine = orders.some((o) => o.uid === uid && o.status === "已付款" && p.orders.includes(o.id));
+      const text = `📦 ${m} 湊單進度 ${p.pct}%，還差約 NT$${gap.toLocaleString()} 就能向日本叫貨！\n` +
+        (mine ? "您的訂單也在這一批裡，大家多湊一點就能早點叫貨、早點到貨～\n" : "") +
+        `同一家廠商的商品都能一起湊（不同角色、不同系列都可以），湊滿後約 2～3 週到貨。\n\n👉 點這裡直接看 ${m} 的所有商品：\n${await mfrLink(env, uid, m)}`;
+      const r = deps.lineApi ? await deps.lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text }] }).catch(() => null) : null;
+      await env.SESSIONS.put("pr:u:" + uid, String(Date.now()), { expirationTtl: 3 * 86400 });
+      if (r && r.ok !== false) { n++; sent++; }
+    }
+    await env.SESSIONS.put("pr:m:" + m, String(Date.now()), { expirationTtl: 30 * 86400 });
+    if (n) done.push(`${m}（${p.pct}%）→ ${n} 位`);
+  }
+  if (done.length && owner && deps.lineApi && !opt.quiet) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: "📣 已發湊單邀請給買過該廠商的客人：\n" + done.join("\n") }] }).catch(() => {});
+  return { sent, done };
+}
 // ---------- 製造商湊單（同一家製造商累積滿人民幣 4,000 元才能向日本叫貨） ----------
 export const POOL_MIN = 4000; // 人民幣（廠商規定）
 export const ASK_AT_POOL = false; // 改成到貨時才問客人要不要先寄
@@ -914,6 +946,13 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     }
     return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」「ZO… 已出貨 物流單號」可以改狀態並通知客人";
   }
+  const prm = t.match(/^湊單提醒\s*(開|關|.+)?$/);
+  if (prm) {
+    const a = (prm[1] || "").trim();
+    if (a === "開" || a === "關") { await env.SESSIONS.put("poolremind", a === "關" ? "off" : "on"); return `好👌 湊單邀請已${a === "關" ? "關閉" : "開啟"}`; }
+    const r = await runPoolReminders(env, deps, { force: true, only: a || undefined, quiet: true });
+    return r.sent ? `好👌 已發湊單邀請，共 ${r.sent} 位客人\n${r.done.join("\n")}` : `目前沒有可以發的對象${a ? "（廠商名稱要跟「叫貨」清單上的一樣，且還沒湊滿）" : ""}`;
+  }
   const am2 = t.match(/^(?:到貨|備好貨|已到貨)\s+(.+)$/);
   if (am2) return await batchArrived(env, deps, am2[1].trim());
   if (/^批次$/.test(t)) { const bs = await listBatches(env, 20); return bs.length ? "📦 最近批次（每批＝同廠商湊滿 NT$20,000 叫的一次貨）\n\n" + bs.map((b) => `${b.status === "已到貨" ? "✅" : "⏳"} ${b.id}｜${b.m}｜NT$${(b.nt || 0).toLocaleString()}｜${b.orders.length} 筆｜${b.status}`).join("\n") + "\n\n貨到了傳「到貨 批次編號」" : "目前還沒有批次"; }
@@ -1095,7 +1134,7 @@ async function init(){
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   if(T&&Object.keys(cart).length)save(); // 打開商城時就把手機裡原本的購物車同步上來
   buildFam();
-  fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;document.querySelectorAll("#grid .card").forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)})}}).catch(()=>{});
+  fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){filter();return}document.querySelectorAll("#grid .card").forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)})}}).catch(()=>{});
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
    Object.keys(byD).sort().reverse().forEach(d=>{const g={},ord=[];byD[d].forEach(x=>{if(!g[x.b]){g[x.b]=[];ord.push(x.b)}g[x.b].push(x)});let more=true;for(let i=0;more;i++){more=false;ord.forEach(b=>{if(g[b][i]){NEWV.push(g[b][i]);more=true}})}})}
   NEWV=grp(NEWV);
@@ -1104,6 +1143,7 @@ async function init(){
   // 訪客的購物車透過 LINE 帶過來（cart=代碼）
   const CID=new URLSearchParams(location.search).get("cart");
   if(CID&&T){try{const r=await fetch("/shop/guestcart?id="+encodeURIComponent(CID)).then(r=>r.json());if(r.ok&&r.cart){for(const k in r.cart)if(ALL.find(x=>x.k===k))cart[k]=r.cart[k];save();bar();renderCart();$("#sheet").classList.add("on")}}catch(e){}}
+  const MF0=new URLSearchParams(location.search).get("mf");if(MF0)goMf(MF0);
   const V=new URLSearchParams(location.search).get("v");if(V==="orders")openOrders();if(V==="news")openNews();
 }
 const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）「」\\-_/|｜]/g,"");
@@ -1114,7 +1154,7 @@ let HOT=null;
 function filter(){
   if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=grp(HOT.map(k=>m.get(k)).filter(Boolean));shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
   if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）";return}
-  if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%（已付款訂單累積滿 NT$"+POOL.need.toLocaleString()+" 就向日本叫貨）";return}
+  if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%（已累積 NT$"+Math.round((POOL.nt||{})[m]||0).toLocaleString()+"／需 NT$"+POOL.need.toLocaleString()+"，同廠商商品都能一起湊）";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
   VIEW=grp(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.m||"")+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w)))));
   shown=0;$("#grid").innerHTML="";page();
@@ -1188,7 +1228,8 @@ let POOL={pct:{},nt:{},need:20000};
 function cartNT(m){let v=0;for(const k in cart){const x=byK(k);if(x&&!x.mem&&x.m===m)v+=(x.g-80)*cart[k]}return v}
 function gapNT(m,extra){return Math.max(0,Math.ceil(POOL.need-((POOL.nt||{})[m]||0)-(extra||0)))}
 function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div><div class="mg"><span class="ml">已累積 </span>NT$'+Math.round((POOL.nt||{})[x.m]||0).toLocaleString()+'<span class="ml"> ／ 需 </span><span class="ms">／</span>NT$'+POOL.need.toLocaleString()+'</div>'}
-document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-mf]");if(!t)return;e.stopPropagation();e.preventDefault();if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+t.dataset.mf;$("#q").value="";document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)},true);
+function goMf(m){if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+m;$("#q").value="";document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)}
+document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-mf]");if(!t)return;e.stopPropagation();e.preventDefault();goMf(t.dataset.mf)},true);
 function unit(x){return x.mem?1:Number(x.box)||Number(x.moq)||3}
 function fixQ(x,q){q=Math.floor(Number(q)||0);if(q<=0)return 0;const u=unit(x),m=step(x);return Math.max(m,Math.ceil(q/u)*u)}
 let TT=null;function toast(t){let el=document.getElementById("toast");if(!el){el=document.createElement("div");el.id="toast";el.className="toast";document.body.appendChild(el)}el.textContent=t;el.classList.add("on");clearTimeout(TT);TT=setTimeout(()=>el.classList.remove("on"),2600)}
