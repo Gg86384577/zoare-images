@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
+import { computePools, mfrOf, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -12,7 +12,27 @@ async function isOwner(env, t) {
 }
 const tw = () => new Date(Date.now() + 8 * 3600e3);
 
-async function buildData(env) {
+async function poolData(env, deps, orders) {
+  const P = await computePools(env, {});
+  let imgs = new Map();
+  try { imgs = new Map((await deps.loadCatalog(env)).map((x) => [String(x.jan || ""), x.img || ""]).filter((a) => a[0])); } catch (e) {}
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  const list = Object.entries(P.pools).map(([m, p]) => {
+    const items = {};
+    for (const id of p.orders) {
+      const o = byId.get(id); if (!o) continue;
+      for (const l of o.lines || []) {
+        if (l.mem || (l.m || mfrOf(l.b)) !== m) continue;
+        const k = l.jan || l.k || l.n, it = (items[k] = items[k] || { n: l.n, jan: l.jan || "", q: 0, img: imgs.get(String(l.jan || "")) || "", ids: [] });
+        it.q += l.q; if (!it.ids.includes(id)) it.ids.push(id);
+      }
+    }
+    const ords = p.orders.map((id) => byId.get(id)).filter(Boolean).map((o) => ({ id: o.id, name: o.lineName, tier: TIER_NAME[o.tier] || "非會員", at: o.paidAt || o.at }));
+    return { m, cny: p.cny, pct: p.pct, ready: p.cny >= P.min, since: p.since, orders: ords, items: Object.values(items).sort((a, b) => b.q - a.q) };
+  }).sort((a, b) => b.cny - a.cny);
+  return { min: P.min, rate: P.rate, list };
+}
+async function buildData(env, deps = {}) {
   const orders = await allOrders(env, 200);
   const today = tw().toISOString().slice(0, 10), month = today.slice(0, 7);
   const wk = new Date(tw()); wk.setUTCDate(wk.getUTCDate() - ((wk.getUTCDay() + 6) % 7)); const week = wk.toISOString().slice(0, 10);
@@ -48,8 +68,9 @@ async function buildData(env) {
   const custList = cs.map((c, i) => { c.tier = tinfo[i][0] || "none"; const tx = Number(tinfo[i][1]) || 0; if (tx && tx < Date.now()) c.tier = "none"; c.until = c.tier !== "none" && tx ? fmtDay(tx) : ""; return c; });
   custList.sort((a, b) => b.spent - a.spent || (b.last || "").localeCompare(a.last || ""));
   const carts = await cartList(env);
+  const pools = await poolData(env, deps, orders).catch((e) => ({ min: 4000, list: [], err: String(e) }));
   return {
-    carts, stats: st, daily, counts,
+    carts, pools, stats: st, daily, counts,
     members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
@@ -65,7 +86,7 @@ export async function handleAdmin(request, env, ctx, deps) {
   if (url.pathname === "/admin" || url.pathname === "/admin/") return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   const t = request.headers.get("x-admin") || url.searchParams.get("t");
   if (!(await isOwner(env, t))) return Response.json({ ok: false, error: "沒有權限，請在 LINE 傳「後台」重新取得連結" }, { status: 401 });
-  if (url.pathname === "/admin/api/data") return Response.json({ ok: true, ...(await buildData(env)) });
+  if (url.pathname === "/admin/api/data") return Response.json({ ok: true, ...(await buildData(env, deps)) });
   if (request.method === "POST" && url.pathname === "/admin/api/cmd") {
     const { text } = await request.json();
     const r = await shopOwnerCommand(env, String(text || "").slice(0, 2000), deps);
@@ -119,7 +140,7 @@ label.l{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 4px}
 </style></head><body>
 <header><div class="logo">ZOARÉ<small>商家後台</small></div><button class="rf" id="rf">↻ 更新</button></header>
 <main id="m"><div class="err">載入中…</div></main>
-<nav id="nav"><button data-v="home" class="on"><b>◫</b>總覽</button><button data-v="orders"><b>☰</b>訂單</button><button data-v="cust"><b>☺</b>客人</button><button data-v="carts"><b>🛒</b>購物車</button><button data-v="sales"><b>↗</b>銷售</button><button data-v="set"><b>⚙</b>設定</button></nav>
+<nav id="nav"><button data-v="home" class="on"><b>◫</b>總覽</button><button data-v="orders"><b>☰</b>訂單</button><button data-v="cust"><b>☺</b>客人</button><button data-v="pools"><b>📦</b>叫貨</button><button data-v="carts"><b>🛒</b>購物車</button><button data-v="sales"><b>↗</b>銷售</button><button data-v="set"><b>⚙</b>設定</button></nav>
 <script>
 const T=new URLSearchParams(location.search).get("t")||"";
 const $=s=>document.querySelector(s);
@@ -132,8 +153,15 @@ async function load(){const r=await api("/admin/api/data");if(!r.ok){$("#m").inn
 async function cmd(text,reload=true){const r=await api("/admin/api/cmd",{text});toast(r.result||"完成");if(reload)await load();return r}
 $("#rf").onclick=load;
 $("#nav").onclick=e=>{const b=e.target.closest("button");if(!b)return;V=b.dataset.v;document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));render();scrollTo(0,0)};
-function render(){({home,orders,cust,sales,set,carts})[V]()}
+function render(){({home,orders,cust,sales,set,carts,pools})[V]()}
 function ago(t){const m=Math.floor((Date.now()-t)/6e4);return m<60?m+" 分鐘前":m<1440?Math.floor(m/60)+" 小時前":Math.floor(m/1440)+" 天前"}
+function pools(){const P=D.pools||{list:[]},L=P.list||[],R=L.filter(p=>p.ready);
+  $("#m").innerHTML='<div class="card"><h3>廠商叫貨進度（門檻人民幣 '+(P.min||4000).toLocaleString()+' 元）</h3><p class="meta">只算「已付款」還沒向日本叫貨的訂單，以進價換算人民幣。同一廠商不同 IP／系列可合併。滿門檻會自動 LINE 通知你；叫完貨按「標記已叫貨」，這些訂單的狀態會變成「已向日本叫貨」，客人查訂單看得到。</p>'+(R.length?'<p style="margin:8px 0 0"><b style="color:#b8954a">✅ 可以叫貨：'+R.map(p=>esc(p.m)).join("、")+'</b></p>':'<p class="meta" style="margin-top:8px">目前沒有廠商湊滿</p>')+'</div>'+
+  (L.length?L.map(p=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(p.m)+'</b>　<small class="meta">'+p.orders.length+' 筆訂單</small></span><b style="color:'+(p.ready?'#b8954a':'inherit')+'">¥'+p.cny.toLocaleString()+'／'+(P.min||4000).toLocaleString()+'</b></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden;margin:6px 0"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+(p.ready?'#b8954a':'#999')+'"></div></div><div class="meta">'+(p.ready?'已湊滿，可以叫貨':'湊單中 '+p.pct+'%，還差 ¥'+Math.max(0,(P.min||4000)-p.cny).toLocaleString())+'</div>'+
+  '<details style="margin-top:8px"'+(p.ready?' open':'')+'><summary class="meta" style="cursor:pointer">要出貨的訂單（'+p.orders.length+'）／商品（'+p.items.length+' 款）</summary><div style="margin:6px 0">'+p.orders.map(o=>'<div class="meta" style="padding:2px 0">・<b>'+esc(o.id)+'</b>　'+esc(o.name||"")+'　'+esc(o.tier)+'　'+esc((o.at||"").slice(5,16).replace("T"," "))+'</div>').join("")+'</div>'+
+  p.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:44px;height:44px;object-fit:cover;border-radius:6px">':'<span style="width:44px"></span>')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'<br><small class="meta">JAN '+esc(i.jan||"—")+'</small></span><b>×'+i.q+'</b></div>').join("")+'</details>'+
+  (p.ready?'<button class="btn" style="margin-top:8px" onclick="poDone(\''+esc(p.m).replace(/'/g,"")+'\')">標記已叫貨</button>':'')+'</div>').join(""):'<div class="card"><p class="meta">目前沒有已付款待叫貨的訂單</p></div>')}
+window.poDone=async m=>{if(!confirm("確定 "+m+" 已向日本叫貨？這些訂單會標記為已叫貨"))return;await cmd("叫貨 "+m+" 完成")};
 function carts(){const L=D.carts||[];
   $("#m").innerHTML='<div class="card"><h3>購物車還沒結帳（'+L.length+' 位）</h3><p class="meta">只記錄用專屬連結進商城的客人。放超過 6 小時沒結帳，機器人會在 11:00～21:00 自動提醒一次（LINE 傳「購物車提醒 關」可以關掉）。</p></div>'+
   (L.length?L.map(c=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(c.name||"（未知）")+'</b>　<small class="meta">'+esc(c.tier==="vip"?"VIP":c.tier==="member"?"一般會員":"非會員")+'・'+ago(c.at)+'更新'+(c.reminded?'・已提醒':'')+'</small></span><b>'+fmt(c.total)+'</b></div>'+c.lines.map(l=>'<div class="meta" style="padding:2px 0">・'+esc(l.n)+' ×'+l.q+'　'+fmt(l.price*l.q)+'</div>').join("")+'<div class="meta" style="margin-top:6px">共 '+c.lines.length+' 款 '+c.qty+' 件</div></div>').join(""):'<div class="card"><p class="meta">目前沒有客人的購物車有東西</p></div>')}

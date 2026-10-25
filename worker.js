@@ -10,13 +10,13 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const CATALOG_VERSION = "20261025-0940";
+const CATALOG_VERSION = "20261025-1500";
 const CATALOG_SHA = "cb33c40ca0dfad7ce85f03605ccd33b96042bbaa"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
@@ -70,9 +70,11 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 
 【批發規則】
 - 每款商品的起批數在候選商品資料的「起批」欄位，報價時一定要照那個數字講，不要每款都說 21 件。
-- 會員（VIP NT$1,000、一般會員 NT$100 都一樣）：每款照商品本身的起批數（型錄沒寫的 3 件起），可不同款混批，整張訂單合計 21 件起。
+- 會員（VIP NT$1,000、一般會員 NT$100）：每款照商品本身的起批數（型錄沒寫的 3 件起）。
 - 非會員：單款要買到商品起批數的倍數、至少 20 件（起批 2→20 件、3→21 件、5→20 件、6→24 件；起批本身超過 20 的照商品）。
-- 不論會員或非會員，整張訂單商品合計未滿 21 件不出貨（系統會擋下訂單）。
+- 起批金額：非 VIP（非會員、一般會員）同一家廠商（製造商）的商品要滿人民幣 4,000 元（以進價計，約台幣 2 萬）才能下單，系統會擋下未達標的訂單；同一廠商不同 IP、系列可以合併計算。
+- VIP 會員不用湊起批金額，每款照起批數就能少量下單，但要等同一廠商的所有已付款訂單累積滿人民幣 4,000 元才會向日本叫貨，需要等待；商城每個商品下面有「廠商」和湊單進度條。
+- 客人問訂單進度：請客人傳「我的訂單」，會顯示每家廠商目前是湊單中幾 %、已湊滿準備叫貨、或已向日本叫貨。
 - 一律以候選商品「起批」欄位寫的數字為準。不可以說「加入會員後全部一件起」。
 - 客人問 FuRyu（フリュー）的商品（常見是三麗鷗景品絨毛、公仔）：目錄沒有就不要報價，回「FuRyu 是廠商配貨制喔 我們可以幫您下單 但會依實際配貨數量出貨 沒配到的部分全額退款～ 我請專人跟您確認款式跟數量」，並加 #HANDOFF。目錄有同角色的其他三麗鷗商品，可以順便列出 1～3 款給客人參考。
 - 商品資料若有「訂購方式：整箱…不拆箱不混款」，這款不論是否會員都只能單款整箱訂（每款 1 箱起），報價時要講清楚每箱幾個、整箱價（單價×每箱數量），以及截單時間。
@@ -806,7 +808,7 @@ async function handleEvent(env, ev) {
   // 查自己的會員期限
   if (uid && env.SESSIONS && /^(會員期限|我的會員|會員到期|到期日|會員資格|會員狀態|我是會員嗎)$/.test(text.replace(/\s/g, ""))) {
     const mi = await memberInfo(env, uid);
-    if (mi.tier === "none") return reply(env, ev.replyToken, [{ type: "text", text: "您目前還不是會員喔～\n加入會員（$100 或 $1,000）每款照商品起批數就能訂（很多款 2～3 件），不同款混批 21 件就能出單👇" }, ...(await membershipCards(env, uid))]);
+    if (mi.tier === "none") return reply(env, ev.replyToken, [{ type: "text", text: "您目前還不是會員喔～\n加入會員（$100 或 $1,000）每款照商品起批數就能訂（很多款 2～3 件），VIP 不用湊起批金額就能少量下單👇" }, ...(await membershipCards(env, uid))]);
     const name = mi.tier === "vip" ? "👑 VIP 會員" : "一般會員";
     return reply(env, ev.replyToken, [{ type: "text", text: `您目前是 ${name}\n📅 有效到 ${fmtDay(mi.until)}（還有 ${mi.days} 天）\n\n到期會自動停止，想續約的話傳「會員方案」直接下單，會從到期日往後延長，不會浪費天數喔～`,
       quickReply: { items: [{ type: "action", action: { type: "message", label: "續約／升級", text: "會員方案" } }, { type: "action", action: { type: "message", label: "商品目錄", text: "商品目錄" } }] } }]);
@@ -1347,6 +1349,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 2) { try { await runNewArrivals(env); } catch (e) { console.log("newArrivals", e); } }
       if (Math.floor(hm / 5) % 12 === 3) { try { await runMemberReminders(env); } catch (e) { console.log("memberRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 4) { try { await runCartReminders(env, { lineApi }); } catch (e) { console.log("cartRemind", e); } }
+      if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
       try { await runBootTasks(env); } catch (e) { console.log("boot", e); }
       try { if ((await env.SESSIONS.get("menuver")) !== RICHMENU_VER && env.LINE_CHANNEL_ACCESS_TOKEN) { const r2 = await setupRichMenu(env); console.log("richmenu", r2); if (!/^好/.test(r2)) await env.SESSIONS.put("menuver", RICHMENU_VER + "-fail"); } } catch (e) { console.log("richmenu", e); }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
