@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -73,7 +73,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 會員（VIP NT$1,000、一般會員 NT$100）：每款照商品本身的起批數（型錄沒寫的 3 件起）。一般會員整張訂單不同款混批合計 21 件起；VIP 沒有總件數限制，可以真正少量叫貨。
 - 非會員：單款要買到商品起批數的倍數、至少 21 件（起批 3→21 件、2→22 件、5→25 件、6→24 件；起批本身超過 21 的照商品）。
 - 廠商起批金額（三種方案都適用）：日本廠商要同一家廠商（製造商）累積滿 NT$20,000（以進價計；匯率變高時門檻會跟著調高）才接單。跟客人說明時一律只講台幣，不要提到人民幣。客人下單不用自己湊滿，所有客人已付款的訂單會依廠商合併計算，滿了就向日本叫貨，先付款先寄；同一廠商不同 IP、系列可以合併，不同廠商不能合併，也不能補差價或補運費提早出貨。商城每個商品下面有「廠商」和湊單進度條。
-- 湊滿時系統會用 LINE 問每位客人「這次出貨」還是「順延」；選順延的這批先讓排下一位的客人出貨，下一批湊滿再問。
+- 一張訂單有多家廠商時，某家廠商的貨先到，系統會用 LINE 問客人要「先寄」已到貨的商品（這次要付一次運費 NT$60，會員可用運費券），還是「等齊再寄」（先留著，全部到齊一起寄只算一次運費）。已出貨的商品在訂單裡會被劃掉。
 - 運費：依廠商分批寄出，每出貨一次國內運費 NT$60；國際運費依物流公司報價（約每公斤 NT$220，出貨時才會確定金額並通知客人）。不是會員或運費券用完的，出貨時自動加收運費。會員每月送運費券（一般會員 5 張國內；VIP 10 張國內＋10 張國際），每月 1 號重新發放，出貨時自動折抵。客人傳「優惠券」可以看本月還剩幾張。會員沒有「全免運」了，不要說運費全免。
 - 一張訂單有多家廠商時，依廠商分別叫貨，哪家先到貨就先寄那家的商品（會分批寄、各有物流單號），全部寄完訂單才會變成「已出貨」。
 - 客人問訂單進度：請客人傳「我的訂單」，會顯示每家廠商目前是湊單中幾 %、已湊滿準備叫貨、或已向日本叫貨。
@@ -744,6 +744,11 @@ async function handleEvent(env, ev) {
   if (uid && !isOwnerUser) {
     await noteContact(env, uid, null);
     await logInquiry(env, uid, msg.type === "text" ? text : msg.type === "image" ? "（傳了圖片）" : msg.type === "sticker" ? "（貼圖）" : "");
+  }
+  // 到貨時客人回覆「先寄／等齊再寄」
+  if (uid && env.SESSIONS && /^(先寄|等齊再寄)\s+ZO/i.test(text || "")) {
+    const er = await earlyShipReply(env, uid, text, { lineApi });
+    if (er) return reply(env, ev.replyToken, [{ type: "text", text: er }]);
   }
   // 湊滿時客人回覆「這次出貨／順延」
   if (uid && env.SESSIONS && /^(這次出貨|順延)\s+ZO/i.test(text || "")) {

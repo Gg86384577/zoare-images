@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
+import { listBatches, arrivalState, orderMfrs, computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -33,7 +33,17 @@ async function poolData(env, deps, orders) {
   const waiting = [];
   for (const o of orders) if (o.status === "已付款") for (const x of mfrStatusSync(o, P.pools, P.need)) if (x.k === "po") waiting.push({ id: o.id, name: o.lineName, m: x.m, at: o.po[x.m].at, paid: o.paidAt || o.at, items: o.lines.filter((l) => !l.mem && (l.m || mfrOf(l.b)) === x.m).map((l) => ({ n: l.n, q: l.q })) });
   waiting.sort((x, y) => (x.m + x.paid).localeCompare(y.m + y.paid));
-  return { need: P.need, rate: P.rate, list, waiting, P: P.pools };
+  const batches = (await listBatches(env, 40)).map((b) => ({ ...b, n: b.orders.length }));
+  const ready = [], hold = [];
+  for (const o of orders) {
+    if (o.status !== "已付款") continue;
+    const st = arrivalState(o);
+    if (!st.arrived.length) continue;
+    const row = { id: o.id, name: o.lineName, tier: TIER_NAME[o.tier] || "非會員", arrived: st.arrived, waiting: st.waiting, choice: st.choice, paid: o.paidAt || o.at, items: o.lines.filter((l) => !l.mem && st.arrived.includes(l.m || mfrOf(l.b))).map((l) => ({ n: l.n, q: l.q, jan: l.jan || "", img: imgs.get(String(l.jan || "")) || "" })) };
+    (st.ready ? ready : hold).push(row);
+  }
+  ready.sort((x, y) => String(x.paid).localeCompare(String(y.paid)));
+  return { need: P.need, rate: P.rate, list, waiting, P: P.pools, batches, ready, hold };
 }
 async function buildData(env, deps = {}) {
   const orders = await allOrders(env, 200);
@@ -78,7 +88,7 @@ async function buildData(env, deps = {}) {
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
       total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), mst: mfrStatusSync(o, (pools && pools.P) || {}, pools && pools.need), shipDue: o.shipDue || 0, intlPend: Object.values(o.sh || {}).some((v) => v.fee && v.fee.intl === null),
-      lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan })), form: o.form, notes: o.notes || [] })),
+      lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan, sh: !!(o.sh && o.sh[l.m || mfrOf(l.b)]) })), form: o.form, notes: o.notes || [] })),
     customers: custList,
     settings: { bank: bank || "", linepay: linepay || "", news: JSON.parse(news || "[]") },
   };
@@ -159,13 +169,17 @@ $("#nav").onclick=e=>{const b=e.target.closest("button");if(!b)return;V=b.datase
 function render(){({home,orders,cust,sales,set,carts,pools})[V]()}
 function ago(t){const m=Math.floor((Date.now()-t)/6e4);return m<60?m+" 分鐘前":m<1440?Math.floor(m/60)+" 小時前":Math.floor(m/1440)+" 天前"}
 function pools(){const P=D.pools||{list:[]},L=P.list||[],R=L.filter(p=>p.ready);
-  $("#m").innerHTML='<div class="card"><h3>廠商叫貨進度（門檻 NT$'+(P.need||20000).toLocaleString()+'）</h3><p class="meta">只算「已付款」還沒向日本叫貨的訂單，以進價計算（人民幣 4,000 元換算，最低 NT$20,000，匯率高時跟著調高）。同一廠商不同 IP／系列、不同客人的訂單都合併計算，先付款先寄。滿門檻會自動 LINE 通知你，也會問每位客人「這次出貨」或「順延」（順延的這批不算，下一批再問）；叫完貨按「標記已叫貨」，這些訂單的狀態會變成「已向日本叫貨」，客人查訂單看得到。</p>'+(R.length?'<p style="margin:8px 0 0"><b style="color:#b8954a">✅ 可以叫貨：'+R.map(p=>esc(p.m)).join("、")+'</b></p>':'<p class="meta" style="margin-top:8px">目前沒有廠商湊滿</p>')+'</div>'+
+  $("#m").innerHTML='<div class="card"><h3>廠商叫貨進度（門檻 NT$'+(P.need||20000).toLocaleString()+'）</h3><p class="meta">只算「已付款」還沒向日本叫貨的訂單，以進價計算（人民幣 4,000 元換算，最低 NT$20,000，匯率高時跟著調高）。同一廠商不同 IP／系列、不同客人的訂單都合併計算，先付款先寄。滿門檻會自動 LINE 通知你；叫完貨按「標記已叫貨」，這批訂單會變成一個「批次」（NT$20,000 一個單位），貨備好再到下面按「這批到貨了」。</p>'+(R.length?'<p style="margin:8px 0 0"><b style="color:#b8954a">✅ 可以叫貨：'+R.map(p=>esc(p.m)).join("、")+'</b></p>':'<p class="meta" style="margin-top:8px">目前沒有廠商湊滿</p>')+'</div>'+
   (L.length?L.map(p=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(p.m)+'</b>　<small class="meta">'+p.orders.length+' 筆訂單</small></span><b style="color:'+(p.ready?'#b8954a':'inherit')+'">NT$'+p.nt.toLocaleString()+'／'+(P.need||20000).toLocaleString()+'</b></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden;margin:6px 0"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+(p.ready?'#b8954a':'#999')+'"></div></div><div class="meta">'+(p.ready?'已湊滿，可以叫貨':'湊單中 '+p.pct+'%，還差 NT$'+Math.max(0,(P.need||20000)-p.nt).toLocaleString())+'</div>'+
   '<details style="margin-top:8px"'+(p.ready?' open':'')+'><summary class="meta" style="cursor:pointer">要出貨的訂單（'+p.orders.length+'，依付款先後）／商品（'+p.items.length+' 款）</summary><div style="margin:6px 0">'+p.orders.map((o,i)=>'<div class="meta" style="padding:2px 0">'+(i+1)+'. <b>'+esc(o.id)+'</b>　'+esc(o.name||"")+'　'+esc(o.tier)+'　'+esc((o.at||"").slice(5,16).replace("T"," "))+(o.ans?'　<b style="color:'+(o.ans==="出貨"?'#1f6b33':o.ans==="順延"?'#9e1b1b':'#8a5a00')+'">'+(o.ans==="出貨"?'✅ 確認出貨':o.ans==="順延"?'⏸ 順延':'⏳ 未回覆')+'</b>':'')+'</div>').join("")+'</div>'+
   p.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:44px;height:44px;object-fit:cover;border-radius:6px">':'<span style="width:44px"></span>')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'<br><small class="meta">JAN '+esc(i.jan||"—")+'</small></span><b>×'+i.q+'</b></div>').join("")+'</details>'+
   (p.ready?'<button class="btn" style="margin-top:8px" onclick="poDone(\''+esc(p.m).replace(/'/g,"")+'\')">標記已叫貨</button>':'')+'</div>').join(""):'<div class="card"><p class="meta">目前沒有已付款待叫貨的訂單</p></div>')+
-  '<div class="card"><h3>已叫貨、等到貨出貨（'+(P.waiting||[]).length+'）</h3><p class="meta">依廠商、付款先後排列。哪家的貨先到，就先把那家的商品寄給客人，按「這家已出貨」會自動扣運費券（國內 $60、國際每公斤 $220）並通知客人；同一張訂單全部廠商都出貨後，訂單自動變成「已出貨」。</p></div>'+
-  (P.waiting||[]).map(w=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(w.m)+'</b>　<small class="meta">'+esc(w.id)+'・'+esc(w.name||"")+'・叫貨 '+esc((w.at||"").slice(5,10))+'</small></span><button class="btn" onclick="shipM(\''+w.id+'\',\''+esc(w.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button></div>'+w.items.map(i=>'<div class="meta" style="padding:2px 0">・'+esc(i.n)+' ×'+i.q+'</div>').join("")+'</div>').join("")}
+  '<div class="card"><h3>📦 批次（每批＝同廠商湊滿 NT$'+(P.need||20000).toLocaleString()+' 叫的一次貨）</h3><p class="meta">貨備好／到貨就按「這批到貨了」。訂單只有這家的商品、或其他廠商也都到了 → 直接進「待出貨」；還有其他廠商沒到 → 系統 LINE 問客人要先寄（付一次 $60）還是等齊再寄。</p></div>'+
+  ((P.batches||[]).filter(b=>b.status!=="已到貨").map(b=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(b.m)+'</b>　<small class="meta">'+esc(b.id)+'・叫貨 '+esc((b.at||"").slice(5,10))+'・'+b.n+' 筆・NT$'+(b.nt||0).toLocaleString()+'</small></span><button class="btn" style="background:#161616;color:#fff" onclick="arrB(\''+esc(b.id)+'\')">📦 這批到貨了</button></div></div>').join("")||'<div class="card"><p class="meta">目前沒有等到貨的批次</p></div>')+
+  '<div class="card"><h3>🚚 待出貨（'+(P.ready||[]).length+'）</h3><p class="meta">已到貨的商品，依付款先後。按「出貨」會把這張訂單已到貨的商品一次寄出（算一次運費），寄出的商品會在訂單裡劃掉。</p></div>'+
+  (P.ready||[]).map(r=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(r.name||"")+'</b>　<small class="meta">'+esc(r.id)+'・'+esc(r.tier)+(r.waiting.length?'・客人選先寄（還在等 '+esc(r.waiting.join("、"))+'）':'')+'</small></span><button class="btn" style="background:#161616;color:#fff" onclick="shipM(\''+r.id+'\',\'已到貨\')">🚚 出貨</button></div><div class="meta">寄：'+esc(r.arrived.join("、"))+'</div>'+r.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px">':'')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'</span><b>×'+i.q+'</b></div>').join("")+'</div>').join("")+
+  ((P.hold||[]).length?'<div class="card"><h3>⏳ 已到貨、留著等齊（'+P.hold.length+'）</h3>'+P.hold.map(r=>'<div class="meta" style="padding:4px 0;border-top:1px solid #eee"><b>'+esc(r.id)+'</b>　'+esc(r.name||"")+'<br>已到：'+esc(r.arrived.join("、"))+'　還在等：'+esc(r.waiting.join("、"))+'　'+(r.choice==="等齊"?'<b>客人選等齊再寄</b>':'<b style="color:#8a5a00">等客人回覆</b>')+' <button class="btn" style="padding:4px 8px;font-size:12px" onclick="shipM(\''+r.id+'\',\'已到貨\')">還是先寄</button></div>').join("")+'</div>':'')}
+window.arrB=async b=>{if(!confirm("確定批次 "+b+" 的貨已經備好／到貨？\n會通知需要的客人"))return;await cmd("到貨 "+b)};
 window.poDone=
 async m=>{if(!confirm("確定 "+m+" 已向日本叫貨？這些訂單會標記為已叫貨"))return;await cmd("叫貨 "+m+" 完成")};
 function carts(){const L=D.carts||[];
@@ -188,7 +202,7 @@ function orders(){
 function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'+esc(o.name)+'</b><span class="st s-'+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
   '<div class="meta">'+o.id+'｜'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.pay)+'｜'+esc(o.tier)+'價</div><div style="font-size:18px;font-weight:700;margin-top:4px">'+fmt(o.total)+'</div>'+
   '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+((o.mst||[]).length&&o.status!=="已取消"?'<div style="margin-top:6px">'+o.mst.map(z=>'<div class="meta" style="display:flex;gap:6px;align-items:center;padding:3px 0"><span style="flex:1">🏭 <b>'+esc(z.m)+'</b>：'+esc(z.s)+'</span>'+(z.k!=="sh"&&o.status==="已付款"?'<button class="btn" style="padding:5px 9px;font-size:12px" onclick="shipM(\''+o.id+'\',\''+esc(z.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button>':'')+'</div>').join("")+'</div>':'')+(o.shipDue||o.intlPend?'<div class="memo">🚚 已出貨運費要收 NT$'+o.shipDue.toLocaleString()+(o.intlPend?'　<b style="color:#9e1b1b">國際運費待填</b> <button class="btn" style="padding:4px 8px;font-size:12px" onclick="intlFee(\''+o.id+'\')">填國際運費</button>':'')+'</div>':'')+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff">'+esc(o.diff)+'</div>':'')+
-  '<details><summary>品項・收件資料・修改</summary>'+o.lines.map((l,i)=>'<div class="it"><span class="n">'+esc(l.n)+'<br><small style="color:#888">'+fmt(l.price)+' × '+l.q+' = '+fmt(l.sub)+'</small></span><input type="number" min="0" value="'+l.q+'" data-i="'+i+'"><button class="btn" onclick="setQ(\''+o.id+'\','+i+',this)">改</button></div>').join("")+
+  '<details><summary>品項・收件資料・修改</summary>'+o.lines.map((l,i)=>'<div class="it"><span class="n"'+(l.sh?' style="color:#999"':'')+'>'+(l.sh?'✅ <s>'+esc(l.n)+'</s> 已出貨':esc(l.n))+'<br><small style="color:#888">'+fmt(l.price)+' × '+l.q+' = '+fmt(l.sub)+'</small></span><input type="number" min="0" value="'+l.q+'" data-i="'+i+'"><button class="btn" onclick="setQ(\''+o.id+'\','+i+',this)">改</button></div>').join("")+
   '<div class="meta" style="margin-top:8px;color:#333">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+(o.paid5?'<br>後五碼：'+esc(o.paid5):'')+(o.track?'<br>物流單號：'+esc(o.track):'')+'</div>'+
   (o.notes.length?'<div class="meta" style="color:#8c2a1f;margin-top:6px">'+o.notes.map(esc).join("<br>")+'</div>':'')+
   '<div class="btns"><button onclick="addItem(\''+o.id+'\')">＋ 加商品</button><button onclick="memo(\''+o.id+'\')">📝 備註</button><button class="del" onclick="delO(\''+o.id+'\')">🗑 刪除訂單</button></div></details>'+

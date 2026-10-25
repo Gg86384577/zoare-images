@@ -341,7 +341,7 @@ export async function handleShop(request, env, ctx, deps) {
     const list = await myOrders(env, uid, 20);
     await Promise.all(list.map(async (o) => { o._mst = await orderMfrStatus(env, o); }));
     return Response.json({ ok: true, orders: list.map((o) => ({ id: o.id, at: o.at, status: o.status, paid5: o.paid5 || "", track: o.track || "", pay: o.form.pay || "轉帳",
-      mst: o._mst || [], total: o.total, qty: o.qty, tier: TIER_NAME[o.tier], discount: o.coupon ? o.coupon.amt : 0, earned: o.earned ? o.earned.amt : 0, lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub })), form: o.form })),
+      mst: o._mst || [], total: o.total, qty: o.qty, tier: TIER_NAME[o.tier], discount: o.coupon ? o.coupon.amt : 0, earned: o.earned ? o.earned.amt : 0, lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, sh: !!shippedMark(o, l) })), form: o.form })),
       bank: (await env.SESSIONS.get("bank")) || "", linepay: (await env.SESSIONS.get("linepay")) || "" });
   }
   if (p === "/shop/order" && request.method === "POST") {
@@ -489,6 +489,7 @@ export async function runCartReminders(env, deps) {
 }
 // ---------- 製造商湊單（同一家製造商累積滿人民幣 4,000 元才能向日本叫貨） ----------
 export const POOL_MIN = 4000; // 人民幣（廠商規定）
+export const ASK_AT_POOL = false; // 改成到貨時才問客人要不要先寄
 export const POOL_NT = 20000; // 對客人顯示的台幣門檻；人民幣 4,000 × 當天匯率超過 2 萬就跟著調高
 export const poolNeed = (rate) => Math.max(POOL_NT, Math.ceil(POOL_MIN * (rate || 0)));
 const MFR = [[/^309 /, "三麗鷗 309"], [/^CRUX/, "CRUX"], [/^Nakajima/, "Nakajima"], [/^T's Factory/, "T's Factory"], [/^Kamio/, "Kamio"], [/^J's Planning/, "J's Planning"],
@@ -524,7 +525,7 @@ export async function computePools(env, deps = {}) {
       await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📦 ${m} 已湊滿叫貨金額！\n已付款待叫貨：NT$${p.nt.toLocaleString()}（門檻 NT$${need.toLocaleString()}）\n訂單 ${p.orders.length} 筆：${p.orders.join("、")}\n\n請到後台「叫貨」查看要叫的商品，叫完傳「叫貨 ${m} 完成」` }] }).catch(() => {});
       notified[m] = sig;
     }
-    if (p.nt >= need && deps.lineApi) {
+    if (ASK_AT_POOL && p.nt >= need && deps.lineApi) {
       const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
       for (const id of p.orders) {
         const o = orders.find((x) => x.id === id);
@@ -591,6 +592,7 @@ export function mfrStatusSync(o, P, need) {
     if (sh) out.push({ m, s: "已出貨（" + mmdd(sh.at) + "）" + (sh.track ? "・物流單號 " + sh.track : ""), k: "sh" });
     else if (o.status === "已出貨") out.push({ m, s: "已出貨", k: "sh" });
     else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
+    else if (o.arr && o.arr[m]) { const w = orderMfrs(o).filter((x) => !(o.sh && o.sh[x]) && !(o.arr && o.arr[x])); out.push({ m, s: "已到貨（" + mmdd(o.arr[m].at) + "）" + (!w.length || o.early === "先寄" ? "，準備出貨" : o.early === "等齊" ? "，幫您留著等其他商品一起寄" : "，等您回覆要不要先寄"), k: "arr" }); }
     else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），到貨就先寄這家的商品", k: "po" });
     else if (o.status === "已付款" && o.defer && o.defer[m]) out.push({ m, s: "已順延到下一批（下一批湊滿會再問您）", k: "defer" });
     else if (o.status !== "已付款") { const p = P[m]; out.push({ m, s: `付款後開始湊單（這家目前 ${p ? p.pct : 0}%${gap(p)}）`, k: "wait" }); }
@@ -614,6 +616,8 @@ export async function customerOrders(env, uid, link) {
   const rows = list.map((o, i) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　${o.form.pay || "轉帳"}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}${mst[i].length > 1 && o.status !== "已取消" || (mst[i].length && !["已出貨", "已取消"].includes(o.status)) ? "\n" + mst[i].map((x) => `　・${x.m}：${x.s}`).join("\n") : ""}`);
   return `您最近的訂單：\n\n${rows.join("\n\n")}\n\n要看完整明細，請點：\n${link}&v=orders\n（或傳訂單編號給我）${lemai}`;
 }
+const strike = (t) => [...String(t)].map((c) => c + "\u0336").join("");
+function shippedMark(o, l) { const m = l.m || mfrOf(l.b); return o.sh && o.sh[m] ? "✅已出貨 " : ""; }
 export async function customerOrderDetail(env, uid, id) {
   const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
   if (!o || o.uid !== uid) return null;
@@ -625,7 +629,7 @@ async function payInfo(env, pay) {
 }
 const payHow = (pay) => pay === "LINE Pay" ? "付款後請回到 LINE 傳「付款截圖」給我們" : "轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」給我們";
 function orderText(o, withRules = true) {
-  const items = o.lines.map((l) => `・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
+  const items = o.lines.map((l) => shippedMark(o, l) ? `・✅已出貨 ${strike(l.n + " ×" + l.q)}` : `・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
   return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　${o.coupon ? `小計 NT$${(o.subtotal || o.total + o.coupon.amt).toLocaleString()}\n🎟 折抵券 −NT$${o.coupon.amt}\n` : ""}合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）${o.earned ? `\n🎁 ${o.earned.camp}：付款後送 NT$${o.earned.amt} 折抵券（下次使用）` : ""}\n運費：依廠商分批寄出，每次出貨國內 NT$${SHIP_DOM}，國際依物流報價（約每公斤 NT$${SHIP_KG}），會員用運費券折抵${o.shipDue ? `\n已出貨運費：NT$${o.shipDue.toLocaleString()}` : ""}` +
     `\n付款方式：${o.form.pay || "轉帳"}` +
     (withRules && o.notes.length ? `\n\n⚠️ 訂購規則提醒：\n${o.notes.slice(0, 8).map((n) => "・" + n).join("\n")}` : "");
@@ -746,6 +750,55 @@ async function payStats(env) {
 }
 
 // 老闆指令：訂單列表／單筆查詢／匯款資料
+// ---------- 批次到貨（每批＝同一廠商湊滿 NT$20,000 叫的一次貨） ----------
+export async function listBatches(env, n = 60) {
+  const ids = JSON.parse((await env.SESSIONS.get("batches")) || "[]").slice(0, n);
+  return (await Promise.all(ids.map((id) => env.SESSIONS.get("batch:" + id)))).filter(Boolean).map((x) => JSON.parse(x));
+}
+// 訂單裡已到貨、還沒寄的廠商；還沒到貨的廠商
+export function arrivalState(o) {
+  const ms = orderMfrs(o).filter((m) => !(o.sh && o.sh[m]));
+  const arrived = ms.filter((m) => o.arr && o.arr[m]), waiting = ms.filter((m) => !(o.arr && o.arr[m]));
+  const choice = o.early || "";
+  const ready = arrived.length && (!waiting.length || choice === "先寄");
+  return { arrived, waiting, ready: !!ready, choice };
+}
+async function batchArrived(env, deps, key) {
+  const bs = await listBatches(env, 300);
+  let b = bs.find((x) => x.id.toUpperCase() === key.toUpperCase()) || bs.find((x) => x.m === key && x.status === "已叫貨");
+  if (!b) return `找不到批次「${key}」。傳「批次」可以看所有批次`;
+  if (b.status === "已到貨") return `批次 ${b.id}（${b.m}）已經標記到貨過了`;
+  const now = nowMin(); b.status = "已到貨"; b.arrAt = now;
+  await env.SESSIONS.put("batch:" + b.id, JSON.stringify(b));
+  let ready = 0, asked = 0;
+  for (const id of b.orders) {
+    const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+    if (!o || o.status === "已取消" || (o.sh && o.sh[b.m])) continue;
+    o.arr = o.arr || {}; o.arr[b.m] = { at: now, bid: b.id };
+    const st = arrivalState(o);
+    if (st.waiting.length && !o.early) {
+      o.early = ""; o.earlyAsk = now;
+      const its = o.lines.filter((l) => !l.mem && st.arrived.includes(l.m || mfrOf(l.b)));
+      await deps.lineApi?.(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: `📦 您的訂單 ${id} 有商品到貨囉！\n已到貨（${st.arrived.join("、")}）：\n${its.slice(0, 10).map((l) => `・${l.n} ×${l.q}`).join("\n")}${its.length > 10 ? `\n…共 ${its.length} 款` : ""}\n\n還在等：${st.waiting.join("、")}\n\n要先寄已到貨的商品嗎？\n・先寄：這次出貨運費 NT$${SHIP_DOM}（會員可用運費券折抵），國際運費另計\n・等齊再寄：先幫您留著，其他商品到了再一起寄，只算一次運費`, quickReply: { items: [{ type: "action", action: { type: "message", label: "🚚 先寄", text: `先寄 ${id}` } }, { type: "action", action: { type: "message", label: "⏳ 等齊再寄", text: `等齊再寄 ${id}` } }] } }] }).catch(() => {});
+      asked++;
+    } else ready++;
+    await saveOrder(env, o);
+  }
+  return `好👌 批次 ${b.id}（${b.m}）已標記到貨\n・可以直接出貨：${ready} 筆\n・還有其他廠商沒到、已 LINE 問客人要不要先寄：${asked} 筆\n\n後台「叫貨」→「待出貨」會列出要寄的訂單`;
+}
+export async function earlyShipReply(env, uid, text, deps = {}) {
+  const m0 = String(text || "").match(/^(先寄|等齊再寄)\s+(ZO\w{10})$/i);
+  if (!m0) return null;
+  const id = m0[2].toUpperCase(), o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+  if (!o || o.uid !== uid) return "找不到這張訂單，可以傳「我的訂單」查看～";
+  const st = arrivalState(o);
+  if (!st.arrived.length) return `訂單 ${id} 目前沒有已到貨、還沒寄的商品喔`;
+  o.early = m0[1] === "先寄" ? "先寄" : "等齊"; o.earlyAt = nowMin();
+  await saveOrder(env, o);
+  const owner = await env.SESSIONS.get("owner");
+  if (owner) await pushTo(deps, env, owner, `${o.early === "先寄" ? "🚚" : "⏳"} ${o.lineName || "客人"}（${id}）：${o.early === "先寄" ? "已到貨的商品要先寄（" + st.arrived.join("、") + "）" : "等其他商品到齊再一起寄"}`);
+  return o.early === "先寄" ? `好的👌 訂單 ${id} 已到貨的商品（${st.arrived.join("、")}）會先寄出\n這次運費國內 NT$${SHIP_DOM}（會員會先用運費券折抵），出貨時會再通知您～` : `好的👌 先幫您留著，等 ${st.waiting.join("、")} 到貨後一起寄，只算一次運費～`;
+}
 // 依廠商出貨：國內運費每次 NT$60、國際運費出貨時問老闆金額；會員先用運費券
 const nowMin = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
 async function pushTo(deps, env, to, text) { if (!deps.lineApi) return false; const r = await deps.lineApi(env, "/v2/bot/message/push", { to, messages: [{ type: "text", text }] }).catch(() => null); return !!(r && r.ok); }
@@ -756,6 +809,7 @@ async function shipPart(env, deps, id, rest) {
   const ms = orderMfrs(o), todo = ms.filter((x) => !(o.sh && o.sh[x]));
   let group, tail;
   if (/^全部(\s|$)/.test(rest)) { group = todo; tail = rest.slice(2); }
+  else if (/^已到貨(\s|$)/.test(rest)) { group = arrivalState(o).arrived; tail = rest.slice(3); }
   else { const m = ms.slice().sort((a, b) => b.length - a.length).find((x) => rest === x || rest.startsWith(x + " ") || rest.startsWith(x + "/")); if (!m) return `訂單 ${id} 裡沒有這家廠商。這張訂單的廠商：${ms.join("、")}\n格式：${id} 分批出貨 廠商名 物流單號 國際運費金額\n（整張一起寄：${id} 分批出貨 全部 物流單號 國際運費金額）`; group = [m]; tail = rest.slice(m.length); }
   if (!group.length) return `訂單 ${id} 的商品都已經出貨了`;
   if (group.some((x) => o.sh && o.sh[x])) return `訂單 ${id} 的 ${group.join("、")} 已經標記出貨過了`;
@@ -772,6 +826,7 @@ async function shipPart(env, deps, id, rest) {
   const key = group.join("＋");
   for (const x of group) o.sh[x] = { at: now, track, fee: x === group[0] ? fee : { same: group[0] }, batch: key };
   const left = ms.filter((x) => !o.sh[x]);
+  o.early = "";
   if (!left.length) { o.statusBefore = o.status; o.status = "已出貨"; if (track) o.track = track; }
   await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
   const sc = await shipCoupons(env, o.uid);
@@ -799,14 +854,17 @@ export async function shopOwnerCommand(env, text, deps = {}) {
   const pm = text.match(/^叫貨\s+(.+?)\s*(完成|已叫)$/);
   if (pm) {
     const m = pm[1].trim(), now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
-    const orders = await allOrders(env, 500); let n = 0;
-    for (const o of orders) {
+    const orders = await allOrders(env, 500); let n = 0, nt = 0;
+    const bid = "B" + now.slice(5, 10).replace("-", "") + "-" + Date.now().toString(36).slice(-3).toUpperCase(), ids = [];
+    for (const o of orders.slice().sort((a, b) => String(a.paidAt || a.at).localeCompare(String(b.paidAt || b.at)))) {
       if (o.status !== "已付款" || !(o.lines || []).some((l) => !l.mem && (l.m || mfrOf(l.b)) === m) || (o.po && o.po[m]) || (o.sh && o.sh[m])) continue;
       if (o.defer && o.defer[m]) { delete o.defer[m]; if (o.ask) delete o.ask[m]; await saveOrder(env, o); continue; } // 順延的客人回到下一批
-      o.po = o.po || {}; o.po[m] = { at: now }; await saveOrder(env, o); n++;
+      o.po = o.po || {}; o.po[m] = { at: now, bid }; await saveOrder(env, o); n++; ids.push(o.id);
+      for (const l of o.lines) if (!l.mem && (l.m || mfrOf(l.b)) === m) nt += lineCostNT(o, l);
     }
+    if (n) { await env.SESSIONS.put("batch:" + bid, JSON.stringify({ id: bid, m, at: now, orders: ids, nt: Math.round(nt), status: "已叫貨" })); const bi = JSON.parse((await env.SESSIONS.get("batches")) || "[]"); bi.unshift(bid); await env.SESSIONS.put("batches", JSON.stringify(bi.slice(0, 300))); }
     await computePools(env, deps);
-    return n ? `好👌 ${m} 已標記叫貨，共 ${n} 筆訂單\n客人查訂單會看到「已向日本叫貨」` : `找不到「${m}」已付款、待叫貨的訂單（廠商名稱要跟「叫貨」清單上的一樣）`;
+    return n ? `好👌 ${m} 已標記叫貨，批次 ${bid}，共 ${n} 筆訂單\n貨備好／到貨時按後台「這批到貨了」，或傳「到貨 ${bid}」` : `找不到「${m}」已付款、待叫貨的訂單（廠商名稱要跟「叫貨」清單上的一樣）`;
   }
   if (/^(購物車|客人購物車|誰加購物車)$/.test(text)) return await cartReport(env);
   if (/^購物車提醒\s*(開|關|開啟|關閉)$/.test(text)) { const off = /關/.test(text); await env.SESSIONS.put("cartremind", off ? "off" : "on"); return off ? "好👌 已關閉購物車提醒" : "好👌 已開啟購物車提醒：客人放了 6 小時沒結帳，會在 11:00～21:00 傳一則提醒（每次只提醒一次）"; }
@@ -856,6 +914,9 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     }
     return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」「ZO… 已出貨 物流單號」可以改狀態並通知客人";
   }
+  const am2 = t.match(/^(?:到貨|備好貨|已到貨)\s+(.+)$/);
+  if (am2) return await batchArrived(env, deps, am2[1].trim());
+  if (/^批次$/.test(t)) { const bs = await listBatches(env, 20); return bs.length ? "📦 最近批次（每批＝同廠商湊滿 NT$20,000 叫的一次貨）\n\n" + bs.map((b) => `${b.status === "已到貨" ? "✅" : "⏳"} ${b.id}｜${b.m}｜NT$${(b.nt || 0).toLocaleString()}｜${b.orders.length} 筆｜${b.status}`).join("\n") + "\n\n貨到了傳「到貨 批次編號」" : "目前還沒有批次"; }
   const sm = t.match(/^(ZO\w{10})\s+分批出貨\s+([\s\S]+)$/i);
   if (sm) return await shipPart(env, deps, sm[1].toUpperCase(), sm[2].trim());
   const im = t.match(/^(ZO\w{10})\s+國際運費\s+\$?\s*(\d+)\s*(.*)$/i);
@@ -1185,7 +1246,7 @@ async function openOrders(){$("#panel").classList.remove("vmode");VK=null;
       '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+((o.mst||[]).length&&o.status!=="已取消"&&(o.status!=="已出貨"||o.mst.length>1)?'<div class="mst">'+o.mst.map(z=>'<div>🏭 '+esc(z.m)+'：'+esc(z.s)+'</div>').join("")+'</div>':'')+
       (o.paid5?'<div style="font-size:12.5px">匯款後五碼：'+esc(o.paid5)+'</div>':'')+(o.track?'<div style="font-size:12.5px">🚚 物流單號：<b>'+esc(o.track)+'</b></div>':'')+
       (o.status==="待付款"&&(o.pay==="LINE Pay"?r.linepay:r.bank)?'<div class="warn" style="margin-top:8px">'+(o.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'<br>'+payHTML(o.pay==="LINE Pay"?r.linepay:r.bank,o.pay==="LINE Pay").replace(/\\n/g,"<br>").replace(/<\\/?pre>/g,"")+'<br>付款後請在 LINE 傳'+(o.pay==="LINE Pay"?"「付款截圖」":"「後五碼」和「轉帳截圖」")+'</div>':'')+
-      '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li><span>'+esc(l.n)+' ×'+l.q+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
+      '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li'+(l.sh?' style="color:#999"':'')+'><span>'+(l.sh?'✅ <s>':'')+esc(l.n)+' ×'+l.q+(l.sh?'</s> 已出貨':'')+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
       '<div style="font-size:12.5px;margin-top:6px;color:#444">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+'</div></details></div>').join("")
       :'<div class="empty">還沒有訂單喔</div>';
     $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2>'+body+'<p style="font-size:12px;color:#6b6f75;margin-top:12px;text-align:center">有問題直接在 LINE 跟我們說喔</p>';
