@@ -1557,6 +1557,32 @@ function recalc(o) {
   o.qty = o.lines.reduce((a, l) => a + l.q, 0);
   o.notes = ruleNotes(o.lines, o.tier);
 }
+// 改單後重算折抵券：①這張用的券（未達門檻就退回）②活動送的券（依新金額增加／減少／取消）
+export async function reconcileCoupons(env, o) {
+  const notes = [], sub = o.lines.reduce((a, l) => a + l.price * l.q, 0);
+  let cps = null; const load = async () => (cps = cps || (await getCoupons(env, o.uid)));
+  o.subtotal = sub; o.total = sub;
+  if (o.coupon) {
+    const c = (await load()).find((x) => x.id === o.coupon.id);
+    const min = c ? c.min : 0;
+    if (sub < min) { if (c && c.used === o.id) c.used = ""; notes.push(`🎟 金額未達 NT$${min.toLocaleString()}，原本使用的 NT$${o.coupon.amt} 折抵券已退回（可下次使用）`); delete o.coupon; delete o.subtotal; }
+    else o.total = sub - o.coupon.amt;
+  } else delete o.subtotal;
+  const day = String(o.at || "").slice(0, 10), camp = CAMPAIGNS.find((c) => (o.earned && c.name === o.earned.camp) || (day >= c.from && day <= c.to));
+  if (camp) {
+    for (const l of o.lines) if (!l.c || !l.c.length) l.c = catsOf({ n: l.n, b: l.b });
+    const earn = campaignEarn(o.lines.map((l) => ({ ...l, sub: l.price * l.q })), camp), old = o.earned ? o.earned.amt : 0;
+    if (earn.amt !== old) {
+      const L = await load(), c = o.earned ? L.find((x) => x.id === o.earned.id) : null;
+      if (c && c.used) notes.push(`⚠️ 活動回饋券（NT$${old}）已在 ${c.used} 用掉，無法再調整，請人工確認`);
+      else if (!earn.amt) { if (c) L.splice(L.indexOf(c), 1); delete o.earned; notes.push(`🎁 活動金額未達 NT$${camp.tiers[camp.tiers.length - 1][0].toLocaleString()}，原本要送的 NT$${old} 折抵券取消`); }
+      else if (c) { c.amt = earn.amt; c.min = earn.amt * camp.minX; o.earned.amt = earn.amt; o.earned.base = earn.base; notes.push(`🎁 活動回饋券 NT$${old} → NT$${earn.amt}（${earn.amt > old ? "增加" : "減少"}）`); }
+      else { const id = "CP" + Math.random().toString(36).slice(2, 8).toUpperCase(), today = twDay(); L.unshift({ id, amt: earn.amt, min: earn.amt * camp.minX, name: camp.name, src: o.id, at: today, exp: addDays(today, camp.days), used: "" }); o.earned = { id, amt: earn.amt, base: earn.base, camp: camp.name }; notes.push(`🎁 達到活動門檻，加送 NT$${earn.amt} 折抵券（付款後生效）`); }
+    }
+  }
+  if (cps) await saveCoupons(env, o.uid, cps);
+  return notes.length ? "\n" + notes.join("\n") : "";
+}
 function payDiff(o) {
   if (!["已付款", "已出貨"].includes(o.status)) return "";
   const paid = (o.payInfo && o.payInfo.amount) || 0;
@@ -1600,7 +1626,8 @@ export async function mergeOrders(env, deps, ids) {
     if (o.memUntil && !t.memUntil) t.memUntil = o.memUntil;
   }
   recalc(t);
-  if (t.coupon) { t.subtotal = t.total; t.total = Math.max(0, t.total - t.coupon.amt); }
+  { const L = await getCoupons(env, t.uid); let ch = false; for (const o of rest) if (o.earned) { const c = L.find((x) => x.id === o.earned.id && !x.used); if (c) { L.splice(L.indexOf(c), 1); ch = true; } } if (ch) await saveCoupons(env, t.uid, L); }
+  const mcn = await reconcileCoupons(env, t);
   if (anyPaid) { t.status = "已付款"; t.payInfo = Object.assign({}, t.payInfo || {}, { amount: paid }); }
   t.merged = [...(t.merged || []), ...rest.map((o) => o.id)];
   await saveOrder(env, t);
@@ -1612,8 +1639,8 @@ export async function mergeOrders(env, deps, ids) {
   for (const o of rest) await env.SESSIONS.delete("o:" + o.id);
   try { await computePools(env, {}); } catch (e) {}
   const diff = payDiff(t), unpaidPart = !anyPaid ? "" : "";
-  if (deps.lineApi) await deps.lineApi(env, "/v2/bot/message/push", { to: t.uid, messages: [{ type: "text", text: `您的訂單已幫您合併成一張：${t.id}\n（原本的 ${rest.map((o) => o.id).join("、")} 已併入）\n共 ${t.qty} 件　合計 NT$${t.total.toLocaleString()}${diff}\n\n合併後一起湊單、一起出貨，運費只算一次～` }] }).catch(() => {});
-  return `好👌 已合併成 ${t.id}（併入 ${rest.map((o) => o.id).join("、")}）\n共 ${t.qty} 件　合計 NT$${t.total.toLocaleString()}　狀態：${t.status}${diff}${unpaidPart}\n已通知客人`;
+  if (deps.lineApi) await deps.lineApi(env, "/v2/bot/message/push", { to: t.uid, messages: [{ type: "text", text: `您的訂單已幫您合併成一張：${t.id}\n（原本的 ${rest.map((o) => o.id).join("、")} 已併入）\n共 ${t.qty} 件　合計 NT$${t.total.toLocaleString()}${mcn}${diff}\n\n合併後一起湊單、一起出貨，運費只算一次～` }] }).catch(() => {});
+  return `好👌 已合併成 ${t.id}（併入 ${rest.map((o) => o.id).join("、")}）\n共 ${t.qty} 件　合計 NT$${t.total.toLocaleString()}　狀態：${t.status}${mcn}${diff}${unpaidPart}\n已通知客人`;
 }
 async function deleteOrder(env, id) {
   try { await revertMem(env, JSON.parse((await env.SESSIONS.get("o:" + id)) || "null")); } catch (e) {}
@@ -1727,9 +1754,9 @@ async function ownerOrders(env, t, deps) {
     if (hit.length > 1) return `「${x[1]}」對到好幾款，請打更完整的名稱：\n` + hit.map((l) => "・" + l.n).join("\n");
     o.lines = o.lines.filter((l) => l !== hit[0]);
     if (!o.lines.length) { await deleteOrder(env, id); return `🗑️ ${id} 品項都刪完了，整張訂單已刪除`; }
-    recalc(o); await saveOrder(env, o);
-    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：移除「${hit[0].n}」\n新的合計 NT$${o.total.toLocaleString()}`);
-    return `好👌 ${id} 已移除「${hit[0].n}」\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${payDiff(o)}`;
+    recalc(o); const cn = await reconcileCoupons(env, o); await saveOrder(env, o);
+    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：移除「${hit[0].n}」\n新的合計 NT$${o.total.toLocaleString()}${cn}`);
+    return `好👌 ${id} 已移除「${hit[0].n}」\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${cn}${payDiff(o)}`;
   }
   // 加品項：「ZO… 加 4970381929411 3」
   x = cmd.match(/^(?:加|新增|加入)\s*(.+?)\s+(\d+)\s*(?:個|件|盒)?$/);
@@ -1743,9 +1770,9 @@ async function ownerOrders(env, t, deps) {
     const price = o.tier === "vip" ? it.v : it.g;
     const ex = o.lines.find((l) => l.k === it.k);
     if (ex) ex.q += q; else o.lines.push({ k: it.k, img: it.img || "", n: it.n, b: it.b, jan: it.jan, q, price, cost: it.mem ? 0 : it.g - 80, sub: 0, box: it.box, moq: it.moq, mem: it.mem || "" });
-    recalc(o); await saveOrder(env, o);
-    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：加入「${it.n}」×${q}\n新的合計 NT$${o.total.toLocaleString()}`);
-    return `好👌 ${id} 已加入「${it.n}」×${q}\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${payDiff(o)}`;
+    recalc(o); const cn = await reconcileCoupons(env, o); await saveOrder(env, o);
+    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：加入「${it.n}」×${q}\n新的合計 NT$${o.total.toLocaleString()}${cn}`);
+    return `好👌 ${id} 已加入「${it.n}」×${q}\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${cn}${payDiff(o)}`;
   }
   // 改數量：「ZO… 小八 改 24」「ZO… 小八 24個」
   x = cmd.match(/^(.+?)\s*(?:改成?|改為|數量|→|=)?\s*(\d+)\s*(?:個|件|盒)?$/);
@@ -1756,9 +1783,9 @@ async function ownerOrders(env, t, deps) {
     const q = Number(x[2]);
     if (q === 0) o.lines = o.lines.filter((l) => l !== hit[0]); else hit[0].q = q;
     if (!o.lines.length) { await deleteOrder(env, id); return `🗑️ ${id} 品項都刪完了，整張訂單已刪除`; }
-    recalc(o); await saveOrder(env, o);
-    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：「${hit[0].n}」數量改為 ${q}\n新的合計 NT$${o.total.toLocaleString()}`);
-    return `好👌 ${id}「${hit[0].n}」改成 ${q} 個\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${payDiff(o)}`;
+    recalc(o); const cn = await reconcileCoupons(env, o); await saveOrder(env, o);
+    await notifyCustomer(env, deps, o, `您的訂單 ${id} 已更新：「${hit[0].n}」數量改為 ${q}\n新的合計 NT$${o.total.toLocaleString()}${cn}`);
+    return `好👌 ${id}「${hit[0].n}」改成 ${q} 個\n新合計 NT$${o.total.toLocaleString()}（已通知客人）${cn}${payDiff(o)}`;
   }
   return `看不懂這個訂單指令😂 可以用：\n・${id} 備註 內容\n・${id} 小八 改 24\n・${id} 刪 小八\n・${id} 加 JAN碼 3\n・${id} 地址 新地址\n・刪除 ${id}\n・${id} 已付款／已出貨／取消`;
 }
