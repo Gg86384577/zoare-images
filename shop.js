@@ -194,7 +194,7 @@ function slim(items, isExpired) {
 
 // ---------- 訂購規則（只提醒，不擋） ----------
 // 起批規則：非會員＝每款起批數的倍數、至少 21 件；一般會員＝每款照起批數、整張訂單混批合計 21 件；VIP＝每款照起批數、不限總件數。
-// 三種方案都一樣：已付款訂單依廠商累積滿人民幣 4,000 元才向日本叫貨（不同客人的訂單合併計算），先付款先寄。
+// 三種方案都一樣：已付款訂單依廠商累積滿 NT$20,000（＝人民幣 4,000 元，匯率高時跟著調高，對客人一律只寫台幣）才向日本叫貨，先付款先寄。
 // 例：起批 2 → 會員 2／非會員 22；起批 3 → 3／21；起批 6 → 6／24；起批 48 → 48／48
 export function minQty(x, tier) {
   if (x.mem) return 1;
@@ -215,7 +215,7 @@ export function ruleNotes(lines, tier) {
     else if (l.q < mq) notes.push(`${l.n}：${tier === "vip" ? "VIP 會員" : tier === "none" ? "非會員" : "一般會員"}這款 ${mq} 件起`);
   }
   if (tier === "member" && total > 0 && total < 21) notes.push(`一般會員整張訂單混批合計需 21 件（目前 ${total} 件）`);
-  if (total > 0) notes.push(`依廠商湊單：同一廠商的已付款訂單累積滿人民幣 ${POOL_MIN.toLocaleString()} 元才向日本叫貨，先付款先寄`);
+  if (total > 0) notes.push(`依廠商湊單：同一廠商的已付款訂單累積滿 NT$${POOL_NT.toLocaleString()} 才向日本叫貨，先付款先寄`);
   return notes;
 }
 
@@ -325,8 +325,8 @@ export async function handleShop(request, env, ctx, deps) {
   if (p === "/shop/pools") {
     const P = await getPools(env), o = {};
     const c = {};
-    for (const m in P.pools) { o[m] = P.pools[m].pct; c[m] = P.pools[m].cny; }
-    return Response.json({ ok: true, min: P.min || POOL_MIN, rate: P.rate || (await cnyRate(env)), pct: o, cny: c }, { headers: { "cache-control": "public, max-age=120" } });
+    for (const m in P.pools) { o[m] = P.pools[m].pct; c[m] = P.pools[m].nt || 0; }
+    return Response.json({ ok: true, need: P.need || poolNeed(await cnyRate(env)), pct: o, nt: c }, { headers: { "cache-control": "public, max-age=120" } });
   }
   if (p === "/shop/me") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
@@ -487,7 +487,9 @@ export async function runCartReminders(env, deps) {
   }
 }
 // ---------- 製造商湊單（同一家製造商累積滿人民幣 4,000 元才能向日本叫貨） ----------
-export const POOL_MIN = 4000;
+export const POOL_MIN = 4000; // 人民幣（廠商規定）
+export const POOL_NT = 20000; // 對客人顯示的台幣門檻；人民幣 4,000 × 當天匯率超過 2 萬就跟著調高
+export const poolNeed = (rate) => Math.max(POOL_NT, Math.ceil(POOL_MIN * (rate || 0)));
 const MFR = [[/^309 /, "三麗鷗 309"], [/^CRUX/, "CRUX"], [/^Nakajima/, "Nakajima"], [/^T's Factory/, "T's Factory"], [/^Kamio/, "Kamio"], [/^J's Planning/, "J's Planning"],
   [/^萬代/, "萬代南夢宮"], [/^角色雜貨・背包|^企鵝家族/, "Unic"], [/^OST/, "OST"], [/^A Planning/, "A Planning"], [/^Sun Arrow/, "Sun Arrow"], [/^Hatakeyama/, "畠山"],
   [/^森本/, "森本產業"], [/^日本現貨/, "中央煽賣"], [/^RE-MENT/, "RE-MENT"], [/^三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列)|^幽遊白書/, "K-company"], [/^Marimo/, "Marimo Craft"],
@@ -497,7 +499,7 @@ async function cnyRate(env) { try { const r = JSON.parse((await env.SESSIONS.get
 const lineCostNT = (o, l) => (l.mem ? 0 : (l.cost != null ? l.cost : l.price - (o.tier === "vip" ? 50 : 80))) * l.q;
 // 已付款、還沒叫貨的部分 → 依製造商加總（人民幣），湊滿就通知老闆
 export async function computePools(env, deps = {}) {
-  const rate = await cnyRate(env), orders = await allOrders(env, 500);
+  const rate = await cnyRate(env), need = poolNeed(rate), orders = await allOrders(env, 500);
   const pools = {};
   for (const o of orders) {
     if (o.status !== "已付款") continue;
@@ -505,33 +507,34 @@ export async function computePools(env, deps = {}) {
       if (l.mem) continue;
       const m = l.m || mfrOf(l.b);
       if ((o.po && o.po[m]) || (o.sh && o.sh[m])) continue;
-      const p = (pools[m] = pools[m] || { cny: 0, orders: [], since: o.paidAt || o.at });
-      p.cny += lineCostNT(o, l) / rate;
+      const p = (pools[m] = pools[m] || { nt: 0, orders: [], since: o.paidAt || o.at });
+      p.nt += lineCostNT(o, l);
       if (!p.orders.includes(o.id)) p.orders.push(o.id);
       if ((o.paidAt || o.at) < p.since) p.since = o.paidAt || o.at;
     }
   }
   const tAt = new Map(orders.map((o) => [o.id, o.paidAt || o.at]));
-  for (const m in pools) { pools[m].orders.sort((a, b) => String(tAt.get(a)).localeCompare(String(tAt.get(b)))); pools[m].cny = Math.round(pools[m].cny); pools[m].pct = Math.min(100, Math.floor((pools[m].cny / POOL_MIN) * 100)); }
+  for (const m in pools) { pools[m].orders.sort((a, b) => String(tAt.get(a)).localeCompare(String(tAt.get(b)))); pools[m].nt = Math.round(pools[m].nt); pools[m].pct = Math.min(100, Math.floor((pools[m].nt / need) * 100)); }
   const prev = JSON.parse((await env.SESSIONS.get("pools")) || "{}"), notified = prev.notified || {};
   const owner = await env.SESSIONS.get("owner");
   for (const m in pools) {
     const p = pools[m], sig = p.orders.slice().sort().join(",");
-    if (p.cny >= POOL_MIN && notified[m] !== sig && owner && deps.lineApi) {
-      await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📦 ${m} 已湊滿叫貨金額！\n已付款待叫貨：¥${p.cny.toLocaleString()} 元人民幣（門檻 ¥${POOL_MIN.toLocaleString()}）\n訂單 ${p.orders.length} 筆：${p.orders.join("、")}\n\n請到後台「叫貨」查看要叫的商品，叫完傳「叫貨 ${m} 完成」` }] }).catch(() => {});
+    if (p.nt >= need && notified[m] !== sig && owner && deps.lineApi) {
+      await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📦 ${m} 已湊滿叫貨金額！\n已付款待叫貨：NT$${p.nt.toLocaleString()}（門檻 NT$${need.toLocaleString()}）\n訂單 ${p.orders.length} 筆：${p.orders.join("、")}\n\n請到後台「叫貨」查看要叫的商品，叫完傳「叫貨 ${m} 完成」` }] }).catch(() => {});
       notified[m] = sig;
     }
   }
-  const out = { at: Date.now(), rate, min: POOL_MIN, pools, notified };
+  const out = { at: Date.now(), rate, need, pools, notified };
   await env.SESSIONS.put("pools", JSON.stringify(out));
   return out;
 }
-export async function getPools(env) { return JSON.parse((await env.SESSIONS.get("pools")) || "null") || { pools: {}, min: POOL_MIN, rate: await cnyRate(env) }; }
+export async function getPools(env) { return JSON.parse((await env.SESSIONS.get("pools")) || "null") || { pools: {}, need: poolNeed(await cnyRate(env)), rate: await cnyRate(env) }; }
 // 一張訂單裡每家製造商目前的狀態（給客人看）
 export const orderMfrs = (o) => [...new Set((o.lines || []).filter((l) => !l.mem).map((l) => l.m || mfrOf(l.b)))];
 const mmdd = (t) => (t ? String(t).slice(5, 10).replace("-", "/") : "");
-export function mfrStatusSync(o, P, rate) {
-  const out = [], gap = (p) => { const g = Math.max(0, POOL_MIN - (p ? p.cny : 0)); return g ? `・還差約人民幣 ¥${g.toLocaleString()}` + (rate ? `（約 NT$${Math.ceil(g * rate).toLocaleString()}）` : "") : ""; };
+export function mfrStatusSync(o, P, need) {
+  need = need || POOL_NT;
+  const out = [], gap = (p) => { const g = Math.max(0, need - (p ? p.nt || 0 : 0)); return g ? `・還差約 NT$${g.toLocaleString()}` : ""; };
   for (const m of orderMfrs(o)) {
     const sh = o.sh && o.sh[m];
     if (sh) out.push({ m, s: "已出貨（" + mmdd(sh.at) + "）" + (sh.track ? "・物流單號 " + sh.track : ""), k: "sh" });
@@ -539,11 +542,11 @@ export function mfrStatusSync(o, P, rate) {
     else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
     else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），到貨就先寄這家的商品", k: "po" });
     else if (o.status !== "已付款") { const p = P[m]; out.push({ m, s: `付款後開始湊單（這家目前 ${p ? p.pct : 0}%${gap(p)}）`, k: "wait" }); }
-    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%${gap(p)}（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）`) + qn, k: "pool" }); }
+    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.nt >= need ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%${gap(p)}（滿 NT$${need.toLocaleString()} 叫貨）`) + qn, k: "pool" }); }
   }
   return out;
 }
-export async function orderMfrStatus(env, o) { const G = await getPools(env); return mfrStatusSync(o, G.pools, G.rate); }
+export async function orderMfrStatus(env, o) { const G = await getPools(env); return mfrStatusSync(o, G.pools, G.need || poolNeed(G.rate)); }
 async function myOrders(env, uid, n = 5) {
   const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
   const out = [];
@@ -692,7 +695,7 @@ async function payStats(env) {
 
 // 老闆指令：訂單列表／單筆查詢／匯款資料
 export async function shopOwnerCommand(env, text, deps = {}) {
-  if (/^(叫貨|叫貨進度|湊單)$/.test(text)) { const P = await computePools(env, deps); const L = Object.entries(P.pools).sort((a, b) => b[1].cny - a[1].cny); return L.length ? "📦 製造商湊單進度（已付款、還沒叫貨，門檻人民幣 " + POOL_MIN.toLocaleString() + " 元）\n\n" + L.map(([m, p]) => `${p.cny >= POOL_MIN ? "✅" : "⏳"} ${m}：¥${p.cny.toLocaleString()}（${p.pct}%）・${p.orders.length} 筆訂單${p.cny >= POOL_MIN ? "・可以叫貨" : ""}`).join("\n") + "\n\n叫完貨傳「叫貨 廠商名 完成」，例如：叫貨 森本產業 完成" : "目前沒有已付款、待叫貨的訂單"; }
+  if (/^(叫貨|叫貨進度|湊單)$/.test(text)) { const P = await computePools(env, deps); const L = Object.entries(P.pools).sort((a, b) => b[1].nt - a[1].nt); return L.length ? "📦 製造商湊單進度（已付款、還沒叫貨，門檻 NT$" + P.need.toLocaleString() + "）\n\n" + L.map(([m, p]) => `${p.nt >= P.need ? "✅" : "⏳"} ${m}：NT$${p.nt.toLocaleString()}（${p.pct}%）・${p.orders.length} 筆訂單${p.nt >= P.need ? "・可以叫貨" : ""}`).join("\n") + "\n\n叫完貨傳「叫貨 廠商名 完成」，例如：叫貨 森本產業 完成" : "目前沒有已付款、待叫貨的訂單"; }
   const pm = text.match(/^叫貨\s+(.+?)\s*(完成|已叫)$/);
   if (pm) {
     const m = pm[1].trim(), now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
@@ -963,7 +966,7 @@ let HOT=null;
 function filter(){
   if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=grp(HOT.map(k=>m.get(k)).filter(Boolean));shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
   if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）";return}
-  if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%（已付款訂單累積滿人民幣 "+POOL.min.toLocaleString()+" 元就向日本叫貨）";return}
+  if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%（已付款訂單累積滿 NT$"+POOL.need.toLocaleString()+" 就向日本叫貨）";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
   VIEW=grp(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.m||"")+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w)))));
   shown=0;$("#grid").innerHTML="";page();
@@ -1033,13 +1036,10 @@ function card(x){
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img class="zm" data-z="'+esc(x.k)+'" loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-let POOL={pct:{},cny:{},min:4000,rate:4.9};
-function cartCNY(m){let v=0;for(const k in cart){const x=byK(k);if(x&&!x.mem&&x.m===m)v+=(x.g-80)*cart[k]/POOL.rate}return v}
-function gapNT(m,extra){return Math.max(0,Math.ceil((POOL.min-((POOL.cny||{})[m]||0)-(extra||0))*POOL.rate))}
-function gapTxt(m){const g=gapNT(m);return g?"還差約 NT$"+g.toLocaleString()+" 這家就發貨":"已湊滿，準備向日本叫貨"}
-function gapFull(m){if(!m)return"";const g=gapNT(m),c=cartCNY(m),g2=gapNT(m,c);return '<div class="mg2"><b>🏭 '+esc(m)+' 發貨門檻：人民幣 ¥'+POOL.min.toLocaleString()+'（約 NT$'+Math.ceil(POOL.min*POOL.rate).toLocaleString()+'）</b><br>'+(g?'目前所有已付款訂單還差約 <b>NT$'+g.toLocaleString()+'</b> 就能向日本叫貨':'已湊滿，準備向日本叫貨')+(c>0&&g?'<br>加上你購物車裡這家的商品，'+(g2?'還差約 <b>NT$'+g2.toLocaleString()+'</b>':'<b>就湊滿了！</b>'):'')+'<br><small>同一廠商不同角色、系列都可以一起湊；付款後才算進進度，先付款先寄</small></div>'}
-function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div><div class="mg"><span class="ml">已累積 </span>NT$'+Math.round(((POOL.cny||{})[x.m]||0)*POOL.rate).toLocaleString()+'<span class="ml"> ／ 需 </span><span class="ms">／</span>NT$'+Math.ceil(POOL.min*POOL.rate).toLocaleString()+'</div>'}
-function mfShort(L){const by={};L.forEach(({x,q})=>{if(x.mem)return;by[x.m]=(by[x.m]||0)+(x.g-80)*q/POOL.rate});return Object.entries(by).filter(e=>e[1]<POOL.min)}
+let POOL={pct:{},nt:{},need:20000};
+function cartNT(m){let v=0;for(const k in cart){const x=byK(k);if(x&&!x.mem&&x.m===m)v+=(x.g-80)*cart[k]}return v}
+function gapNT(m,extra){return Math.max(0,Math.ceil(POOL.need-((POOL.nt||{})[m]||0)-(extra||0)))}
+function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div><div class="mg"><span class="ml">已累積 </span>NT$'+Math.round((POOL.nt||{})[x.m]||0).toLocaleString()+'<span class="ml"> ／ 需 </span><span class="ms">／</span>NT$'+POOL.need.toLocaleString()+'</div>'}
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-mf]");if(!t)return;e.stopPropagation();e.preventDefault();if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+t.dataset.mf;$("#q").value="";document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)},true);
 function unit(x){return x.mem?1:Number(x.box)||Number(x.moq)||3}
 function fixQ(x,q){q=Math.floor(Number(q)||0);if(q<=0)return 0;const u=unit(x),m=step(x);return Math.max(m,Math.ceil(q/u)*u)}
@@ -1070,7 +1070,7 @@ function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
   if(t==="member"&&total>0&&total<21)out.push("一般會員整張訂單混批合計需 21 件（目前 "+total+" 件，還差 "+(21-total)+" 件）");
-  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];out.push("依廠商湊單：同一廠商的已付款訂單累積滿人民幣 "+POOL.min.toLocaleString()+" 元才向日本叫貨，先付款先寄（"+ms.map(m=>{const g=gapNT(m,cartCNY(m));return m+(g?" 加上這張訂單還差約 NT$"+g.toLocaleString():" 加上這張訂單就湊滿")}).join("、")+"）")}return out}
+  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];out.push("依廠商湊單：同一廠商的已付款訂單累積滿 NT$"+POOL.need.toLocaleString()+" 才向日本叫貨，先付款先寄（"+ms.map(m=>{const g=gapNT(m,cartNT(m));return m+(g?" 加上這張訂單還差約 NT$"+g.toLocaleString():" 加上這張訂單就湊滿")}).join("、")+"）")}return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
@@ -1568,7 +1568,7 @@ ${link}
 ・非會員：每款 21 件起（照商品起批數的倍數，例如起批 3 件→21 件、2 件→22 件）
 ・一般會員：每款照商品起批數（很多款 2～3 件），不同款混批合計 21 件
 ・VIP 會員：每款照商品起批數就能少量下單，沒有總件數限制
-・所有訂單都依廠商湊單（同一廠商累積滿人民幣 4,000 元才向日本叫貨），先付款先寄
+・所有訂單都依廠商湊單（同一廠商累積滿 NT$20,000 才向日本叫貨），先付款先寄
 👉 想少量多樣進貨，加入會員最划算
 
 ━━ 會員方案 ━━
