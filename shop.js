@@ -475,17 +475,20 @@ export async function cartReport(env) {
   return `🛒 購物車還沒結帳的客人（${L.length} 位）\n\n` + L.slice(0, 20).map((c) => `👤 ${c.name || "（未知）"}｜${TIER_NAME[c.tier] || ""}｜${agoTxt(c.at)}更新${c.reminded ? "｜已提醒" : ""}\n` + c.lines.slice(0, 8).map((l) => `・${l.n} ×${l.q}`).join("\n") + (c.lines.length > 8 ? `\n…還有 ${c.lines.length - 8} 款` : "") + `\n共 ${c.lines.length} 款 ${c.qty} 件・NT$${c.total.toLocaleString()}`).join("\n\n") + (L.length > 20 ? `\n\n…還有 ${L.length - 20} 位，請看後台「購物車」` : "");
 }
 // 放了 6 小時以上沒結帳 → 提醒一次（11:00～21:00 才傳；內容改了會重新計時）
-export async function runCartReminders(env, deps) {
+export async function runCartReminders(env, deps, opt = {}) {
   const h = new Date(Date.now() + 8 * 3600e3).getUTCHours();
-  if (h < 11 || h >= 21 || (await env.SESSIONS.get("cartremind")) === "off") return;
+  if (!opt.force && (h < 11 || h >= 21 || (await env.SESSIONS.get("cartremind")) === "off")) return 0;
+  let n = 0;
   for (const c of await cartList(env)) {
-    if (c.reminded || Date.now() - c.at < 6 * 3600e3) continue;
+    if (opt.uid && c.uid !== opt.uid) continue;
+    if (!opt.force && (c.reminded || Date.now() - c.at < 6 * 3600e3)) continue;
     const link = await shopLink(env, c.uid);
     const text = `${c.name ? c.name + " " : ""}您好～您的購物車裡還有 ${c.lines.length} 款商品（${c.qty} 件）還沒結帳喔🛒\n\n${c.lines.slice(0, 5).map((l) => "・" + l.n + " ×" + l.q).join("\n")}${c.lines.length > 5 ? "\n…" : ""}\n\n部分商品有結單日或數量限制，要下單的話點這裡繼續👇\n${link}\n有任何問題直接跟我們說～`;
     const r = await deps.lineApi(env, "/v2/bot/message/push", { to: c.uid, messages: [{ type: "text", text }] });
     c.reminded = Date.now(); await env.SESSIONS.put("ct:" + c.uid, JSON.stringify(c), { expirationTtl: 30 * 86400 });
-    if (!r || !r.ok) console.log("cart remind failed", c.uid);
+    if (!r || !r.ok) console.log("cart remind failed", c.uid); else n++;
   }
+  return n;
 }
 // ---------- 湊單邀請：還沒湊滿的廠商，LINE 提醒全部買家一起湊（一則訊息最多列 3 家廠商）----------
 // 每家廠商最多 3 天發一次、每位客人最多 1 天收一則；11:00～21:00 才發；LINE 傳「湊單提醒 關」可關掉
@@ -905,6 +908,8 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     return n ? `好👌 ${m} 已標記叫貨，批次 ${bid}，共 ${n} 筆訂單\n貨備好／到貨時按後台「這批到貨了」，或傳「到貨 ${bid}」` : `找不到「${m}」已付款、待叫貨的訂單（廠商名稱要跟「叫貨」清單上的一樣）`;
   }
   if (/^(購物車|客人購物車|誰加購物車)$/.test(text)) return await cartReport(env);
+  const crm = text.match(/^購物車提醒\s*(全部|U[0-9a-f]{32})$/);
+  if (crm) { const n = await runCartReminders(env, deps, { force: true, uid: crm[1] === "全部" ? "" : crm[1] }); return n ? `好👌 已發購物車結帳提醒給 ${n} 位客人` : "目前沒有可以提醒的購物車"; }
   if (/^購物車提醒\s*(開|關|開啟|關閉)$/.test(text)) { const off = /關/.test(text); await env.SESSIONS.put("cartremind", off ? "off" : "on"); return off ? "好👌 已關閉購物車提醒" : "好👌 已開啟購物車提醒：客人放了 6 小時沒結帳，會在 11:00～21:00 傳一則提醒（每次只提醒一次）"; }
   const t = text.trim();
   const om2 = await ownerOrders(env, t, deps);
