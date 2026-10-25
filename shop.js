@@ -987,6 +987,8 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     const r = await runPoolReminders(env, deps, { force: true, only: a || undefined, quiet: true });
     return r.sent ? `好👌 已發湊單邀請給全部買家，共 ${r.sent} 位\n廠商：${r.done.join("、")}` : `目前沒有可以發的對象${a ? "（廠商名稱要跟「叫貨」清單上的一樣，且還沒湊滿）" : ""}`;
   }
+  const mg = t.match(/^合併\s+((?:ZO\w{10}[\s,，、]*){2,})$/i);
+  if (mg) return await mergeOrders(env, deps, [...new Set(mg[1].toUpperCase().match(/ZO\w{10}/g))]);
   const am2 = t.match(/^(?:到貨|備好貨|已到貨)\s+(.+)$/);
   if (am2) return await batchArrived(env, deps, am2[1].trim());
   if (/^批次$/.test(t)) { const bs = await listBatches(env, 20); return bs.length ? "📦 最近批次（每批＝同廠商湊滿 NT$20,000 叫的一次貨）\n\n" + bs.map((b) => `${b.status === "已到貨" ? "✅" : "⏳"} ${b.id}｜${b.m}｜NT$${(b.nt || 0).toLocaleString()}｜${b.orders.length} 筆｜${b.status}`).join("\n") + "\n\n貨到了傳「到貨 批次編號」" : "目前還沒有批次"; }
@@ -1576,6 +1578,42 @@ async function revertMem(env, o) {
   if (cur !== o.tier) return;
   if (!o.prevTier || o.prevTier === "none" || (o.prevUntil && o.prevUntil < Date.now())) await setMembership(env, o.uid, "none");
   else await setMembership(env, o.uid, o.prevTier, o.prevUntil ? { until: o.prevUntil } : { months: 1 });
+}
+// ---------- 合併同一位客人的訂單（還沒向日本叫貨、還沒出貨的才可以）----------
+const MERGE_ST = ["待付款", "已回報匯款", "待確認", "已付款"];
+export function canMerge(o) { return o && MERGE_ST.includes(o.status) && !Object.keys(o.po || {}).length && !Object.keys(o.sh || {}).length && !Object.keys(o.arr || {}).length; }
+export async function mergeOrders(env, deps, ids) {
+  const os = (await Promise.all(ids.map((id) => env.SESSIONS.get("o:" + id)))).map((x) => JSON.parse(x || "null"));
+  if (os.some((o) => !o)) return "找不到其中一張訂單";
+  if (new Set(os.map((o) => o.uid)).size > 1) return "不同客人的訂單不能合併";
+  const bad = os.filter((o) => !canMerge(o));
+  if (bad.length) return `這些訂單不能合併（已取消／已出貨／已向日本叫貨）：${bad.map((o) => o.id + "「" + o.status + "」").join("、")}`;
+  os.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const t = os[0], rest = os.slice(1), paidOf = (o) => (o.status === "已付款" ? (o.payInfo && o.payInfo.amount) || o.total : 0);
+  let paid = paidOf(t), anyPaid = t.status === "已付款";
+  for (const o of rest) {
+    for (const l of o.lines) { const ex = t.lines.find((x) => x.k === l.k && x.price === l.price); if (ex) ex.q += l.q; else t.lines.push(l); }
+    if (o.status === "已付款") { paid += paidOf(o); if (!anyPaid || String(o.paidAt) < String(t.paidAt || "9")) t.paidAt = t.paidAt && anyPaid ? (String(o.paidAt) < String(t.paidAt) ? o.paidAt : t.paidAt) : o.paidAt; anyPaid = true; }
+    if (o.coupon && !t.coupon) t.coupon = o.coupon; else if (o.coupon) { try { const cps = await getCoupons(env, o.uid); const cc = cps.find((x) => x.id === o.coupon.id && x.used === o.id); if (cc) { cc.used = ""; await saveCoupons(env, o.uid, cps); } } catch (e) {} }
+    if (o.memo) t.memo = [t.memo, o.memo].filter(Boolean).join("；");
+    if (o.form && o.form.note) t.form.note = [t.form.note, o.form.note].filter(Boolean).join("；");
+    if (o.memUntil && !t.memUntil) t.memUntil = o.memUntil;
+  }
+  recalc(t);
+  if (t.coupon) { t.subtotal = t.total; t.total = Math.max(0, t.total - t.coupon.amt); }
+  if (anyPaid) { t.status = "已付款"; t.payInfo = Object.assign({}, t.payInfo || {}, { amount: paid }); }
+  t.merged = [...(t.merged || []), ...rest.map((o) => o.id)];
+  await saveOrder(env, t);
+  // 被合併的訂單直接移除（不退會員等級）
+  const idx = JSON.parse((await env.SESSIONS.get("orders")) || "[]").filter((x) => !rest.some((o) => o.id === x));
+  await env.SESSIONS.put("orders", JSON.stringify(idx));
+  const mine = JSON.parse((await env.SESSIONS.get("ou:" + t.uid)) || "[]").filter((x) => !rest.some((o) => o.id === x));
+  await env.SESSIONS.put("ou:" + t.uid, JSON.stringify(mine));
+  for (const o of rest) await env.SESSIONS.delete("o:" + o.id);
+  try { await computePools(env, {}); } catch (e) {}
+  const diff = payDiff(t), unpaidPart = !anyPaid ? "" : "";
+  if (deps.lineApi) await deps.lineApi(env, "/v2/bot/message/push", { to: t.uid, messages: [{ type: "text", text: `您的訂單已幫您合併成一張：${t.id}\n（原本的 ${rest.map((o) => o.id).join("、")} 已併入）\n共 ${t.qty} 件　合計 NT$${t.total.toLocaleString()}${diff}\n\n合併後一起湊單、一起出貨，運費只算一次～` }] }).catch(() => {});
+  return `好👌 已合併成 ${t.id}（併入 ${rest.map((o) => o.id).join("、")}）\n共 ${t.qty} 件　合計 NT$${t.total.toLocaleString()}　狀態：${t.status}${diff}${unpaidPart}\n已通知客人`;
 }
 async function deleteOrder(env, id) {
   try { await revertMem(env, JSON.parse((await env.SESSIONS.get("o:" + id)) || "null")); } catch (e) {}
