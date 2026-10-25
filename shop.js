@@ -503,7 +503,7 @@ export async function computePools(env, deps = {}) {
     for (const l of o.lines || []) {
       if (l.mem) continue;
       const m = l.m || mfrOf(l.b);
-      if (o.po && o.po[m]) continue;
+      if ((o.po && o.po[m]) || (o.sh && o.sh[m])) continue;
       const p = (pools[m] = pools[m] || { cny: 0, orders: [], since: o.paidAt || o.at });
       p.cny += lineCostNT(o, l) / rate;
       if (!p.orders.includes(o.id)) p.orders.push(o.id);
@@ -527,18 +527,22 @@ export async function computePools(env, deps = {}) {
 }
 export async function getPools(env) { return JSON.parse((await env.SESSIONS.get("pools")) || "null") || { pools: {}, min: POOL_MIN, rate: await cnyRate(env) }; }
 // 一張訂單裡每家製造商目前的狀態（給客人看）
-export async function orderMfrStatus(env, o) {
-  const P = (await getPools(env)).pools, out = [];
-  const ms = [...new Set((o.lines || []).filter((l) => !l.mem).map((l) => l.m || mfrOf(l.b)))];
-  for (const m of ms) {
-    if (o.status === "已出貨") out.push({ m, s: "已出貨" });
-    else if (o.status === "已取消") out.push({ m, s: "已取消" });
-    else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨" + (o.po[m].at ? "（" + o.po[m].at.slice(5, 10).replace("-", "/") + "）" : "") });
-    else if (o.status !== "已付款") out.push({ m, s: "付款後開始湊單" });
-    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）`) + qn }); }
+export const orderMfrs = (o) => [...new Set((o.lines || []).filter((l) => !l.mem).map((l) => l.m || mfrOf(l.b)))];
+const mmdd = (t) => (t ? String(t).slice(5, 10).replace("-", "/") : "");
+export function mfrStatusSync(o, P) {
+  const out = [];
+  for (const m of orderMfrs(o)) {
+    const sh = o.sh && o.sh[m];
+    if (sh) out.push({ m, s: "已出貨（" + mmdd(sh.at) + "）" + (sh.track ? "・物流單號 " + sh.track : ""), k: "sh" });
+    else if (o.status === "已出貨") out.push({ m, s: "已出貨", k: "sh" });
+    else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
+    else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），到貨就先寄這家的商品", k: "po" });
+    else if (o.status !== "已付款") out.push({ m, s: "付款後開始湊單", k: "wait" });
+    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）`) + qn, k: "pool" }); }
   }
   return out;
 }
+export async function orderMfrStatus(env, o) { return mfrStatusSync(o, (await getPools(env)).pools); }
 async function myOrders(env, uid, n = 5) {
   const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
   const out = [];
@@ -551,14 +555,14 @@ export async function customerOrders(env, uid, link) {
   const lemai = "";
   if (!list.length) return `目前沒有線上訂購網站的訂單紀錄喔${lemai}\n\n🛒 線上訂購：${link}`;
   const mst = await Promise.all(list.map((o) => orderMfrStatus(env, o)));
-  const rows = list.map((o, i) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　${o.form.pay || "轉帳"}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}${mst[i].length && !["已出貨", "已取消"].includes(o.status) ? "\n" + mst[i].map((x) => `　・${x.m}：${x.s}`).join("\n") : ""}`);
+  const rows = list.map((o, i) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　${o.form.pay || "轉帳"}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}${mst[i].length > 1 && o.status !== "已取消" || (mst[i].length && !["已出貨", "已取消"].includes(o.status)) ? "\n" + mst[i].map((x) => `　・${x.m}：${x.s}`).join("\n") : ""}`);
   return `您最近的訂單：\n\n${rows.join("\n\n")}\n\n要看完整明細，請點：\n${link}&v=orders\n（或傳訂單編號給我）${lemai}`;
 }
 export async function customerOrderDetail(env, uid, id) {
   const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
   if (!o || o.uid !== uid) return null;
   const mst = await orderMfrStatus(env, o);
-  return `訂單 ${o.id}（${o.at}）\n狀態：${o.status}${mst.length && !["已出貨", "已取消"].includes(o.status) ? "\n" + mst.map((x) => `・${x.m}：${x.s}`).join("\n") : ""}${o.paid5 ? "　後五碼 " + o.paid5 : ""}${o.track ? "\n物流單號：" + o.track : ""}\n\n${orderText(o, false)}\n\n收件人：${o.form.name}\n寄送：${o.form.ship}　${o.form.addr}`;
+  return `訂單 ${o.id}（${o.at}）\n狀態：${o.status}${(mst.length > 1 && o.status !== "已取消") || (mst.length && !["已出貨", "已取消"].includes(o.status)) ? "\n" + mst.map((x) => `・${x.m}：${x.s}`).join("\n") : ""}${o.paid5 ? "　後五碼 " + o.paid5 : ""}${o.track ? "\n物流單號：" + o.track : ""}\n\n${orderText(o, false)}\n\n收件人：${o.form.name}\n寄送：${o.form.ship}　${o.form.addr}`;
 }
 async function payInfo(env, pay) {
   return (await env.SESSIONS.get(pay === "LINE Pay" ? "linepay" : "bank")) || "";
@@ -746,6 +750,25 @@ export async function shopOwnerCommand(env, text, deps = {}) {
       if (o) rows.push(`${o.id}｜${o.lineName}｜NT$${o.total.toLocaleString()}｜${o.form.pay || "轉帳"}｜${o.status}${o.paid5 ? "（" + o.paid5 + "）" : ""}`);
     }
     return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」「ZO… 已出貨 物流單號」可以改狀態並通知客人";
+  }
+  const sm = t.match(/^(ZO\w{10})\s+分批出貨\s+([\s\S]+)$/i);
+  if (sm) {
+    const id = sm[1].toUpperCase(), o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+    if (!o) return `找不到訂單 ${id}`;
+    if (!["已付款", "已出貨"].includes(o.status)) return `訂單 ${id} 目前是「${o.status}」，付款後才能出貨`;
+    const ms = orderMfrs(o), rest = sm[2].trim(), m = ms.slice().sort((a, b) => b.length - a.length).find((x) => rest === x || rest.startsWith(x + " ") || rest.startsWith(x + "/"));
+    if (!m) return `訂單 ${id} 裡沒有這家廠商。這張訂單的廠商：${ms.join("、")}\n格式：${id} 分批出貨 廠商名 物流單號`;
+    const track = rest.slice(m.length).replace(/^[\s/]+/, "").trim().slice(0, 60);
+    const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+    o.sh = o.sh || {}; o.sh[m] = { at: now, track };
+    const left = ms.filter((x) => !o.sh[x]);
+    const items = o.lines.filter((l) => !l.mem && (l.m || mfrOf(l.b)) === m);
+    if (!left.length) { o.statusBefore = o.status; o.status = "已出貨"; if (track) o.track = track; }
+    await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+    const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : "最後一批商品出貨囉！"}\n廠商：${m}\n${items.map((l) => `・${l.n} ×${l.q}`).join("\n")}${track ? "\n物流單號：" + track : ""}\n\n${left.length ? "其他廠商的商品（" + left.join("、") + "）到貨後會再寄出，可以傳「我的訂單」查看進度～" : "這張訂單的商品全部寄出了，收到貨有任何問題都可以跟我們說～"}`;
+    let sent = false;
+    if (deps.lineApi) { const r = await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: msg }] }); sent = r && r.ok; }
+    return `好👌 ${id}「${m}」的商品已標記出貨${track ? "（物流單號 " + track + "）" : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}`;
   }
   const om = t.match(/^(ZO\w{10})(?:\s*(已付款|已出貨|取消)(?:\s+(.+))?)?$/i);
   if (om) {
@@ -1067,7 +1090,7 @@ async function openOrders(){$("#panel").classList.remove("vmode");VK=null;
   $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
-      '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+((o.mst||[]).length&&o.status!=="已出貨"&&o.status!=="已取消"?'<div class="mst">'+o.mst.map(z=>'<div>🏭 '+esc(z.m)+'：'+esc(z.s)+'</div>').join("")+'</div>':'')+
+      '<div style="color:#6b6f75;font-size:12.5px">'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.tier)+'價</div><div>合計 <b>'+fmt(o.total)+'</b></div>'+((o.mst||[]).length&&o.status!=="已取消"&&(o.status!=="已出貨"||o.mst.length>1)?'<div class="mst">'+o.mst.map(z=>'<div>🏭 '+esc(z.m)+'：'+esc(z.s)+'</div>').join("")+'</div>':'')+
       (o.paid5?'<div style="font-size:12.5px">匯款後五碼：'+esc(o.paid5)+'</div>':'')+(o.track?'<div style="font-size:12.5px">🚚 物流單號：<b>'+esc(o.track)+'</b></div>':'')+
       (o.status==="待付款"&&(o.pay==="LINE Pay"?r.linepay:r.bank)?'<div class="warn" style="margin-top:8px">'+(o.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'<br>'+payHTML(o.pay==="LINE Pay"?r.linepay:r.bank,o.pay==="LINE Pay").replace(/\\n/g,"<br>").replace(/<\\/?pre>/g,"")+'<br>付款後請在 LINE 傳'+(o.pay==="LINE Pay"?"「付款截圖」":"「後五碼」和「轉帳截圖」")+'</div>':'')+
       '<details><summary>查看明細與收件資料</summary><ul>'+o.lines.map(l=>'<li><span>'+esc(l.n)+' ×'+l.q+'</span><span>'+fmt(l.sub)+'</span></li>').join("")+'</ul>'+
@@ -1415,7 +1438,7 @@ async function ownerOrders(env, t, deps) {
   m = t.match(/^(ZO\w{10})\s+([\s\S]+)$/i);
   if (!m) return null;
   const id = m[1].toUpperCase(), cmd = m[2].trim();
-  if (/^(已付款|已出貨|取消)(\s|$)/.test(cmd)) return null; // 交給狀態指令
+  if (/^(已付款|已出貨|取消|分批出貨)(\s|$)/.test(cmd)) return null; // 交給狀態指令
   const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
   if (!o) return `找不到訂單 ${id}`;
   // 備註

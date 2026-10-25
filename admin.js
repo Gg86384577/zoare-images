@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { computePools, mfrOf, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
+import { computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -30,7 +30,10 @@ async function poolData(env, deps, orders) {
     const ords = p.orders.map((id) => byId.get(id)).filter(Boolean).map((o) => ({ id: o.id, name: o.lineName, tier: TIER_NAME[o.tier] || "非會員", at: o.paidAt || o.at }));
     return { m, cny: p.cny, pct: p.pct, ready: p.cny >= P.min, since: p.since, orders: ords, items: Object.values(items).sort((a, b) => b.q - a.q) };
   }).sort((a, b) => b.cny - a.cny);
-  return { min: P.min, rate: P.rate, list };
+  const waiting = [];
+  for (const o of orders) if (o.status === "已付款") for (const x of mfrStatusSync(o, P.pools)) if (x.k === "po") waiting.push({ id: o.id, name: o.lineName, m: x.m, at: o.po[x.m].at, paid: o.paidAt || o.at, items: o.lines.filter((l) => !l.mem && (l.m || mfrOf(l.b)) === x.m).map((l) => ({ n: l.n, q: l.q })) });
+  waiting.sort((x, y) => (x.m + x.paid).localeCompare(y.m + y.paid));
+  return { min: P.min, rate: P.rate, list, waiting, P: P.pools };
 }
 async function buildData(env, deps = {}) {
   const orders = await allOrders(env, 200);
@@ -74,7 +77,7 @@ async function buildData(env, deps = {}) {
     members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
-      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(),
+      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), mst: mfrStatusSync(o, (pools && pools.P) || {}),
       lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan })), form: o.form, notes: o.notes || [] })),
     customers: custList,
     settings: { bank: bank || "", linepay: linepay || "", news: JSON.parse(news || "[]") },
@@ -160,8 +163,11 @@ function pools(){const P=D.pools||{list:[]},L=P.list||[],R=L.filter(p=>p.ready);
   (L.length?L.map(p=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(p.m)+'</b>　<small class="meta">'+p.orders.length+' 筆訂單</small></span><b style="color:'+(p.ready?'#b8954a':'inherit')+'">¥'+p.cny.toLocaleString()+'／'+(P.min||4000).toLocaleString()+'</b></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden;margin:6px 0"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+(p.ready?'#b8954a':'#999')+'"></div></div><div class="meta">'+(p.ready?'已湊滿，可以叫貨':'湊單中 '+p.pct+'%，還差 ¥'+Math.max(0,(P.min||4000)-p.cny).toLocaleString())+'</div>'+
   '<details style="margin-top:8px"'+(p.ready?' open':'')+'><summary class="meta" style="cursor:pointer">要出貨的訂單（'+p.orders.length+'，依付款先後）／商品（'+p.items.length+' 款）</summary><div style="margin:6px 0">'+p.orders.map((o,i)=>'<div class="meta" style="padding:2px 0">'+(i+1)+'. <b>'+esc(o.id)+'</b>　'+esc(o.name||"")+'　'+esc(o.tier)+'　'+esc((o.at||"").slice(5,16).replace("T"," "))+'</div>').join("")+'</div>'+
   p.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:44px;height:44px;object-fit:cover;border-radius:6px">':'<span style="width:44px"></span>')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'<br><small class="meta">JAN '+esc(i.jan||"—")+'</small></span><b>×'+i.q+'</b></div>').join("")+'</details>'+
-  (p.ready?'<button class="btn" style="margin-top:8px" onclick="poDone(\''+esc(p.m).replace(/'/g,"")+'\')">標記已叫貨</button>':'')+'</div>').join(""):'<div class="card"><p class="meta">目前沒有已付款待叫貨的訂單</p></div>')}
-window.poDone=async m=>{if(!confirm("確定 "+m+" 已向日本叫貨？這些訂單會標記為已叫貨"))return;await cmd("叫貨 "+m+" 完成")};
+  (p.ready?'<button class="btn" style="margin-top:8px" onclick="poDone(\''+esc(p.m).replace(/'/g,"")+'\')">標記已叫貨</button>':'')+'</div>').join(""):'<div class="card"><p class="meta">目前沒有已付款待叫貨的訂單</p></div>')+
+  '<div class="card"><h3>已叫貨、等到貨出貨（'+(P.waiting||[]).length+'）</h3><p class="meta">依廠商、付款先後排列。哪家的貨先到，就先把那家的商品寄給客人，按「這家已出貨」會通知客人；同一張訂單全部廠商都出貨後，訂單自動變成「已出貨」。</p></div>'+
+  (P.waiting||[]).map(w=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(w.m)+'</b>　<small class="meta">'+esc(w.id)+'・'+esc(w.name||"")+'・叫貨 '+esc((w.at||"").slice(5,10))+'</small></span><button class="btn" onclick="shipM(\''+w.id+'\',\''+esc(w.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button></div>'+w.items.map(i=>'<div class="meta" style="padding:2px 0">・'+esc(i.n)+' ×'+i.q+'</div>').join("")+'</div>').join("")}
+window.poDone=
+async m=>{if(!confirm("確定 "+m+" 已向日本叫貨？這些訂單會標記為已叫貨"))return;await cmd("叫貨 "+m+" 完成")};
 function carts(){const L=D.carts||[];
   $("#m").innerHTML='<div class="card"><h3>購物車還沒結帳（'+L.length+' 位）</h3><p class="meta">只記錄用專屬連結進商城的客人。放超過 6 小時沒結帳，機器人會在 11:00～21:00 自動提醒一次（LINE 傳「購物車提醒 關」可以關掉）。</p></div>'+
   (L.length?L.map(c=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(c.name||"（未知）")+'</b>　<small class="meta">'+esc(c.tier==="vip"?"VIP":c.tier==="member"?"一般會員":"非會員")+'・'+ago(c.at)+'更新'+(c.reminded?'・已提醒':'')+'</small></span><b>'+fmt(c.total)+'</b></div>'+c.lines.map(l=>'<div class="meta" style="padding:2px 0">・'+esc(l.n)+' ×'+l.q+'　'+fmt(l.price*l.q)+'</div>').join("")+'<div class="meta" style="margin-top:6px">共 '+c.lines.length+' 款 '+c.qty+' 件</div></div>').join(""):'<div class="card"><p class="meta">目前沒有客人的購物車有東西</p></div>')}
@@ -181,7 +187,7 @@ function orders(){
 }
 function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'+esc(o.name)+'</b><span class="st s-'+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
   '<div class="meta">'+o.id+'｜'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.pay)+'｜'+esc(o.tier)+'價</div><div style="font-size:18px;font-weight:700;margin-top:4px">'+fmt(o.total)+'</div>'+
-  '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff">'+esc(o.diff)+'</div>':'')+
+  '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+((o.mst||[]).length&&o.status!=="已取消"?'<div style="margin-top:6px">'+o.mst.map(z=>'<div class="meta" style="display:flex;gap:6px;align-items:center;padding:3px 0"><span style="flex:1">🏭 <b>'+esc(z.m)+'</b>：'+esc(z.s)+'</span>'+(z.k!=="sh"&&o.status==="已付款"?'<button class="btn" style="padding:5px 9px;font-size:12px" onclick="shipM(\''+o.id+'\',\''+esc(z.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button>':'')+'</div>').join("")+'</div>':'')+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff">'+esc(o.diff)+'</div>':'')+
   '<details><summary>品項・收件資料・修改</summary>'+o.lines.map((l,i)=>'<div class="it"><span class="n">'+esc(l.n)+'<br><small style="color:#888">'+fmt(l.price)+' × '+l.q+' = '+fmt(l.sub)+'</small></span><input type="number" min="0" value="'+l.q+'" data-i="'+i+'"><button class="btn" onclick="setQ(\''+o.id+'\','+i+',this)">改</button></div>').join("")+
   '<div class="meta" style="margin-top:8px;color:#333">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+(o.paid5?'<br>後五碼：'+esc(o.paid5):'')+(o.track?'<br>物流單號：'+esc(o.track):'')+'</div>'+
   (o.notes.length?'<div class="meta" style="color:#8c2a1f;margin-top:6px">'+o.notes.map(esc).join("<br>")+'</div>':'')+
@@ -189,6 +195,7 @@ function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'
   '<div class="btns">'+(["待付款","已回報匯款","待確認"].includes(o.status)?'<button class="dark" onclick="st(\''+o.id+'\',\'已付款\')">✓ 確認已付款</button>':'')+(o.status==="已付款"?'<button class="dark" onclick="ship(\''+o.id+'\')">🚚 出貨</button>':'')+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="st(\''+o.id+'\',\'取消\')">取消訂單</button>':'')+'</div></div>'}
 const ord=id=>D.orders.find(o=>o.id===id);
 window.st=async(id,s)=>{if(s==="取消"&&!confirm("確定取消 "+id+"？會通知客人"))return;await cmd(id+" "+s)};
+window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:""))};
 window.ship=async id=>{const t=prompt("物流單號（可空白）","");if(t===null)return;await cmd(id+" 已出貨"+(t?" "+t:""))};
 window.memo=async id=>{const t=prompt("備註（空白＝清除）",ord(id).memo||"");if(t===null)return;await cmd(id+" 備註 "+t)};
 window.delO=async id=>{if(!confirm("確定刪除訂單 "+id+"？刪除後無法復原"))return;await cmd("刪除 "+id)};
