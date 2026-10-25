@@ -1378,7 +1378,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 3) { try { await runMemberReminders(env); } catch (e) { console.log("memberRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 4) { try { await runCartReminders(env, { lineApi }); } catch (e) { console.log("cartRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
-      if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi }); } catch (e) { console.log("poolremind", e); } }
+      if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
       try { await runBootTasks(env); } catch (e) { console.log("boot", e); }
       try { if ((await env.SESSIONS.get("menuver")) !== RICHMENU_VER && env.LINE_CHANNEL_ACCESS_TOKEN) { const r2 = await setupRichMenu(env); console.log("richmenu", r2); if (!/^好/.test(r2)) await env.SESSIONS.put("menuver", RICHMENU_VER + "-fail"); } } catch (e) { console.log("richmenu", e); }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
