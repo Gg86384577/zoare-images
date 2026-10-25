@@ -324,8 +324,9 @@ export async function handleShop(request, env, ctx, deps) {
   }
   if (p === "/shop/pools") {
     const P = await getPools(env), o = {};
-    for (const m in P.pools) o[m] = P.pools[m].pct;
-    return Response.json({ ok: true, min: P.min || POOL_MIN, rate: P.rate || (await cnyRate(env)), pct: o }, { headers: { "cache-control": "public, max-age=120" } });
+    const c = {};
+    for (const m in P.pools) { o[m] = P.pools[m].pct; c[m] = P.pools[m].cny; }
+    return Response.json({ ok: true, min: P.min || POOL_MIN, rate: P.rate || (await cnyRate(env)), pct: o, cny: c }, { headers: { "cache-control": "public, max-age=120" } });
   }
   if (p === "/shop/me") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
@@ -867,7 +868,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .vdet{margin:16px 16px 0;background:var(--bg);border-radius:16px;padding:14px}.vdn{font-weight:800;font-size:17px}.vdm{font-size:12px;color:var(--sub);margin:3px 0 2px}.vdet .op{background:#fff;border:0}
 .vbar{position:sticky;bottom:0;z-index:3;background:#fff;border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:12px;margin-top:16px}.vbar #vsum{flex:1;font-size:14px;line-height:1.3}.vbar #vsum small{color:var(--sub)}.vbar .go{margin:0;padding:0 28px}
 @media(min-width:640px){.vgrid{grid-template-columns:repeat(6,minmax(0,1fr))}}
-.mf{display:flex;align-items:center;gap:5px;font-size:11px;color:#6b6f75;margin:2px 0 1px;cursor:pointer}.mf b{color:#161616}.pb{flex:1;height:5px;background:#e6e7ea;border-radius:9px;overflow:hidden;min-width:28px}.pb i{display:block;height:100%;background:linear-gradient(90deg,#c9a45c,#9e1b1b)}.pp{font-size:10px}.mst{font-size:12.5px;background:#f6f6f7;border-radius:10px;padding:6px 10px;margin-top:6px;line-height:1.6}
+.mg{font-size:10.5px;color:#9e1b1b;margin:0 0 2px}.vinfo .mg{display:none}.mg2{margin:8px 0 2px;padding:9px 11px;border-radius:10px;background:#f7f3ea;border:1px solid #e6dcc4;font-size:12.5px;line-height:1.6;color:#4a4a4a}.mg2 b{color:#161616}.mf{display:flex;align-items:center;gap:5px;font-size:11px;color:#6b6f75;margin:2px 0 1px;cursor:pointer}.mf b{color:#161616}.pb{flex:1;height:5px;background:#e6e7ea;border-radius:9px;overflow:hidden;min-width:28px}.pb i{display:block;height:100%;background:linear-gradient(90deg,#c9a45c,#9e1b1b)}.pp{font-size:10px}.mst{font-size:12.5px;background:#f6f6f7;border-radius:10px;padding:6px 10px;margin-top:6px;line-height:1.6}
 .toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:rgba(22,22,22,.92);color:#fff;font-size:14px;border-radius:12px;padding:10px 16px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;max-width:86vw;text-align:center}.toast.on{opacity:1}
 .lb{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;color:#fff}.lb.on{display:flex}.lb img{max-width:100%;max-height:68vh;object-fit:contain;background:#fff;border-radius:12px}.lbt{margin-top:10px;font-size:15px;font-weight:700;text-align:center}.lbb{display:flex;gap:10px;margin-top:12px;align-items:center}.lbb button{border:0;border-radius:12px;height:44px;min-width:44px;font-size:22px;background:#333;color:#fff}.lbb .lbs{background:#fff;color:#161616;font-size:16px;font-weight:700;padding:0 20px}.lb small{margin-top:10px;color:#bbb;font-size:12px}.lbc{position:absolute;top:12px;right:14px;border:0;background:none;color:#fff;font-size:34px}.zm{cursor:zoom-in}
 .sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.45);display:none}
@@ -1008,7 +1009,7 @@ function vClose(){const k=VK;VK=null;$("#panel").classList.remove("vmode");$("#s
 function openVar(k,i){const L=FAM[k];if(!L)return;VK=k;VI=i!=null?i:Math.max(0,L.findIndex(y=>cart[y.k]||(y.alt&&cart[y.alt])));
   const ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps);
   $("#panel").classList.add("vmode");
-  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vb">'+esc(L[0].b)+'</div>'+mfB(L[0])+'<div class="vtt">'+esc(L[0]._fb)+'</div><div class="vpr">'+fmt(mn)+(mx>mn?' ～ '+fmt(mx):'')+'</div></div><div class="vsec"><div class="vh2">選擇款式・規格<span>共 '+L.length+' 種</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div><div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
+  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vb">'+esc(L[0].b)+'</div>'+mfB(L[0])+'<div class="vtt">'+esc(L[0]._fb)+'</div><div class="vpr">'+fmt(mn)+(mx>mn?' ～ '+fmt(mx):'')+'</div><div id="vgap"></div></div><div class="vsec"><div class="vh2">選擇款式・規格<span>共 '+L.length+' 種</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div><div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
   $("#sheet").classList.add("on");$("#panel").scrollTop=0;$("#vx").onclick=vClose;$("#vok").onclick=vClose;
   $("#vgrid").onclick=e=>{const t=e.target.closest("[data-vi]");if(!t)return;VI=+t.dataset.vi;renderVar();const d=$("#vdet");if(d)d.scrollIntoView({behavior:"smooth",block:"nearest"})};
   renderVar()}
@@ -1018,6 +1019,7 @@ function renderVar(){const L=FAM[VK];if(!L)return;const y=L[VI]||L[0],A=y.alt?by
   const sub=y.box?"整盒 "+y.box+" 個・只能整盒訂":step(y)+" 件起";
   $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div><div class="vdm">'+esc(sub)+(y.sh?"・📦 "+esc(y.sh):"")+'</div>'+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
   let n=0,amt=0;L.forEach(z=>[z.k,z.alt].forEach(k=>{if(k&&cart[k]){const w=byK(k);if(w){n+=cart[k];amt+=price(w)*cart[k]}}}));
+  {const g=$("#vgap");if(g)g.innerHTML=gapFull(y.m)}
   $("#vsum").innerHTML=n?'這款已選 <b>'+n+'</b> 件<br><small>'+fmt(amt)+'</small>':'<small>點上面的款式，再按「加入」</small>'}
 document.addEventListener("click",e=>{if(e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");if(g)openVar(g.dataset.g)});
 function opt(y,lab,sub){return '<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+lab+'</b><small>'+esc(sub)+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
@@ -1032,8 +1034,12 @@ function card(x){
   return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img class="zm" data-z="'+esc(x.k)+'" loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
-let POOL={pct:{},min:4000,rate:4.9};
-function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div>'}
+let POOL={pct:{},cny:{},min:4000,rate:4.9};
+function cartCNY(m){let v=0;for(const k in cart){const x=byK(k);if(x&&!x.mem&&x.m===m)v+=(x.g-80)*cart[k]/POOL.rate}return v}
+function gapNT(m,extra){return Math.max(0,Math.ceil((POOL.min-((POOL.cny||{})[m]||0)-(extra||0))*POOL.rate))}
+function gapTxt(m){const g=gapNT(m);return g?"還差約 NT$"+g.toLocaleString()+" 這家就發貨":"已湊滿，準備向日本叫貨"}
+function gapFull(m){if(!m)return"";const g=gapNT(m),c=cartCNY(m),g2=gapNT(m,c);return '<div class="mg2"><b>🏭 '+esc(m)+' 發貨門檻：人民幣 ¥'+POOL.min.toLocaleString()+'（約 NT$'+Math.ceil(POOL.min*POOL.rate).toLocaleString()+'）</b><br>'+(g?'目前所有已付款訂單還差約 <b>NT$'+g.toLocaleString()+'</b> 就能向日本叫貨':'已湊滿，準備向日本叫貨')+(c>0&&g?'<br>加上你購物車裡這家的商品，'+(g2?'還差約 <b>NT$'+g2.toLocaleString()+'</b>':'<b>就湊滿了！</b>'):'')+'<br><small>同一廠商不同角色、系列都可以一起湊；付款後才算進進度，先付款先寄</small></div>'}
+function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div><div class="mg">'+gapTxt(x.m)+'</div>'}
 function mfShort(L){const by={};L.forEach(({x,q})=>{if(x.mem)return;by[x.m]=(by[x.m]||0)+(x.g-80)*q/POOL.rate});return Object.entries(by).filter(e=>e[1]<POOL.min)}
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-mf]");if(!t)return;e.stopPropagation();e.preventDefault();if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+t.dataset.mf;$("#q").value="";document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)},true);
 function unit(x){return x.mem?1:Number(x.box)||Number(x.moq)||3}
@@ -1065,7 +1071,7 @@ function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
   if(t==="member"&&total>0&&total<21)out.push("一般會員整張訂單混批合計需 21 件（目前 "+total+" 件，還差 "+(21-total)+" 件）");
-  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];out.push("依廠商湊單：同一廠商的已付款訂單累積滿人民幣 "+POOL.min.toLocaleString()+" 元才向日本叫貨，先付款先寄（"+ms.map(m=>m+" 目前 "+(POOL.pct[m]||0)+"%").join("、")+"）")}return out}
+  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];out.push("依廠商湊單：同一廠商的已付款訂單累積滿人民幣 "+POOL.min.toLocaleString()+" 元才向日本叫貨，先付款先寄（"+ms.map(m=>{const g=gapNT(m,cartCNY(m));return m+(g?" 加上這張訂單還差約 NT$"+g.toLocaleString():" 加上這張訂單就湊滿")}).join("、")+"）")}return out}
 $("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
