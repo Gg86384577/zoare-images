@@ -209,7 +209,7 @@ function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'
   '<div class="meta" style="margin-top:8px;color:#333">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+(o.paid5?'<br>後五碼：'+esc(o.paid5):'')+(o.track?'<br>物流單號：'+esc(o.track):'')+'</div>'+
   (o.notes.length?'<div class="meta" style="color:#8c2a1f;margin-top:6px">'+o.notes.map(esc).join("<br>")+'</div>':'')+
   '<div class="btns"><button onclick="addItem(\''+o.id+'\')">＋ 加商品</button><button onclick="memo(\''+o.id+'\')">📝 備註</button><button class="del" onclick="delO(\''+o.id+'\')">🗑 刪除訂單</button></div></details>'+
-  '<div class="btns">'+(["待付款","已回報匯款","待確認"].includes(o.status)?'<button class="dark" onclick="st(\''+o.id+'\',\'已付款\')">✓ 確認已付款</button>':'')+(o.status==="已付款"?'<button class="dark" onclick="ship(\''+o.id+'\')">🚚 出貨</button>':'')+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="st(\''+o.id+'\',\'取消\')">取消訂單</button>':'')+'</div></div>'}
+  '<div class="btns">'+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="editO(\''+o.id+'\')">✏️ 改數量</button>':'')+(["待付款","已回報匯款","待確認"].includes(o.status)?'<button class="dark" onclick="st(\''+o.id+'\',\'已付款\')">✓ 確認已付款</button>':'')+(o.status==="已付款"?'<button class="dark" onclick="ship(\''+o.id+'\')">🚚 出貨</button>':'')+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="st(\''+o.id+'\',\'取消\')">取消訂單</button>':'')+'</div></div>'}
 const ord=id=>D.orders.find(o=>o.id===id);
 window.st=async(id,s)=>{if(s==="取消"&&!confirm("確定取消 "+id+"？會通知客人"))return;await cmd(id+" "+s)};
 window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;const v=prompt("這次國際運費要收多少？（NT$，約每公斤 $220）\n客人有國際運費券會自動折抵；還不知道可空白，之後再填","");if(v===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:"")+(v&&Number(v)>0?" 國際"+Math.round(Number(v)):""))};
@@ -217,7 +217,8 @@ window.intlFee=async id=>{const v=prompt("國際運費金額（NT$）","");if(!v
 window.ship=async id=>shipM(id,"全部");
 window.memo=async id=>{const t=prompt("備註（空白＝清除）",ord(id).memo||"");if(t===null)return;await cmd(id+" 備註 "+t)};
 window.delO=async id=>{if(!confirm("確定刪除訂單 "+id+"？刪除後無法復原"))return;await cmd("刪除 "+id)};
-window.setQ=async(id,i,btn)=>{const q=btn.previousElementSibling.value;const l=ord(id).lines[i];await cmd(id+" "+l.n+" 改 "+q)};
+window.setQ=async(id,i,btn)=>{const q=Math.floor(Number(btn.previousElementSibling.value));if(!(q>=0))return;const l=ord(id).lines[i];if(q===l.q)return toast("數量沒有變");if(q===0&&!confirm("數量 0 會把「"+l.n+"」從訂單移除，確定？"))return;await cmd(id+" #"+(i+1)+" 改 "+q)};
+window.editO=id=>{const d=document.querySelector('.o[data-id="'+id+'"] details');if(d){d.open=true;d.scrollIntoView({behavior:"smooth",block:"start"})}};
 window.addItem=async id=>{const k=prompt("輸入 JAN 碼或商品名稱");if(!k)return;const q=prompt("數量","1");if(!q)return;await cmd(id+" 加 "+k+" "+q)};
 function cust(){const L=D.customers;
   $("#m").innerHTML='<input class="f" id="cq" placeholder="搜尋客人">'+'<div id="cl"></div>';

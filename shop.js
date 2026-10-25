@@ -1657,7 +1657,7 @@ async function ownerOrders(env, t, deps) {
   if (x) { o.form.phone = x[1].trim().slice(0, 20); await saveOrder(env, o); return `好👌 ${id} 電話改成：${o.form.phone}`; }
   x = cmd.match(/^(?:收件人|姓名)[\s:：]*(.+)$/);
   if (x) { o.form.name = x[1].trim().slice(0, 40); await saveOrder(env, o); return `好👌 ${id} 收件人改成：${o.form.name}`; }
-  const find = (kw) => o.lines.filter((l) => l.n.includes(kw) || l.jan === kw);
+  const find = (kw) => { const ix = String(kw).match(/^#(\d+)$/); if (ix) { const l = o.lines[Number(ix[1]) - 1]; return l ? [l] : []; } const ex = o.lines.filter((l) => l.n === kw); return ex.length ? ex : o.lines.filter((l) => l.n.includes(kw) || l.jan === kw); };
   // 刪除品項：「ZO… 刪 小八」
   x = cmd.match(/^(?:刪除?|拿掉|移除)\s*(.+)$/);
   if (x) {
