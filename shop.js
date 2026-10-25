@@ -593,7 +593,7 @@ export function mfrStatusSync(o, P, need) {
     else if (o.status === "已出貨") out.push({ m, s: "已出貨", k: "sh" });
     else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
     else if (o.arr && o.arr[m]) { const w = orderMfrs(o).filter((x) => !(o.sh && o.sh[x]) && !(o.arr && o.arr[x])); out.push({ m, s: "已到貨（" + mmdd(o.arr[m].at) + "）" + (!w.length || o.early === "先寄" ? "，準備出貨" : o.early === "等齊" ? "，幫您留著等其他商品一起寄" : "，等您回覆要不要先寄"), k: "arr" }); }
-    else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），到貨就先寄這家的商品", k: "po" });
+    else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），約 2～3 週到貨，到貨就先寄這家的商品", k: "po" });
     else if (o.status === "已付款" && o.defer && o.defer[m]) out.push({ m, s: "已順延到下一批（下一批湊滿會再問您）", k: "defer" });
     else if (o.status !== "已付款") { const p = P[m]; out.push({ m, s: `付款後開始湊單（這家目前 ${p ? p.pct : 0}%${gap(p)}）`, k: "wait" }); }
     else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.nt >= need ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%${gap(p)}（滿 NT$${need.toLocaleString()} 叫貨）`) + qn, k: "pool" }); }
@@ -1693,10 +1693,11 @@ export async function membershipCards(env, uid) {
 }
 
 // ---------- 新朋友加入的歡迎訊息 ----------
+const INTRO_V = "20261025";
 export async function welcomeMessages(env, uid, name) {
   const link = await shopLink(env, uid);
   const hi = name ? `${name} 您好～` : "您好～";
-  const text = `${hi}歡迎加入 ZOARÉ 🎉
+  const text = `${hi}歡迎加入 ZOARÉ 🎉（下面有 1 分鐘影片教您怎麼買👇）
 我們是日本角色商品批發，吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購、批發價直送台灣🇯🇵
 日本廠商要湊滿一定金額才接單，我們幫大家依廠商合併湊單，商城每個商品下面都看得到湊單進度
 
@@ -1719,6 +1720,7 @@ ${link}
 ・一般會員：每款照商品起批數（很多款 2～3 件），不同款混批合計 21 件
 ・VIP 會員：每款照商品起批數就能少量下單，沒有總件數限制
 ・所有訂單都依廠商湊單：同一廠商所有客人已付款的訂單累積滿 NT$20,000 就向日本叫貨，先付款先寄
+・湊滿叫貨後約 2～3 週到貨
 ・湊滿時會用 LINE 問您要這批出貨還是順延（想等其他廠商一起寄可以選順延）
 ・一張訂單有多家廠商時，哪家先到貨就先寄哪家
 
@@ -1740,7 +1742,8 @@ ${link}
   const qrs = [["🔥 熱賣推薦", "熱賣推薦"], ["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["✨ 新品上線", "新品上線"], ["加入 VIP", "會員方案"]];
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
-  return [{ type: "text", text }, { type: "text", text: text2 }, ...cards];
+  const video = { type: "video", originalContentUrl: SHOP_BASE + "/m/intro.mp4?v=" + INTRO_V, previewImageUrl: SHOP_BASE + "/m/intro.jpg?v=" + INTRO_V };
+  return [{ type: "text", text }, video, { type: "text", text: text2 }, ...cards];
 }
 
 // 下單會員方案但 3 天內沒付款 → 恢復原本等級並通知老闆（每次排程檢查）
