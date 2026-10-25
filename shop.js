@@ -1693,11 +1693,12 @@ export async function membershipCards(env, uid) {
 }
 
 // ---------- 新朋友加入的歡迎訊息 ----------
-const INTRO_V = "20261025";
+const INTRO_V = "20261025b";
+export const introVideoMsg = () => ({ type: "video", originalContentUrl: SHOP_BASE + "/m/intro.mp4?v=" + INTRO_V, previewImageUrl: SHOP_BASE + "/m/intro.jpg?v=" + INTRO_V });
 export async function welcomeMessages(env, uid, name) {
   const link = await shopLink(env, uid);
   const hi = name ? `${name} 您好～` : "您好～";
-  const text = `${hi}歡迎加入 ZOARÉ 🎉（下面有 1 分鐘影片教您怎麼買👇）
+  const text = `${hi}歡迎加入 ZOARÉ 🎉（下面有 2 分鐘影片，從選單一步一步教您怎麼買👇）
 我們是日本角色商品批發，吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購、批發價直送台灣🇯🇵
 日本廠商要湊滿一定金額才接單，我們幫大家依廠商合併湊單，商城每個商品下面都看得到湊單進度
 
@@ -1742,7 +1743,7 @@ ${link}
   const qrs = [["🔥 熱賣推薦", "熱賣推薦"], ["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["✨ 新品上線", "新品上線"], ["加入 VIP", "會員方案"]];
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
-  const video = { type: "video", originalContentUrl: SHOP_BASE + "/m/intro.mp4?v=" + INTRO_V, previewImageUrl: SHOP_BASE + "/m/intro.jpg?v=" + INTRO_V };
+  const video = introVideoMsg();
   return [{ type: "text", text }, video, { type: "text", text: text2 }, ...cards];
 }
 

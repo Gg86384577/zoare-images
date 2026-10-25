@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -114,7 +114,10 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 最後另起一行加上控制指令（客人看不到）。只要回覆裡有列出商品，就一定要用 #SHOW 附上那幾款的圖片：
 #SHOW 要附上商品卡片的候選編號，用逗號分隔，回覆裡列出幾款就寫幾款，最多 10 個（例如：#SHOW 1,2,3；不需要就寫 #SHOW 0）
 有 #SHOW 時系統只會傳商品卡片（卡片上已經有圖、名稱、價格、最低訂購量、下單按鈕），所以文字只要一句簡短的話（例如「有的喔 這幾款給您參考👇」），不要再逐款列出名稱、價格、連結。
-需要轉真人客服時，再另起一行寫：#HANDOFF`;
+需要轉真人客服時，再另起一行寫：#HANDOFF
+客人問到購買流程或制度（怎麼下單、怎麼用商城、湊單／進度條是什麼、起批規則、會員差別、付款回報、什麼時候到貨、運費／運費券、先寄或等齊、怎麼查訂單、已出貨劃掉）時：先用 2～4 句直接回答他的問題，再說「附上教學影片，第 X 步（約 m:ss）就是在講這個，看完就知道〇〇」（〇〇＝這段影片幫他解決什麼問題），最後另起一行寫：#VIDEO
+教學影片段落：第1步 0:05 加入好友、點選單「批發商城」；第2步 0:16 首頁新品、商品下方的廠商湊單進度（已累積／需 NT$20,000）；第3步 0:25 選擇規格、放大儲存照片；第4步 0:32 選款式按加入、數量是起批數倍數；第5步 0:41 查看購物車；第6步 0:48 購物車提醒每家廠商還差多少、方案件數規則；第7步 0:57 填資料送出訂單、轉帳或 LINE Pay；第8步 1:05 付款後傳後五碼＋截圖自動對帳；第9步 1:14 傳「我的訂單」查湊單進度；第10步 1:22 湊滿 NT$20,000 叫貨，湊滿後約 2～3 週到貨；第11步 1:32 到貨時選先寄（運費 $60）或等齊；第12步 1:41 出貨通知、物流單號、運費券折抵；第13步 1:49 已出貨商品劃掉；第14步 1:56 三種會員方案比較。
+到貨時間一律說「湊滿後約 2～3 週到貨」（從湊滿叫貨才開始算，不是從下單算）。`;
 
 // ---------- 中日文對照與簡繁轉換（搜尋用） ----------
 const ALIASES = [
@@ -407,14 +410,15 @@ function parseJson(text) {
     const m = t.match(/"reply"\s*:\s*"([\s\S]*)/);
     if (m) t = m[1].replace(/"\s*,\s*"show"[\s\S]*$/, "").replace(/\\n/g, "\n").replace(/\\"/g, '"');
   }
-  let show = [], handoff = false;
+  let show = [], handoff = false, video = false;
   const lines = t.split("\n").filter((ln) => {
     const x = ln.trim();
     if (/^#SHOW/i.test(x)) { show = (x.match(/\d+/g) || []).map(Number).filter((n) => n > 0); return false; }
     if (/^#HANDOFF/i.test(x)) { handoff = true; return false; }
+    if (/^#VIDEO/i.test(x)) { video = true; return false; }
     return true;
   });
-  return { reply: lines.join("\n").trim(), show, handoff };
+  return { reply: lines.join("\n").trim(), show, handoff, video };
 }
 
 // 照片 → 搜尋關鍵字
@@ -760,6 +764,10 @@ async function handleEvent(env, ev) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
     if (pr) return reply(env, ev.replyToken, [{ type: "text", text: pr }]);
   }
+  // 教學影片
+  if (uid && /^(教學|教學影片|使用教學|怎麼買|怎麼下單|如何下單|購買流程|下單流程|操作流程|影片)[？?]?$/.test(text || "")) {
+    return reply(env, ev.replyToken, [{ type: "text", text: "這是 ZOARÉ 批發商城的使用教學影片👇\n從 LINE 選單點「批發商城」開始，一步一步帶您：選規格、加入購物車、送出訂單、付款回報、查湊單進度，到貨後選先寄或等齊、出貨通知和運費券。\n\n⏱ 提醒：同一廠商湊滿 NT$20,000 才向日本叫貨，湊滿後約 2～3 週到貨～" }, introVideoMsg()]);
+  }
   // 查自己的折抵券
   if (uid && env.SESSIONS && /^(我的)?(優惠券|優惠卷|折抵券|折抵卷|折價券)$/.test(text)) {
     return reply(env, ev.replyToken, [{ type: "text", text: await couponText(env, uid, await shopLink(env, uid)) }]);
@@ -967,6 +975,7 @@ async function handleEvent(env, ev) {
     if (/NT\$\s*\d/.test(replyText) && !replyText.includes(myLink)) replyText += `\n\n🛒 線上訂購：${myLink}`;
     // 有商品卡片時只傳卡片，不附文字；沒有卡片才傳文字報價
     if (!cardMsg) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
+    if (!cardMsg && out.video && lineMsgs.length < 5) lineMsgs.push(introVideoMsg());
     if (!cardMsg && uid && /\{會員連結\}/.test(out.reply || "")) lineMsgs.push(...(await membershipCards(env, uid)));
     await reply(env, ev.replyToken, lineMsgs, uid);
     if (uid && !isOwnerUser && shown.length) await noteContact(env, uid, { items: shown.map(itemRef), topic: text.slice(0, 20) });
