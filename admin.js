@@ -180,7 +180,7 @@ function pools(){const P=D.pools||{list:[]},L=P.list||[],R=L.filter(p=>p.ready);
   (P.ready||[]).map(r=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(r.name||"")+'</b>　<small class="meta">'+esc(r.id)+'・'+esc(r.tier)+(r.waiting.length?'・客人選先寄（還在等 '+esc(r.waiting.join("、"))+'）':'')+'</small></span><button class="btn" style="background:#161616;color:#fff" onclick="shipM(\''+r.id+'\',\'已到貨\')">🚚 出貨</button></div><div class="meta">寄：'+esc(r.arrived.join("、"))+'</div>'+r.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px">':'')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'</span><b>×'+i.q+'</b></div>').join("")+'</div>').join("")+
   ((P.hold||[]).length?'<div class="card"><h3>⏳ 已到貨、留著等齊（'+P.hold.length+'）</h3>'+P.hold.map(r=>'<div class="meta" style="padding:4px 0;border-top:1px solid #eee"><b>'+esc(r.id)+'</b>　'+esc(r.name||"")+'<br>已到：'+esc(r.arrived.join("、"))+'　還在等：'+esc(r.waiting.join("、"))+'　'+(r.choice==="等齊"?'<b>客人選等齊再寄</b>':'<b style="color:#8a5a00">等客人回覆</b>')+' <button class="btn" style="padding:4px 8px;font-size:12px" onclick="shipM(\''+r.id+'\',\'已到貨\')">還是先寄</button></div>').join("")+'</div>':'')}
 window.arrB=async b=>{if(!confirm("確定批次 "+b+" 的貨已經備好／到貨？\n會通知需要的客人"))return;await cmd("到貨 "+b)};
-window.invite=async m=>{if(!confirm("發 LINE 給買過／加過購物車 "+m+" 商品的客人，邀請一起湊單？"))return;await cmd("湊單提醒 "+m)};
+window.invite=async m=>{if(!confirm("發 LINE 給全部買家，邀請一起湊 "+m+" ？"))return;await cmd("湊單提醒 "+m)};
 window.poDone=
 async m=>{if(!confirm("確定 "+m+" 已向日本叫貨？這些訂單會標記為已叫貨"))return;await cmd("叫貨 "+m+" 完成")};
 function carts(){const L=D.carts||[];

@@ -487,36 +487,42 @@ export async function runCartReminders(env, deps) {
     if (!r || !r.ok) console.log("cart remind failed", c.uid);
   }
 }
-// ---------- 湊單邀請：還沒湊滿的廠商，LINE 提醒買過／加過購物車的客人一起湊 ----------
+// ---------- 湊單邀請：還沒湊滿的廠商，LINE 提醒全部買家一起湊（一則訊息最多列 3 家廠商）----------
 // 每家廠商最多 3 天發一次、每位客人最多 1 天收一則；11:00～21:00 才發；LINE 傳「湊單提醒 關」可關掉
 export async function mfrLink(env, uid, m) { return (await shopLink(env, uid)) + "&mf=" + encodeURIComponent(m); }
 export async function runPoolReminders(env, deps, opt = {}) {
   const h = new Date(Date.now() + 8 * 3600e3).getUTCHours();
-  if (!opt.force && (h < 11 || h >= 21 || (await env.SESSIONS.get("poolremind")) === "off")) return { sent: 0 };
+  if (!opt.force && (h < 11 || h >= 21 || (await env.SESSIONS.get("poolremind")) === "off")) return { sent: 0, done: [] };
   const P = await getPools(env), need = P.need || POOL_NT, owner = await env.SESSIONS.get("owner");
-  const orders = await allOrders(env, 500), fans = {};
-  const add = (m, uid) => { if (uid && uid !== owner) (fans[m] = fans[m] || new Set()).add(uid); };
-  for (const o of orders) if (o.status !== "已取消") for (const l of o.lines || []) if (!l.mem) add(l.m || mfrOf(l.b), o.uid);
-  try { for (const c of await cartList(env)) for (const l of c.lines || []) add(l.m || mfrOf(l.b), c.uid); } catch (e) {}
-  let sent = 0; const done = [];
-  const ms = Object.entries(P.pools || {}).filter(([m, p]) => (opt.only ? m === opt.only : true) && p.nt < need && (opt.force || p.pct >= 20)).sort((a, b) => b[1].pct - a[1].pct);
-  for (const [m, p] of ms) {
+  const ms = [];
+  for (const [m, p] of Object.entries(P.pools || {}).sort((a, b) => b[1].pct - a[1].pct)) {
+    if (opt.only && m !== opt.only) continue;
+    if (p.nt >= need || (!opt.force && p.pct < 20)) continue;
     if (!opt.force && Date.now() - Number((await env.SESSIONS.get("pr:m:" + m)) || 0) < 3 * 86400e3) continue;
-    const gap = Math.max(0, need - p.nt); let n = 0;
-    for (const uid of fans[m] || []) {
-      if (!opt.force && Date.now() - Number((await env.SESSIONS.get("pr:u:" + uid)) || 0) < 86400e3) continue;
-      const mine = orders.some((o) => o.uid === uid && o.status === "已付款" && p.orders.includes(o.id));
-      const text = `📦 ${m} 湊單進度 ${p.pct}%，還差約 NT$${gap.toLocaleString()} 就能向日本叫貨！\n` +
-        (mine ? "您的訂單也在這一批裡，大家多湊一點就能早點叫貨、早點到貨～\n" : "") +
-        `同一家廠商的商品都能一起湊（不同角色、不同系列都可以），湊滿後約 2～3 週到貨。\n\n👉 點這裡直接看 ${m} 的所有商品：\n${await mfrLink(env, uid, m)}`;
-      const r = deps.lineApi ? await deps.lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text }] }).catch(() => null) : null;
-      await env.SESSIONS.put("pr:u:" + uid, String(Date.now()), { expirationTtl: 3 * 86400 });
-      if (r && r.ok !== false) { n++; sent++; }
-    }
-    await env.SESSIONS.put("pr:m:" + m, String(Date.now()), { expirationTtl: 30 * 86400 });
-    if (n) done.push(`${m}（${p.pct}%）→ ${n} 位`);
+    ms.push([m, p]);
   }
-  if (done.length && owner && deps.lineApi && !opt.quiet) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: "📣 已發湊單邀請給買過該廠商的客人：\n" + done.join("\n") }] }).catch(() => {});
+  if (!ms.length) return { sent: 0, done: [] };
+  // 全部買家：下過單的＋傳過訊息的＋有購物車的
+  const orders = await allOrders(env, 500), uids = new Set();
+  for (const o of orders) uids.add(o.uid);
+  try { for (const c of await cartList(env)) uids.add(c.uid); } catch (e) {}
+  try { const ks = await env.SESSIONS.list({ prefix: "n:" }); const v = await Promise.all(ks.keys.slice(0, 1000).map((k) => env.SESSIONS.get(k.name))); v.forEach((u) => u && uids.add(u)); } catch (e) {}
+  uids.delete(owner); uids.delete(null); uids.delete(undefined);
+  const top = ms.slice(0, 3); let sent = 0;
+  for (const uid of uids) {
+    if (!/^U[0-9a-f]{32}$/.test(uid)) continue;
+    if (!opt.force && Date.now() - Number((await env.SESSIONS.get("pr:u:" + uid)) || 0) < 86400e3) continue;
+    const mine = new Set(orders.filter((o) => o.uid === uid && o.status === "已付款").map((o) => o.id));
+    const parts = [];
+    for (const [m, p] of top) parts.push(`📦 ${m}：已湊 ${p.pct}%，還差約 NT$${Math.max(0, need - p.nt).toLocaleString()}${p.orders.some((id) => mine.has(id)) ? "（您的訂單也在這批）" : ""}\n👉 ${await mfrLink(env, uid, m)}`);
+    const text = `這幾家廠商正在湊單，一起湊就能早點向日本叫貨🙌\n同一家廠商的商品都能一起湊（不同角色、系列都可以），湊滿後約 2～3 週到貨。\n\n${parts.join("\n\n")}\n\n點連結就會直接列出那家廠商的所有商品～`;
+    const r = deps.lineApi ? await deps.lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text }] }).catch(() => null) : null;
+    await env.SESSIONS.put("pr:u:" + uid, String(Date.now()), { expirationTtl: 3 * 86400 });
+    if (r && r.ok !== false) sent++;
+  }
+  for (const [m] of top) await env.SESSIONS.put("pr:m:" + m, String(Date.now()), { expirationTtl: 30 * 86400 });
+  const done = top.map(([m, p]) => `${m}（${p.pct}%）`);
+  if (sent && owner && deps.lineApi && !opt.quiet) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 已發湊單邀請給全部買家 ${sent} 位：\n${done.join("、")}` }] }).catch(() => {});
   return { sent, done };
 }
 // ---------- 製造商湊單（同一家製造商累積滿人民幣 4,000 元才能向日本叫貨） ----------
@@ -951,7 +957,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     const a = (prm[1] || "").trim();
     if (a === "開" || a === "關") { await env.SESSIONS.put("poolremind", a === "關" ? "off" : "on"); return `好👌 湊單邀請已${a === "關" ? "關閉" : "開啟"}`; }
     const r = await runPoolReminders(env, deps, { force: true, only: a || undefined, quiet: true });
-    return r.sent ? `好👌 已發湊單邀請，共 ${r.sent} 位客人\n${r.done.join("\n")}` : `目前沒有可以發的對象${a ? "（廠商名稱要跟「叫貨」清單上的一樣，且還沒湊滿）" : ""}`;
+    return r.sent ? `好👌 已發湊單邀請給全部買家，共 ${r.sent} 位\n廠商：${r.done.join("、")}` : `目前沒有可以發的對象${a ? "（廠商名稱要跟「叫貨」清單上的一樣，且還沒湊滿）" : ""}`;
   }
   const am2 = t.match(/^(?:到貨|備好貨|已到貨)\s+(.+)$/);
   if (am2) return await batchArrived(env, deps, am2[1].trim());
