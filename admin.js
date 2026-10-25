@@ -27,7 +27,7 @@ async function poolData(env, deps, orders) {
         it.q += l.q; if (!it.ids.includes(id)) it.ids.push(id);
       }
     }
-    const ords = p.orders.map((id) => byId.get(id)).filter(Boolean).map((o) => ({ id: o.id, name: o.lineName, tier: TIER_NAME[o.tier] || "非會員", at: o.paidAt || o.at }));
+    const ords = p.orders.map((id) => byId.get(id)).filter(Boolean).map((o) => ({ id: o.id, name: o.lineName, tier: TIER_NAME[o.tier] || "非會員", at: o.paidAt || o.at, ans: o.ask && o.ask[m] ? o.ask[m].ans || "未回覆" : "" }));
     return { m, nt: p.nt, pct: p.pct, ready: p.nt >= P.need, since: p.since, orders: ords, items: Object.values(items).sort((a, b) => b.q - a.q) };
   }).sort((a, b) => b.nt - a.nt);
   const waiting = [];
@@ -159,12 +159,12 @@ $("#nav").onclick=e=>{const b=e.target.closest("button");if(!b)return;V=b.datase
 function render(){({home,orders,cust,sales,set,carts,pools})[V]()}
 function ago(t){const m=Math.floor((Date.now()-t)/6e4);return m<60?m+" 分鐘前":m<1440?Math.floor(m/60)+" 小時前":Math.floor(m/1440)+" 天前"}
 function pools(){const P=D.pools||{list:[]},L=P.list||[],R=L.filter(p=>p.ready);
-  $("#m").innerHTML='<div class="card"><h3>廠商叫貨進度（門檻 NT$'+(P.need||20000).toLocaleString()+'）</h3><p class="meta">只算「已付款」還沒向日本叫貨的訂單，以進價計算（人民幣 4,000 元換算，最低 NT$20,000，匯率高時跟著調高）。同一廠商不同 IP／系列、不同客人的訂單都合併計算，先付款先寄。滿門檻會自動 LINE 通知你；叫完貨按「標記已叫貨」，這些訂單的狀態會變成「已向日本叫貨」，客人查訂單看得到。</p>'+(R.length?'<p style="margin:8px 0 0"><b style="color:#b8954a">✅ 可以叫貨：'+R.map(p=>esc(p.m)).join("、")+'</b></p>':'<p class="meta" style="margin-top:8px">目前沒有廠商湊滿</p>')+'</div>'+
+  $("#m").innerHTML='<div class="card"><h3>廠商叫貨進度（門檻 NT$'+(P.need||20000).toLocaleString()+'）</h3><p class="meta">只算「已付款」還沒向日本叫貨的訂單，以進價計算（人民幣 4,000 元換算，最低 NT$20,000，匯率高時跟著調高）。同一廠商不同 IP／系列、不同客人的訂單都合併計算，先付款先寄。滿門檻會自動 LINE 通知你，也會問每位客人「這次出貨」或「順延」（順延的這批不算，下一批再問）；叫完貨按「標記已叫貨」，這些訂單的狀態會變成「已向日本叫貨」，客人查訂單看得到。</p>'+(R.length?'<p style="margin:8px 0 0"><b style="color:#b8954a">✅ 可以叫貨：'+R.map(p=>esc(p.m)).join("、")+'</b></p>':'<p class="meta" style="margin-top:8px">目前沒有廠商湊滿</p>')+'</div>'+
   (L.length?L.map(p=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(p.m)+'</b>　<small class="meta">'+p.orders.length+' 筆訂單</small></span><b style="color:'+(p.ready?'#b8954a':'inherit')+'">NT$'+p.nt.toLocaleString()+'／'+(P.need||20000).toLocaleString()+'</b></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden;margin:6px 0"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+(p.ready?'#b8954a':'#999')+'"></div></div><div class="meta">'+(p.ready?'已湊滿，可以叫貨':'湊單中 '+p.pct+'%，還差 NT$'+Math.max(0,(P.need||20000)-p.nt).toLocaleString())+'</div>'+
-  '<details style="margin-top:8px"'+(p.ready?' open':'')+'><summary class="meta" style="cursor:pointer">要出貨的訂單（'+p.orders.length+'，依付款先後）／商品（'+p.items.length+' 款）</summary><div style="margin:6px 0">'+p.orders.map((o,i)=>'<div class="meta" style="padding:2px 0">'+(i+1)+'. <b>'+esc(o.id)+'</b>　'+esc(o.name||"")+'　'+esc(o.tier)+'　'+esc((o.at||"").slice(5,16).replace("T"," "))+'</div>').join("")+'</div>'+
+  '<details style="margin-top:8px"'+(p.ready?' open':'')+'><summary class="meta" style="cursor:pointer">要出貨的訂單（'+p.orders.length+'，依付款先後）／商品（'+p.items.length+' 款）</summary><div style="margin:6px 0">'+p.orders.map((o,i)=>'<div class="meta" style="padding:2px 0">'+(i+1)+'. <b>'+esc(o.id)+'</b>　'+esc(o.name||"")+'　'+esc(o.tier)+'　'+esc((o.at||"").slice(5,16).replace("T"," "))+(o.ans?'　<b style="color:'+(o.ans==="出貨"?'#1f6b33':o.ans==="順延"?'#9e1b1b':'#8a5a00')+'">'+(o.ans==="出貨"?'✅ 確認出貨':o.ans==="順延"?'⏸ 順延':'⏳ 未回覆')+'</b>':'')+'</div>').join("")+'</div>'+
   p.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:44px;height:44px;object-fit:cover;border-radius:6px">':'<span style="width:44px"></span>')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'<br><small class="meta">JAN '+esc(i.jan||"—")+'</small></span><b>×'+i.q+'</b></div>').join("")+'</details>'+
   (p.ready?'<button class="btn" style="margin-top:8px" onclick="poDone(\''+esc(p.m).replace(/'/g,"")+'\')">標記已叫貨</button>':'')+'</div>').join(""):'<div class="card"><p class="meta">目前沒有已付款待叫貨的訂單</p></div>')+
-  '<div class="card"><h3>已叫貨、等到貨出貨（'+(P.waiting||[]).length+'）</h3><p class="meta">依廠商、付款先後排列。哪家的貨先到，就先把那家的商品寄給客人，按「這家已出貨」會通知客人；同一張訂單全部廠商都出貨後，訂單自動變成「已出貨」。</p></div>'+
+  '<div class="card"><h3>已叫貨、等到貨出貨（'+(P.waiting||[]).length+'）</h3><p class="meta">依廠商、付款先後排列。哪家的貨先到，就先把那家的商品寄給客人，按「這家已出貨」會自動扣運費券（國內 $60、國際每公斤 $220）並通知客人；同一張訂單全部廠商都出貨後，訂單自動變成「已出貨」。</p></div>'+
   (P.waiting||[]).map(w=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(w.m)+'</b>　<small class="meta">'+esc(w.id)+'・'+esc(w.name||"")+'・叫貨 '+esc((w.at||"").slice(5,10))+'</small></span><button class="btn" onclick="shipM(\''+w.id+'\',\''+esc(w.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button></div>'+w.items.map(i=>'<div class="meta" style="padding:2px 0">・'+esc(i.n)+' ×'+i.q+'</div>').join("")+'</div>').join("")}
 window.poDone=
 async m=>{if(!confirm("確定 "+m+" 已向日本叫貨？這些訂單會標記為已叫貨"))return;await cmd("叫貨 "+m+" 完成")};
@@ -195,7 +195,7 @@ function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'
   '<div class="btns">'+(["待付款","已回報匯款","待確認"].includes(o.status)?'<button class="dark" onclick="st(\''+o.id+'\',\'已付款\')">✓ 確認已付款</button>':'')+(o.status==="已付款"?'<button class="dark" onclick="ship(\''+o.id+'\')">🚚 出貨</button>':'')+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="st(\''+o.id+'\',\'取消\')">取消訂單</button>':'')+'</div></div>'}
 const ord=id=>D.orders.find(o=>o.id===id);
 window.st=async(id,s)=>{if(s==="取消"&&!confirm("確定取消 "+id+"？會通知客人"))return;await cmd(id+" "+s)};
-window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:""))};
+window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;const kg=prompt("國際運費重量（公斤，每公斤 NT$220；不知道可空白，之後再跟客人報價）","");if(kg===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:"")+(kg&&Number(kg)>0?" "+Number(kg)+"kg":""))};
 window.ship=async id=>{const t=prompt("物流單號（可空白）","");if(t===null)return;await cmd(id+" 已出貨"+(t?" "+t:""))};
 window.memo=async id=>{const t=prompt("備註（空白＝清除）",ord(id).memo||"");if(t===null)return;await cmd(id+" 備註 "+t)};
 window.delO=async id=>{if(!confirm("確定刪除訂單 "+id+"？刪除後無法復原"))return;await cmd("刪除 "+id)};

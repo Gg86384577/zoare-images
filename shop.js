@@ -87,8 +87,8 @@ function packN(it) {
 let SLIM = null, SLIM_SRC = null, SLIM_TXT = null, SLIM_TXT_KEY = "";
 function hashStr(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + s.length.toString(36); }
 const MEMBER_ITEMS = [
-  { k: "MEMBER|VIP", n: "VIP 會員（月費）國際＋國內運費全免・VIP 專屬價", b: "ZOARÉ 會員方案", s: "", g: 1000, v: 1000, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_vip.jpg", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "vip" },
-  { k: "MEMBER|GEN", n: "一般會員（月費）只免國際運費", b: "ZOARÉ 會員方案", s: "", g: 100, v: 100, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_gen.jpg", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "member" },
+  { k: "MEMBER|VIP", n: "VIP 會員（月費）每月 10 張國內＋10 張國際運費券・VIP 專屬價", b: "ZOARÉ 會員方案", s: "", g: 1000, v: 1000, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_vip.jpg?v=2", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "vip" },
+  { k: "MEMBER|GEN", n: "一般會員（月費）每月 5 張國內運費券", b: "ZOARÉ 會員方案", s: "", g: 100, v: 100, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_gen.jpg?v=2", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "member" },
 ];
 // 網站多加的分類（LINE 選單按鈕有上限，不放這些）
 const WEB_CATS = [
@@ -333,7 +333,7 @@ export async function handleShop(request, env, ctx, deps) {
     if (!uid) return Response.json({ ok: false, error: "連結無效，請回到 LINE 重新點訂購連結" }, { status: 401 });
     const tier = await getTier(env, uid);
     const mi = await memberInfo(env, uid);
-    return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier], until: mi.until ? fmtDay(mi.until) : "", days: mi.days, coupons: await couponView(env, uid), camp: activeCampaign() });
+    return Response.json({ ok: true, name: await deps.displayName(env, uid), tier, tierName: TIER_NAME[tier], until: mi.until ? fmtDay(mi.until) : "", days: mi.days, coupons: await couponView(env, uid), camp: activeCampaign(), sc: await shipCoupons(env, uid), shipRule: SHIP_RULE });
   }
   if (p === "/shop/orders") {
     const uid = await verifyToken(env, url.searchParams.get("t"));
@@ -449,7 +449,8 @@ export async function couponView(env, uid) {
 export async function couponText(env, uid, link) {
   const v = await couponView(env, uid), camp = activeCampaign();
   const ok = v.filter((c) => c.status === "可使用"), wait = v.filter((c) => c.status === "付款後生效");
-  let t = ok.length || wait.length ? "🎟 您的折抵券\n\n" + [...ok, ...wait].map((c) => `・NT$${c.amt} 折抵券（${c.name}）\n　${c.status === "可使用" ? "✅ 可使用" : "⏳ 付款後生效"}・訂單滿 NT$${c.min.toLocaleString()} 可用・有效到 ${c.exp.slice(5).replace("-", "/")}`).join("\n") : "目前沒有可使用的折抵券喔";
+  const sc = await shipCoupons(env, uid);
+  let t = shipCouponLine(sc) + "\n" + SHIP_RULE + "\n\n" + (ok.length || wait.length ? "🎟 您的折抵券\n\n" + [...ok, ...wait].map((c) => `・NT$${c.amt} 折抵券（${c.name}）\n　${c.status === "可使用" ? "✅ 可使用" : "⏳ 付款後生效"}・訂單滿 NT$${c.min.toLocaleString()} 可用・有效到 ${c.exp.slice(5).replace("-", "/")}`).join("\n") : "目前沒有可使用的折抵券喔");
   if (camp) t += `\n\n🎀 ${camp.name}進行中（${camp.from.slice(5).replace("-", "/")}～${camp.to.slice(5).replace("-", "/")}）\n${[].concat(camp.cat).join("、")}商品訂單滿額：${camp.tiers.slice().reverse().map(([a, b]) => `滿 $${a.toLocaleString()} 送 $${b.toLocaleString()}`).join("、")}`;
   return t + `\n\n下單時在購物車選擇折抵券就會自動扣除👇\n${link}`;
 }
@@ -506,7 +507,7 @@ export async function computePools(env, deps = {}) {
     for (const l of o.lines || []) {
       if (l.mem) continue;
       const m = l.m || mfrOf(l.b);
-      if ((o.po && o.po[m]) || (o.sh && o.sh[m])) continue;
+      if ((o.po && o.po[m]) || (o.sh && o.sh[m]) || (o.defer && o.defer[m])) continue;
       const p = (pools[m] = pools[m] || { nt: 0, orders: [], since: o.paidAt || o.at });
       p.nt += lineCostNT(o, l);
       if (!p.orders.includes(o.id)) p.orders.push(o.id);
@@ -523,10 +524,60 @@ export async function computePools(env, deps = {}) {
       await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📦 ${m} 已湊滿叫貨金額！\n已付款待叫貨：NT$${p.nt.toLocaleString()}（門檻 NT$${need.toLocaleString()}）\n訂單 ${p.orders.length} 筆：${p.orders.join("、")}\n\n請到後台「叫貨」查看要叫的商品，叫完傳「叫貨 ${m} 完成」` }] }).catch(() => {});
       notified[m] = sig;
     }
+    if (p.nt >= need && deps.lineApi) {
+      const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+      for (const id of p.orders) {
+        const o = orders.find((x) => x.id === id);
+        if (!o || (o.ask && o.ask[m])) continue;
+        o.ask = o.ask || {}; o.ask[m] = { at: now, ans: "" };
+        await saveOrder(env, o);
+        const its = o.lines.filter((l) => !l.mem && (l.m || mfrOf(l.b)) === m);
+        await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: `🎉 ${m} 已經湊滿發貨金額囉！\n您的訂單 ${id} 裡這家的商品：\n${its.slice(0, 8).map((l) => `・${l.n} ×${l.q}`).join("\n")}${its.length > 8 ? `\n…共 ${its.length} 款` : ""}\n\n要這批一起向日本叫貨、到貨就寄出嗎？\n${SHIP_RULE}\n\n想等其他廠商一起寄可以選「順延」，這批會先讓排下一位的客人出貨，下一批湊滿再問您～`, quickReply: { items: [{ type: "action", action: { type: "message", label: "✅ 這次出貨", text: `這次出貨 ${id} ${m}` } }, { type: "action", action: { type: "message", label: "⏸ 順延下一批", text: `順延 ${id} ${m}` } }] } }] }).catch(() => {});
+      }
+    }
   }
   const out = { at: Date.now(), rate, need, pools, notified };
   await env.SESSIONS.put("pools", JSON.stringify(out));
   return out;
+}
+// ---------- 運費券（每月發放，取代原本的會員免運） ----------
+export const SHIP_DOM = 60, SHIP_KG = 220;
+export const SC_QUOTA = { vip: { dom: 10, intl: 10 }, member: { dom: 5, intl: 0 }, none: { dom: 0, intl: 0 } };
+const ymTW = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7);
+export async function shipCoupons(env, uid) {
+  const tier = await getTier(env, uid), q = SC_QUOTA[tier] || SC_QUOTA.none, ym = ymTW();
+  const used = JSON.parse((await env.SESSIONS.get(`sc:${uid}:${ym}`)) || '{"dom":0,"intl":0}');
+  return { tier, ym, quota: q, used, dom: Math.max(0, q.dom - used.dom), intl: Math.max(0, q.intl - used.intl) };
+}
+async function useShipCoupon(env, uid, kind) {
+  const c = await shipCoupons(env, uid);
+  if (!(c[kind] > 0)) return false;
+  c.used[kind] = (c.used[kind] || 0) + 1;
+  await env.SESSIONS.put(`sc:${uid}:${c.ym}`, JSON.stringify(c.used), { expirationTtl: 70 * 86400 });
+  return true;
+}
+export function shipCouponLine(c) {
+  if (!c || (!c.quota.dom && !c.quota.intl)) return "🚚 運費券：加入會員每月送（一般會員 5 張國內、VIP 10 張國內＋10 張國際）";
+  return `🚚 本月運費券：國內 ${c.dom}/${c.quota.dom} 張${c.quota.intl ? `、國際 ${c.intl}/${c.quota.intl} 張` : ""}（每月 1 號重新發放）`;
+}
+export const SHIP_RULE = `每次出貨國內運費 NT$${SHIP_DOM}，國際運費依物流公司報價（約每公斤 NT$${SHIP_KG}）；會員出貨時自動用運費券折抵`;
+// 客人回覆「這次出貨／順延」
+export async function customerShipReply(env, uid, text, deps = {}) {
+  const m0 = String(text || "").match(/^(這次出貨|順延)\s+(ZO\w{10})\s+(.+)$/i);
+  if (!m0) return null;
+  const id = m0[2].toUpperCase(), m = m0[3].trim(), o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+  if (!o || o.uid !== uid) return "找不到這張訂單，可以傳「我的訂單」查看～";
+  if (!orderMfrs(o).includes(m)) return `訂單 ${id} 裡沒有「${m}」的商品喔`;
+  if (o.po && o.po[m]) return `訂單 ${id} 的 ${m} 商品已經向日本叫貨囉，到貨就會寄出～`;
+  const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+  o.ask = o.ask || {}; o.ask[m] = Object.assign(o.ask[m] || {}, { ans: m0[1] === "順延" ? "順延" : "出貨", ansAt: now });
+  o.defer = o.defer || {};
+  if (m0[1] === "順延") o.defer[m] = { at: now }; else delete o.defer[m];
+  await saveOrder(env, o);
+  try { await computePools(env, deps); } catch (e) {}
+  const owner = await env.SESSIONS.get("owner");
+  if (owner && deps.lineApi) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `${m0[1] === "順延" ? "⏸" : "✅"} ${o.lineName || "客人"}（${id}）${m}：${m0[1] === "順延" ? "選擇順延到下一批" : "確認這次出貨"}` }] }).catch(() => {});
+  return m0[1] === "順延" ? `好的👌 訂單 ${id} 的 ${m} 商品順延到下一批\n這批會先讓排下一位的客人出貨，下一批湊滿時會再問您～` : `好的👌 訂單 ${id} 的 ${m} 商品會在這批一起向日本叫貨，到貨就寄出～\n${SHIP_RULE}`;
 }
 export async function getPools(env) { return JSON.parse((await env.SESSIONS.get("pools")) || "null") || { pools: {}, need: poolNeed(await cnyRate(env)), rate: await cnyRate(env) }; }
 // 一張訂單裡每家製造商目前的狀態（給客人看）
@@ -541,6 +592,7 @@ export function mfrStatusSync(o, P, need) {
     else if (o.status === "已出貨") out.push({ m, s: "已出貨", k: "sh" });
     else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
     else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），到貨就先寄這家的商品", k: "po" });
+    else if (o.status === "已付款" && o.defer && o.defer[m]) out.push({ m, s: "已順延到下一批（下一批湊滿會再問您）", k: "defer" });
     else if (o.status !== "已付款") { const p = P[m]; out.push({ m, s: `付款後開始湊單（這家目前 ${p ? p.pct : 0}%${gap(p)}）`, k: "wait" }); }
     else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.nt >= need ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%${gap(p)}（滿 NT$${need.toLocaleString()} 叫貨）`) + qn, k: "pool" }); }
   }
@@ -574,7 +626,7 @@ async function payInfo(env, pay) {
 const payHow = (pay) => pay === "LINE Pay" ? "付款後請回到 LINE 傳「付款截圖」給我們" : "轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」給我們";
 function orderText(o, withRules = true) {
   const items = o.lines.map((l) => `・${l.n} ×${l.q}　NT$${l.sub.toLocaleString()}`).join("\n");
-  return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　${o.coupon ? `小計 NT$${(o.subtotal || o.total + o.coupon.amt).toLocaleString()}\n🎟 折抵券 −NT$${o.coupon.amt}\n` : ""}合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）${o.earned ? `\n🎁 ${o.earned.camp}：付款後送 NT$${o.earned.amt} 折抵券（下次使用）` : ""}\n運費：${o.tier === "vip" ? "VIP 免運" : "由客服確認後通知"}` +
+  return `訂單編號：${o.id}\n${items}\n\n共 ${o.qty} 件　${o.coupon ? `小計 NT$${(o.subtotal || o.total + o.coupon.amt).toLocaleString()}\n🎟 折抵券 −NT$${o.coupon.amt}\n` : ""}合計 NT$${o.total.toLocaleString()}（${TIER_NAME[o.tier]}價）${o.earned ? `\n🎁 ${o.earned.camp}：付款後送 NT$${o.earned.amt} 折抵券（下次使用）` : ""}\n運費：依廠商分批寄出，每次出貨國內 NT$${SHIP_DOM}，國際依物流報價（約每公斤 NT$${SHIP_KG}），會員用運費券折抵${o.shipDue ? `\n已出貨運費：NT$${o.shipDue.toLocaleString()}` : ""}` +
     `\n付款方式：${o.form.pay || "轉帳"}` +
     (withRules && o.notes.length ? `\n\n⚠️ 訂購規則提醒：\n${o.notes.slice(0, 8).map((n) => "・" + n).join("\n")}` : "");
 }
@@ -701,7 +753,8 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     const m = pm[1].trim(), now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
     const orders = await allOrders(env, 500); let n = 0;
     for (const o of orders) {
-      if (o.status !== "已付款" || !(o.lines || []).some((l) => !l.mem && (l.m || mfrOf(l.b)) === m) || (o.po && o.po[m])) continue;
+      if (o.status !== "已付款" || !(o.lines || []).some((l) => !l.mem && (l.m || mfrOf(l.b)) === m) || (o.po && o.po[m]) || (o.sh && o.sh[m])) continue;
+      if (o.defer && o.defer[m]) { delete o.defer[m]; if (o.ask) delete o.ask[m]; await saveOrder(env, o); continue; } // 順延的客人回到下一批
       o.po = o.po || {}; o.po[m] = { at: now }; await saveOrder(env, o); n++;
     }
     await computePools(env, deps);
@@ -762,17 +815,26 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     if (!["已付款", "已出貨"].includes(o.status)) return `訂單 ${id} 目前是「${o.status}」，付款後才能出貨`;
     const ms = orderMfrs(o), rest = sm[2].trim(), m = ms.slice().sort((a, b) => b.length - a.length).find((x) => rest === x || rest.startsWith(x + " ") || rest.startsWith(x + "/"));
     if (!m) return `訂單 ${id} 裡沒有這家廠商。這張訂單的廠商：${ms.join("、")}\n格式：${id} 分批出貨 廠商名 物流單號`;
-    const track = rest.slice(m.length).replace(/^[\s/]+/, "").trim().slice(0, 60);
+    let track = rest.slice(m.length).replace(/^[\s/]+/, "").trim();
+    const kgm = track.match(/(\d+(?:\.\d+)?)\s*(?:kg|公斤)/i), kg = kgm ? Number(kgm[1]) : 0;
+    if (kgm) track = track.replace(kgm[0], "").trim();
+    track = track.slice(0, 60);
+    const domCp = await useShipCoupon(env, o.uid, "dom"), intlCp = await useShipCoupon(env, o.uid, "intl");
+    const fee = { dom: domCp ? 0 : SHIP_DOM, domCp, intlCp, kg, intl: intlCp ? 0 : kg ? Math.ceil(kg * SHIP_KG) : null };
+    const due = fee.dom + (fee.intl || 0);
+    o.shipDue = (o.shipDue || 0) + due;
     const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
-    o.sh = o.sh || {}; o.sh[m] = { at: now, track };
+    o.sh = o.sh || {}; o.sh[m] = { at: now, track, fee };
+    const sc = await shipCoupons(env, o.uid);
+    const feeTxt = `\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : kg ? `${kg} 公斤 × NT$${SHIP_KG} = NT$${fee.intl.toLocaleString()}` : "依物流公司報價，確定後另外通知"}${due ? `\n本次運費合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}`;
     const left = ms.filter((x) => !o.sh[x]);
     const items = o.lines.filter((l) => !l.mem && (l.m || mfrOf(l.b)) === m);
     if (!left.length) { o.statusBefore = o.status; o.status = "已出貨"; if (track) o.track = track; }
     await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
-    const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : "最後一批商品出貨囉！"}\n廠商：${m}\n${items.map((l) => `・${l.n} ×${l.q}`).join("\n")}${track ? "\n物流單號：" + track : ""}\n\n${left.length ? "其他廠商的商品（" + left.join("、") + "）到貨後會再寄出，可以傳「我的訂單」查看進度～" : "這張訂單的商品全部寄出了，收到貨有任何問題都可以跟我們說～"}`;
+    const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : "最後一批商品出貨囉！"}\n廠商：${m}\n${items.map((l) => `・${l.n} ×${l.q}`).join("\n")}${track ? "\n物流單號：" + track : ""}\n\n${left.length ? "其他廠商的商品（" + left.join("、") + "）到貨後會再寄出，可以傳「我的訂單」查看進度～" : "這張訂單的商品全部寄出了，收到貨有任何問題都可以跟我們說～"}${feeTxt}`;
     let sent = false;
     if (deps.lineApi) { const r = await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: msg }] }); sent = r && r.ok; }
-    return `好👌 ${id}「${m}」的商品已標記出貨${track ? "（物流單號 " + track + "）" : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}`;
+    return `好👌 ${id}「${m}」的商品已標記出貨${track ? "（物流單號 " + track + "）" : ""}\n運費：國內 ${domCp ? "用券" : "NT$" + SHIP_DOM}・國際 ${intlCp ? "用券" : kg ? "NT$" + fee.intl : "待報價"}${due ? `，要跟客人收 NT$${due}` : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}`;
   }
   const om = t.match(/^(ZO\w{10})(?:\s*(已付款|已出貨|取消)(?:\s+(.+))?)?$/i);
   if (om) {
@@ -1111,8 +1173,9 @@ let CPSEL="";
 const CST={"可使用":"#1f6b33","付款後生效":"#8a5a00","已使用":"#888","已過期":"#888","已失效":"#888"};
 function cpCard(c){return '<div class="cp'+(c.status==="可使用"||c.status==="付款後生效"?'':' off')+'"><div class="cpa">NT$'+c.amt+'</div><div class="cpt"><b>'+esc(c.name)+' 折抵券</b><br><small>訂單滿 NT$'+c.min.toLocaleString()+' 可用・有效到 '+esc(c.exp.slice(5).replace("-","/"))+'</small><br><span style="color:'+(CST[c.status]||"#888")+';font-weight:700;font-size:12px">'+esc(c.status==="付款後生效"?"⏳ 訂單 "+c.src+" 付款後生效":c.status==="已使用"?"已使用（"+c.used+"）":c.status)+'</span></div></div>'}
 function campLine(){const C=ME&&ME.camp;if(!C)return"";const tl=C.tiers.slice().reverse().map(t=>"滿 $"+t[0].toLocaleString()+" 送 $"+t[1].toLocaleString()).join("・");return '<div class="camp">🎀 <b>'+esc(C.name)+'</b>（'+C.from.slice(5).replace("-","/")+'～'+C.to.slice(5).replace("-","/")+'）<br>'+esc([].concat(C.cat).join('、'))+'商品不用整箱，訂單達指定金額就送：'+tl+'<br><small>付款後生效，30 天內下次訂購使用，訂單滿券面 5 倍可折抵</small></div>'}
+function scLine(c){if(!c||(!c.quota.dom&&!c.quota.intl))return"🚚 加入會員每月送運費券（一般會員 5 張國內、VIP 10 張國內＋10 張國際）";return"🚚 本月運費券：國內 "+c.dom+"/"+c.quota.dom+" 張"+(c.quota.intl?"、國際 "+c.intl+"/"+c.quota.intl+" 張":"")+"，出貨時自動折抵"}
 function openCoupons(){$("#panel").classList.remove("vmode");VK=null;const L=(ME.coupons||[]);
-  $("#panel").innerHTML='<h2>我的優惠券<button class="x" id="cpx">×</button></h2>'+campLine()+(L.length?L.map(cpCard).join(""):'<div class="empty">目前還沒有折抵券喔</div>');
+  $("#panel").innerHTML='<h2>我的優惠券<button class="x" id="cpx">×</button></h2>'+'<div class="camp" style="background:#f4f1ea;border-color:#e2d9c2;color:#3a3a3a"><b>'+esc(scLine(ME.sc))+'</b><br><small>'+esc(ME.shipRule||"")+'（每月 1 號重新發放，當月有效）</small></div>'+campLine()+(L.length?L.map(cpCard).join(""):'<div class="empty">目前還沒有折抵券喔</div>');
   $("#sheet").classList.add("on");$("#cpx").onclick=()=>$("#sheet").classList.remove("on")}
 function caseN(x){const m=String(x.pk||"").match(/(?:入数|入數|装箱数|裝箱數)\\s*(\\d+)/);return m?+m[1]:0}
 function campEarn(L){const C=ME&&ME.camp;if(!C)return null;let base=0;L.forEach(({x,q,sub})=>{if(!x.mem&&(x.c||[]).some(c=>[].concat(C.cat).includes(c)))base+=sub});const t=C.tiers.find(t=>base>=t[0]),nx=C.tiers.slice().reverse().find(t=>base<t[0]);return{base,amt:t?t[1]:0,next:nx}}
@@ -1127,7 +1190,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   $("#panel").innerHTML='<h2>購物車<button class="x" id="cx">×</button></h2>'+
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
   (N.length?'<div class="warn"><b>訂購規則提醒</b><br>'+N.map(esc).join("<br>")+'</div>':'')+
-  cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：'+(TIER()==="vip"?"VIP 免運":"由客服確認後通知")+'</small></div>'+
+  cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：依廠商分批寄出，每次出貨國內 NT$60，國際運費依物流報價（約每公斤 NT$220）'+(ME.sc&&TIER()===ME.tier?'<br>'+esc(scLine(ME.sc)):'<br>會員每月送運費券：一般會員 5 張國內、VIP 10 張國內＋10 張國際')+'</small></div>'+
   '<form id="of"><label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
   '<label>寄送方式</label><select class="f" name="ship" required>'+["7-11 店到店","全家店到店","萊爾富店到店","宅配","其他"].map(s=>'<option'+(form.ship===s?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
@@ -1532,12 +1595,12 @@ export async function membershipCards(env, uid) {
   const link = (await shopLink(env, uid)) + "&q=" + encodeURIComponent("會員方案");
   const tier = await getTier(env, uid);
   const bubbles = [
-    memBubble("👑 VIP 會員", "NT$1,000／月", ["國際＋國內運費全免", "全館 VIP 價，每件比一般價便宜 NT$30", "真正少量叫貨：每款照商品起批數（很多款 2～3 件），沒有總件數限制（依廠商湊單、需等待）", "新品優先通知"], RAW_IMG + "member_vip.jpg", "加入 VIP 會員", link, true),
-    memBubble("一般會員", "NT$100／月", ["免國際運費", "每款照商品起批數（很多款 2～3 件），不同款混批 21 件", "商品用一般價"], RAW_IMG + "member_gen.jpg", "加入一般會員", link, false),
+    memBubble("👑 VIP 會員", "NT$1,000／月", ["每月 10 張國內＋10 張國際運費券", "全館 VIP 價，每件比一般價便宜 NT$30", "真正少量叫貨：每款照商品起批數（很多款 2～3 件），沒有總件數限制（依廠商湊單、需等待）", "新品優先通知"], RAW_IMG + "member_vip.jpg?v=2", "加入 VIP 會員", link, true),
+    memBubble("一般會員", "NT$100／月", ["每月 5 張國內運費券", "每款照商品起批數（很多款 2～3 件），不同款混批 21 件", "商品用一般價"], RAW_IMG + "member_gen.jpg?v=2", "加入一般會員", link, false),
   ];
   const mi = await memberInfo(env, uid);
   const exp = mi.until ? `有效到 ${fmtDay(mi.until)}（還有 ${mi.days} 天）` : "";
-  const head = tier === "vip" ? `您已經是 VIP 會員囉👑 ${exp}\n要續約可以點下面直接下單，會從到期日往後延長～` : tier === "member" ? `您目前是一般會員，${exp}\n升級 VIP 運費全免、每件再便宜 NT$30👇` : "ZOARÉ 批發會員方案👇 付款完成會自動開通，效期 1 個月";
+  const head = tier === "vip" ? `您已經是 VIP 會員囉👑 ${exp}\n要續約可以點下面直接下單，會從到期日往後延長～` : tier === "member" ? `您目前是一般會員，${exp}\n升級 VIP 每月 10 張國內＋10 張國際運費券、每件再便宜 NT$30、沒有總件數限制👇` : "ZOARÉ 批發會員方案👇 付款完成會自動開通，效期 1 個月";
   const out = [{ type: "flex", altText: head, contents: { type: "carousel", contents: bubbles } }];
   if (tier !== "none") out.unshift({ type: "text", text: head });
   return out;
@@ -1549,6 +1612,7 @@ export async function welcomeMessages(env, uid, name) {
   const hi = name ? `${name} 您好～` : "您好～";
   const text = `${hi}歡迎加入 ZOARÉ 🎉
 我們是日本角色商品批發，吉伊卡哇、三麗鷗、寶可夢、史努比、角落生物…上千款日本正版商品，集單預購、批發價直送台灣🇯🇵
+日本廠商要湊滿一定金額才接單，我們幫大家依廠商合併湊單，商城每個商品下面都看得到湊單進度
 
 ━━ 怎麼買？3 個步驟 ━━
 ① 找商品：直接在這裡打角色名字，例如「吉伊卡哇」「酷洛米」，馬上傳商品卡片給您
@@ -1568,17 +1632,24 @@ ${link}
 ・非會員：每款 21 件起（照商品起批數的倍數，例如起批 3 件→21 件、2 件→22 件）
 ・一般會員：每款照商品起批數（很多款 2～3 件），不同款混批合計 21 件
 ・VIP 會員：每款照商品起批數就能少量下單，沒有總件數限制
-・所有訂單都依廠商湊單（同一廠商累積滿 NT$20,000 才向日本叫貨），先付款先寄
+・所有訂單都依廠商湊單：同一廠商所有客人已付款的訂單累積滿 NT$20,000 就向日本叫貨，先付款先寄
+・湊滿時會用 LINE 問您要這批出貨還是順延（想等其他廠商一起寄可以選順延）
+・一張訂單有多家廠商時，哪家先到貨就先寄哪家
+
+━━ 運費 ━━
+・每次出貨國內運費 NT$60，國際運費依物流公司報價（約每公斤 NT$220）
+・會員每月送運費券，出貨時自動折抵
 👉 想少量多樣進貨，加入會員最划算
 
 ━━ 會員方案 ━━
 👑 VIP 會員 NT$1,000／月（推薦）
-・國際＋國內運費全免
+・每月 10 張國內＋10 張國際運費券
 ・全館 VIP 價，每件再便宜 NT$30
+・真正少量叫貨，沒有總件數限制
 ・新品優先通知
-🔹 一般會員 NT$100／月：只免國際運費
+🔹 一般會員 NT$100／月：每月 5 張國內運費券，不同款混批 21 件
 
-💡 幫您算：每月進貨 34 件以上，VIP 每件省的 NT$30 就把月費賺回來了，運費還全免！
+💡 幫您算：每月進貨 34 件以上，VIP 每件省的 NT$30 就把月費賺回來了，還有 20 張運費券！
 點下面卡片就能直接加入，付款完成自動開通👇`;
   const qrs = [["🔥 熱賣推薦", "熱賣推薦"], ["吉伊卡哇", "吉伊卡哇"], ["三麗鷗", "三麗鷗"], ["✨ 新品上線", "新品上線"], ["加入 VIP", "會員方案"]];
   const cards = await membershipCards(env, uid);

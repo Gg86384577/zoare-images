@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -73,6 +73,8 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 會員（VIP NT$1,000、一般會員 NT$100）：每款照商品本身的起批數（型錄沒寫的 3 件起）。一般會員整張訂單不同款混批合計 21 件起；VIP 沒有總件數限制，可以真正少量叫貨。
 - 非會員：單款要買到商品起批數的倍數、至少 21 件（起批 3→21 件、2→22 件、5→25 件、6→24 件；起批本身超過 21 的照商品）。
 - 廠商起批金額（三種方案都適用）：日本廠商要同一家廠商（製造商）累積滿 NT$20,000（以進價計；匯率變高時門檻會跟著調高）才接單。跟客人說明時一律只講台幣，不要提到人民幣。客人下單不用自己湊滿，所有客人已付款的訂單會依廠商合併計算，滿了就向日本叫貨，先付款先寄；同一廠商不同 IP、系列可以合併，不同廠商不能合併，也不能補差價或補運費提早出貨。商城每個商品下面有「廠商」和湊單進度條。
+- 湊滿時系統會用 LINE 問每位客人「這次出貨」還是「順延」；選順延的這批先讓排下一位的客人出貨，下一批湊滿再問。
+- 運費：依廠商分批寄出，每出貨一次國內運費 NT$60；國際運費依物流公司報價（約每公斤 NT$220）。會員每月送運費券（一般會員 5 張國內；VIP 10 張國內＋10 張國際），每月 1 號重新發放，出貨時自動折抵。客人傳「優惠券」可以看本月還剩幾張。會員沒有「全免運」了，不要說運費全免。
 - 一張訂單有多家廠商時，依廠商分別叫貨，哪家先到貨就先寄那家的商品（會分批寄、各有物流單號），全部寄完訂單才會變成「已出貨」。
 - 客人問訂單進度：請客人傳「我的訂單」，會顯示每家廠商目前是湊單中幾 %、已湊滿準備叫貨、或已向日本叫貨。
 - 一律以候選商品「起批」欄位寫的數字為準。不可以說「加入會員後全部一件起」。
@@ -80,14 +82,14 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 商品資料若有「訂購方式：整箱…不拆箱不混款」，這款不論是否會員都只能單款整箱訂（每款 1 箱起），報價時要講清楚每箱幾個、整箱價（單價×每箱數量），以及截單時間。
 
 【會員】
-- 預設只推薦 VIP 會員：NT$1,000／月，國際＋國內運費全免、更優惠的批發價、部分商品 VIP 專屬價、新品優先通知。入會：${VIP}
-- 只有客人問 NT$100、問更便宜的方案、或說 VIP 太貴時，才介紹一般會員：NT$100／月，只免國際運費。入會：${GENERAL}
+- 預設只推薦 VIP 會員：NT$1,000／月，每月 10 張國內＋10 張國際運費券、更優惠的批發價（每件便宜 NT$30）、沒有總件數限制可以真正少量叫貨、新品優先通知。入會：${VIP}
+- 只有客人問 NT$100、問更便宜的方案、或說 VIP 太貴時，才介紹一般會員：NT$100／月，每月 5 張國內運費券，每款照起批數、不同款混批 21 件。入會：${GENERAL}
 
 【其他】
 - 訂單查詢：請客人點選單的「訂單查詢」，或傳「我的訂單」。
 - 優惠券／折抵券：請客人傳「優惠券」查看自己的券、狀態和期限；下單時在商城購物車選擇折抵券就會自動扣除。目前活動「三麗鷗・吉伊卡哇滿額回饋」10/22～10/25：不用整箱，同一張訂單裡三麗鷗＋吉伊卡哇商品金額合計滿 $3,000 送 $100、滿 $10,000 送 $300、滿 $20,000 送 $600、滿 $30,000 送 $1,000；付款後生效，30 天內使用，下次訂單滿券面 5 倍可折抵，一張訂單限用一張；活動期間下單約兩週出貨。
 - 付款方式：線上訂購網站結帳時可以選「銀行轉帳」或「LINE Pay」，付款後在 LINE 傳後五碼和付款截圖，系統會自動對帳。
-- 運費細節、退換貨、改單、取消訂單、客訴，或任何從上面規則和候選商品裡找不到答案的問題：不要硬回答，直接加上 #HANDOFF（系統會自動跟客人說請專人回覆，你的文字不會送出）。
+- 實際國際運費金額、退換貨、改單、取消訂單、客訴，或任何從上面規則和候選商品裡找不到答案的問題：不要硬回答，直接加上 #HANDOFF（系統會自動跟客人說請專人回覆，你的文字不會送出）。
 - 客人一直問同一件事、你只能重複前面講過的話時，也加上 #HANDOFF。
 - 會員效期一般是 1 個月，到期自動停止；客人問自己的會員到期日，請他傳「會員期限」。續約會從到期日往後延長。
 - 會員取消：下個月不繼續繳費就等於取消，不用另外申請。已下的訂單一律以下單當時的金額、數量為準。
@@ -743,6 +745,11 @@ async function handleEvent(env, ev) {
     await noteContact(env, uid, null);
     await logInquiry(env, uid, msg.type === "text" ? text : msg.type === "image" ? "（傳了圖片）" : msg.type === "sticker" ? "（貼圖）" : "");
   }
+  // 湊滿時客人回覆「這次出貨／順延」
+  if (uid && env.SESSIONS && /^(這次出貨|順延)\s+ZO/i.test(text || "")) {
+    const sr = await customerShipReply(env, uid, text, { lineApi });
+    if (sr) return reply(env, ev.replyToken, [{ type: "text", text: sr }]);
+  }
   // 匯款後五碼回報
   if (uid && env.SESSIONS && text) {
     const pr = await handlePayment(env, { lineApi }, uid, text);
@@ -1277,7 +1284,7 @@ async function runMemberReminders(env) {
       const nm = tier === "vip" ? "VIP 會員" : "一般會員";
       if (left > 0 && left <= 3 * 86400e3 && !done.includes("soon")) {
         await env.SESSIONS.put("txr:" + uid, done + "soon", { expirationTtl: 40 * 86400 });
-        await lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text: `您好～提醒您，您的 ${nm} 將在 ${fmtDay(until)} 到期☺️\n想繼續享有會員價${tier === "vip" ? "和運費全免" : ""}的話，點下面直接續約，會從到期日往後延長，不會浪費天數喔～` }, ...(await membershipCards(env, uid)).filter((m) => m.type === "flex")] });
+        await lineApi(env, "/v2/bot/message/push", { to: uid, messages: [{ type: "text", text: `您好～提醒您，您的 ${nm} 將在 ${fmtDay(until)} 到期☺️\n想繼續享有會員價${tier === "vip" ? "和每月運費券" : "和每月運費券"}的話，點下面直接續約，會從到期日往後延長，不會浪費天數喔～` }, ...(await membershipCards(env, uid)).filter((m) => m.type === "flex")] });
       } else if (left <= 0 && !done.includes("end")) {
         await env.SESSIONS.put("txr:" + uid, done + "end", { expirationTtl: 40 * 86400 });
         await env.SESSIONS.delete("tier:" + uid);
