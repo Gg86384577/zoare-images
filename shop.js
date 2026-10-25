@@ -529,20 +529,20 @@ export async function getPools(env) { return JSON.parse((await env.SESSIONS.get(
 // 一張訂單裡每家製造商目前的狀態（給客人看）
 export const orderMfrs = (o) => [...new Set((o.lines || []).filter((l) => !l.mem).map((l) => l.m || mfrOf(l.b)))];
 const mmdd = (t) => (t ? String(t).slice(5, 10).replace("-", "/") : "");
-export function mfrStatusSync(o, P) {
-  const out = [];
+export function mfrStatusSync(o, P, rate) {
+  const out = [], gap = (p) => { const g = Math.max(0, POOL_MIN - (p ? p.cny : 0)); return g ? `・還差約人民幣 ¥${g.toLocaleString()}` + (rate ? `（約 NT$${Math.ceil(g * rate).toLocaleString()}）` : "") : ""; };
   for (const m of orderMfrs(o)) {
     const sh = o.sh && o.sh[m];
     if (sh) out.push({ m, s: "已出貨（" + mmdd(sh.at) + "）" + (sh.track ? "・物流單號 " + sh.track : ""), k: "sh" });
     else if (o.status === "已出貨") out.push({ m, s: "已出貨", k: "sh" });
     else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
     else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），到貨就先寄這家的商品", k: "po" });
-    else if (o.status !== "已付款") out.push({ m, s: "付款後開始湊單", k: "wait" });
-    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）`) + qn, k: "pool" }); }
+    else if (o.status !== "已付款") { const p = P[m]; out.push({ m, s: `付款後開始湊單（這家目前 ${p ? p.pct : 0}%${gap(p)}）`, k: "wait" }); }
+    else { const p = P[m], qi = p ? p.orders.indexOf(o.id) + 1 : 0, qn = qi > 0 ? `・排第 ${qi} 位（先付款先寄）` : ""; out.push({ m, s: (p && p.cny >= POOL_MIN ? "已湊滿，準備向日本叫貨" : `湊單中 ${p ? p.pct : 0}%${gap(p)}（滿人民幣 ${POOL_MIN.toLocaleString()} 元叫貨）`) + qn, k: "pool" }); }
   }
   return out;
 }
-export async function orderMfrStatus(env, o) { return mfrStatusSync(o, (await getPools(env)).pools); }
+export async function orderMfrStatus(env, o) { const G = await getPools(env); return mfrStatusSync(o, G.pools, G.rate); }
 async function myOrders(env, uid, n = 5) {
   const ids = JSON.parse((await env.SESSIONS.get("ou:" + uid)) || "[]").slice(0, n);
   const out = [];

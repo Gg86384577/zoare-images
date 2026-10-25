@@ -77,7 +77,7 @@ async function buildData(env, deps = {}) {
     members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
-      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), mst: mfrStatusSync(o, (pools && pools.P) || {}),
+      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), mst: mfrStatusSync(o, (pools && pools.P) || {}, pools && pools.rate),
       lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan })), form: o.form, notes: o.notes || [] })),
     customers: custList,
     settings: { bank: bank || "", linepay: linepay || "", news: JSON.parse(news || "[]") },
