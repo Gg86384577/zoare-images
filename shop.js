@@ -1558,7 +1558,7 @@ function recalc(o) {
   o.notes = ruleNotes(o.lines, o.tier);
 }
 // 改單後重算折抵券：①這張用的券（未達門檻就退回）②活動送的券（依新金額增加／減少／取消）
-export async function reconcileCoupons(env, o) {
+export async function reconcileCoupons(env, o, opt = {}) {
   const notes = [], sub = o.lines.reduce((a, l) => a + l.price * l.q, 0);
   let cps = null; const load = async () => (cps = cps || (await getCoupons(env, o.uid)));
   o.subtotal = sub; o.total = sub;
@@ -1569,7 +1569,9 @@ export async function reconcileCoupons(env, o) {
     else o.total = sub - o.coupon.amt;
   } else delete o.subtotal;
   const day = String(o.at || "").slice(0, 10), camp = CAMPAIGNS.find((c) => (o.earned && c.name === o.earned.camp) || (day >= c.from && day <= c.to));
-  if (camp) {
+  if (camp && (opt.keepEarned || (o.merged || []).length)) {
+    if (!opt.keepEarned && o.earnedList && o.earnedList.length) notes.push("ℹ️ 這張是合併訂單，活動回饋券照原本各張訂單結算，不會因改數量自動增減，需要調整請人工處理");
+  } else if (camp) {
     for (const l of o.lines) if (!l.c || !l.c.length) l.c = catsOf({ n: l.n, b: l.b });
     const earn = campaignEarn(o.lines.map((l) => ({ ...l, sub: l.price * l.q })), camp), old = o.earned ? o.earned.amt : 0;
     if (earn.amt !== old) {
@@ -1626,8 +1628,11 @@ export async function mergeOrders(env, deps, ids) {
     if (o.memUntil && !t.memUntil) t.memUntil = o.memUntil;
   }
   recalc(t);
-  { const L = await getCoupons(env, t.uid); let ch = false; for (const o of rest) if (o.earned) { const c = L.find((x) => x.id === o.earned.id && !x.used); if (c) { L.splice(L.indexOf(c), 1); ch = true; } } if (ch) await saveCoupons(env, t.uid, L); }
-  const mcn = await reconcileCoupons(env, t);
+  { const L = await getCoupons(env, t.uid); let ch = false; for (const c of L) if (rest.some((o) => o.id === c.src)) { c.src = t.id; ch = true; } if (ch) await saveCoupons(env, t.uid, L); }
+  // 活動回饋券以「原本每一張訂單」各自結算：合併不重算、不加送，各張原本的券照樣保留
+  t.earnedList = [...(t.earnedList || (t.earned ? [t.earned] : [])), ...rest.flatMap((o) => o.earnedList || (o.earned ? [o.earned] : []))];
+  if (t.earnedList.length) { t.earned = t.earnedList[0]; t.earned = { ...t.earnedList[0], amt: t.earnedList.reduce((a, e) => a + e.amt, 0) }; }
+  const mcn = await reconcileCoupons(env, t, { keepEarned: true }) + (t.earnedList.length ? `\n🎁 活動回饋券照原本各張訂單結算（共 NT$${t.earnedList.reduce((a, e) => a + e.amt, 0)}），合併不另外加送` : "");
   if (anyPaid) { t.status = "已付款"; t.payInfo = Object.assign({}, t.payInfo || {}, { amount: paid }); }
   t.merged = [...(t.merged || []), ...rest.map((o) => o.id)];
   await saveOrder(env, t);
