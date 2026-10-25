@@ -746,6 +746,54 @@ async function payStats(env) {
 }
 
 // 老闆指令：訂單列表／單筆查詢／匯款資料
+// 依廠商出貨：國內運費每次 NT$60、國際運費出貨時問老闆金額；會員先用運費券
+const nowMin = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+async function pushTo(deps, env, to, text) { if (!deps.lineApi) return false; const r = await deps.lineApi(env, "/v2/bot/message/push", { to, messages: [{ type: "text", text }] }).catch(() => null); return !!(r && r.ok); }
+async function shipPart(env, deps, id, rest) {
+  const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+  if (!o) return `找不到訂單 ${id}`;
+  if (!["已付款", "已出貨"].includes(o.status)) return `訂單 ${id} 目前是「${o.status}」，付款後才能出貨`;
+  const ms = orderMfrs(o), todo = ms.filter((x) => !(o.sh && o.sh[x]));
+  let group, tail;
+  if (/^全部(\s|$)/.test(rest)) { group = todo; tail = rest.slice(2); }
+  else { const m = ms.slice().sort((a, b) => b.length - a.length).find((x) => rest === x || rest.startsWith(x + " ") || rest.startsWith(x + "/")); if (!m) return `訂單 ${id} 裡沒有這家廠商。這張訂單的廠商：${ms.join("、")}\n格式：${id} 分批出貨 廠商名 物流單號 國際運費金額\n（整張一起寄：${id} 分批出貨 全部 物流單號 國際運費金額）`; group = [m]; tail = rest.slice(m.length); }
+  if (!group.length) return `訂單 ${id} 的商品都已經出貨了`;
+  if (group.some((x) => o.sh && o.sh[x])) return `訂單 ${id} 的 ${group.join("、")} 已經標記出貨過了`;
+  let track = tail.replace(/^[\s/]+/, "").trim(), intlAmt = null;
+  const am = track.match(/(?:國際(?:運費)?\s*\$?\s*|\$\s*)(\d+)/), kgm = track.match(/(\d+(?:\.\d+)?)\s*(?:kg|公斤)/i);
+  if (am) { intlAmt = Number(am[1]); track = track.replace(am[0], "").trim(); }
+  else if (kgm) { intlAmt = Math.ceil(Number(kgm[1]) * SHIP_KG); track = track.replace(kgm[0], "").trim(); }
+  track = track.slice(0, 60);
+  const domCp = await useShipCoupon(env, o.uid, "dom"), intlCp = await useShipCoupon(env, o.uid, "intl");
+  const fee = { dom: domCp ? 0 : SHIP_DOM, domCp, intlCp, intl: intlCp ? 0 : intlAmt };
+  const due = fee.dom + (fee.intl || 0), now = nowMin();
+  o.shipDue = (o.shipDue || 0) + due;
+  o.sh = o.sh || {};
+  const key = group.join("＋");
+  for (const x of group) o.sh[x] = { at: now, track, fee: x === group[0] ? fee : { same: group[0] }, batch: key };
+  const left = ms.filter((x) => !o.sh[x]);
+  if (!left.length) { o.statusBefore = o.status; o.status = "已出貨"; if (track) o.track = track; }
+  await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+  const sc = await shipCoupons(env, o.uid);
+  const items = o.lines.filter((l) => !l.mem && group.includes(l.m || mfrOf(l.b)));
+  const pend = fee.intl === null;
+  const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : ms.length > group.length ? "最後一批商品出貨囉！" : "出貨囉！"}\n${ms.length > 1 ? "廠商：" + group.join("、") + "\n" : ""}${items.slice(0, 15).map((l) => `・${l.n} ×${l.q}`).join("\n")}${items.length > 15 ? `\n…共 ${items.length} 款` : ""}${track ? "\n物流單號：" + track : ""}\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : pend ? "依物流公司報價，確定後另外通知您" : "NT$" + fee.intl.toLocaleString()}${due ? `\n本次運費${pend ? "（目前）" : ""}合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}${left.length ? `\n\n其他廠商的商品（${left.join("、")}）到貨後會再寄出，可以傳「我的訂單」查看進度～` : ""}`;
+  const sent = await pushTo(deps, env, o.uid, msg);
+  return `好👌 ${id}「${group.join("、")}」已標記出貨${track ? "（物流單號 " + track + "）" : ""}\n運費：國內 ${domCp ? "用券" : "NT$" + SHIP_DOM}・國際 ${intlCp ? "用券" : pend ? "❓待填" : "NT$" + fee.intl}${due ? `，目前要跟客人收 NT$${due}` : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}${pend ? `\n\n❓ 這次國際運費要收多少？請回覆：\n${id} 國際運費 金額\n例如：${id} 國際運費 440` : ""}`;
+}
+async function setIntlFee(env, deps, id, amt, mName) {
+  const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
+  if (!o) return `找不到訂單 ${id}`;
+  const ent = Object.entries(o.sh || {}).filter(([m, v]) => v.fee && !v.fee.same && (!mName || m === mName || (v.batch || "").includes(mName)));
+  const tgt = ent.find(([, v]) => v.fee.intl === null) || (mName ? ent[0] : null);
+  if (!tgt) return `訂單 ${id} 沒有待填國際運費的出貨紀錄${ent.length ? "（要改已填的金額請加廠商名：" + id + " 國際運費 金額 廠商名）" : ""}`;
+  const f = tgt[1].fee, old = f.intl || 0;
+  if (f.intlCp) return `訂單 ${id} 這次出貨已用國際運費券折抵，不用收國際運費`;
+  f.intl = amt; o.shipDue = (o.shipDue || 0) - old + amt;
+  await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+  const sent = await pushTo(deps, env, o.uid, `📦 訂單 ${id}（${tgt[1].batch || tgt[0]}）的國際運費：NT$${amt.toLocaleString()}\n這次出貨運費合計 NT$${(f.dom + amt).toLocaleString()}（國內 ${f.domCp ? "用券" : "NT$" + f.dom}）\n客服會跟您確認付款，謝謝🙏`);
+  return `好👌 ${id} 國際運費 NT$${amt}，這次出貨要跟客人收 NT$${f.dom + amt}${sent ? "\n已通知客人" : ""}`;
+}
 export async function shopOwnerCommand(env, text, deps = {}) {
   if (/^(叫貨|叫貨進度|湊單)$/.test(text)) { const P = await computePools(env, deps); const L = Object.entries(P.pools).sort((a, b) => b[1].nt - a[1].nt); return L.length ? "📦 製造商湊單進度（已付款、還沒叫貨，門檻 NT$" + P.need.toLocaleString() + "）\n\n" + L.map(([m, p]) => `${p.nt >= P.need ? "✅" : "⏳"} ${m}：NT$${p.nt.toLocaleString()}（${p.pct}%）・${p.orders.length} 筆訂單${p.nt >= P.need ? "・可以叫貨" : ""}`).join("\n") + "\n\n叫完貨傳「叫貨 廠商名 完成」，例如：叫貨 森本產業 完成" : "目前沒有已付款、待叫貨的訂單"; }
   const pm = text.match(/^叫貨\s+(.+?)\s*(完成|已叫)$/);
@@ -809,38 +857,15 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     return "最近 10 筆訂單：\n" + rows.join("\n") + "\n\n傳訂單編號可以看明細，傳「ZO… 已付款」「ZO… 已出貨 物流單號」可以改狀態並通知客人";
   }
   const sm = t.match(/^(ZO\w{10})\s+分批出貨\s+([\s\S]+)$/i);
-  if (sm) {
-    const id = sm[1].toUpperCase(), o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
-    if (!o) return `找不到訂單 ${id}`;
-    if (!["已付款", "已出貨"].includes(o.status)) return `訂單 ${id} 目前是「${o.status}」，付款後才能出貨`;
-    const ms = orderMfrs(o), rest = sm[2].trim(), m = ms.slice().sort((a, b) => b.length - a.length).find((x) => rest === x || rest.startsWith(x + " ") || rest.startsWith(x + "/"));
-    if (!m) return `訂單 ${id} 裡沒有這家廠商。這張訂單的廠商：${ms.join("、")}\n格式：${id} 分批出貨 廠商名 物流單號`;
-    let track = rest.slice(m.length).replace(/^[\s/]+/, "").trim();
-    const kgm = track.match(/(\d+(?:\.\d+)?)\s*(?:kg|公斤)/i), kg = kgm ? Number(kgm[1]) : 0;
-    if (kgm) track = track.replace(kgm[0], "").trim();
-    track = track.slice(0, 60);
-    const domCp = await useShipCoupon(env, o.uid, "dom"), intlCp = await useShipCoupon(env, o.uid, "intl");
-    const fee = { dom: domCp ? 0 : SHIP_DOM, domCp, intlCp, kg, intl: intlCp ? 0 : kg ? Math.ceil(kg * SHIP_KG) : null };
-    const due = fee.dom + (fee.intl || 0);
-    o.shipDue = (o.shipDue || 0) + due;
-    const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
-    o.sh = o.sh || {}; o.sh[m] = { at: now, track, fee };
-    const sc = await shipCoupons(env, o.uid);
-    const feeTxt = `\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : kg ? `${kg} 公斤 × NT$${SHIP_KG} = NT$${fee.intl.toLocaleString()}` : "依物流公司報價，確定後另外通知"}${due ? `\n本次運費合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}`;
-    const left = ms.filter((x) => !o.sh[x]);
-    const items = o.lines.filter((l) => !l.mem && (l.m || mfrOf(l.b)) === m);
-    if (!left.length) { o.statusBefore = o.status; o.status = "已出貨"; if (track) o.track = track; }
-    await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
-    const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : "最後一批商品出貨囉！"}\n廠商：${m}\n${items.map((l) => `・${l.n} ×${l.q}`).join("\n")}${track ? "\n物流單號：" + track : ""}\n\n${left.length ? "其他廠商的商品（" + left.join("、") + "）到貨後會再寄出，可以傳「我的訂單」查看進度～" : "這張訂單的商品全部寄出了，收到貨有任何問題都可以跟我們說～"}${feeTxt}`;
-    let sent = false;
-    if (deps.lineApi) { const r = await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [{ type: "text", text: msg }] }); sent = r && r.ok; }
-    return `好👌 ${id}「${m}」的商品已標記出貨${track ? "（物流單號 " + track + "）" : ""}\n運費：國內 ${domCp ? "用券" : "NT$" + SHIP_DOM}・國際 ${intlCp ? "用券" : kg ? "NT$" + fee.intl : "待報價"}${due ? `，要跟客人收 NT$${due}` : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}`;
-  }
+  if (sm) return await shipPart(env, deps, sm[1].toUpperCase(), sm[2].trim());
+  const im = t.match(/^(ZO\w{10})\s+國際運費\s+\$?\s*(\d+)\s*(.*)$/i);
+  if (im) return await setIntlFee(env, deps, im[1].toUpperCase(), Number(im[2]), im[3].trim());
   const om = t.match(/^(ZO\w{10})(?:\s*(已付款|已出貨|取消)(?:\s+(.+))?)?$/i);
   if (om) {
     const id = om[1].toUpperCase();
     const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
     if (!o) return `找不到訂單 ${id}`;
+    if (om[2] === "已出貨" && orderMfrs(o).some((x) => !(o.sh && o.sh[x]))) return await shipPart(env, deps, id, ("全部 " + (om[3] || "")).trim());
     if (om[2]) {
       o.statusBefore = o.status;
       o.status = om[2] === "取消" ? "已取消" : om[2];
@@ -1506,7 +1531,7 @@ async function ownerOrders(env, t, deps) {
   m = t.match(/^(ZO\w{10})\s+([\s\S]+)$/i);
   if (!m) return null;
   const id = m[1].toUpperCase(), cmd = m[2].trim();
-  if (/^(已付款|已出貨|取消|分批出貨)(\s|$)/.test(cmd)) return null; // 交給狀態指令
+  if (/^(已付款|已出貨|取消|分批出貨|國際運費)(\s|$)/.test(cmd)) return null; // 交給狀態指令
   const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
   if (!o) return `找不到訂單 ${id}`;
   // 備註

@@ -77,7 +77,7 @@ async function buildData(env, deps = {}) {
     members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
     orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
-      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), mst: mfrStatusSync(o, (pools && pools.P) || {}, pools && pools.need),
+      total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), mst: mfrStatusSync(o, (pools && pools.P) || {}, pools && pools.need), shipDue: o.shipDue || 0, intlPend: Object.values(o.sh || {}).some((v) => v.fee && v.fee.intl === null),
       lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan })), form: o.form, notes: o.notes || [] })),
     customers: custList,
     settings: { bank: bank || "", linepay: linepay || "", news: JSON.parse(news || "[]") },
@@ -187,7 +187,7 @@ function orders(){
 }
 function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'+esc(o.name)+'</b><span class="st s-'+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
   '<div class="meta">'+o.id+'｜'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.pay)+'｜'+esc(o.tier)+'價</div><div style="font-size:18px;font-weight:700;margin-top:4px">'+fmt(o.total)+'</div>'+
-  '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+((o.mst||[]).length&&o.status!=="已取消"?'<div style="margin-top:6px">'+o.mst.map(z=>'<div class="meta" style="display:flex;gap:6px;align-items:center;padding:3px 0"><span style="flex:1">🏭 <b>'+esc(z.m)+'</b>：'+esc(z.s)+'</span>'+(z.k!=="sh"&&o.status==="已付款"?'<button class="btn" style="padding:5px 9px;font-size:12px" onclick="shipM(\''+o.id+'\',\''+esc(z.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button>':'')+'</div>').join("")+'</div>':'')+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff">'+esc(o.diff)+'</div>':'')+
+  '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+((o.mst||[]).length&&o.status!=="已取消"?'<div style="margin-top:6px">'+o.mst.map(z=>'<div class="meta" style="display:flex;gap:6px;align-items:center;padding:3px 0"><span style="flex:1">🏭 <b>'+esc(z.m)+'</b>：'+esc(z.s)+'</span>'+(z.k!=="sh"&&o.status==="已付款"?'<button class="btn" style="padding:5px 9px;font-size:12px" onclick="shipM(\''+o.id+'\',\''+esc(z.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button>':'')+'</div>').join("")+'</div>':'')+(o.shipDue||o.intlPend?'<div class="memo">🚚 已出貨運費要收 NT$'+o.shipDue.toLocaleString()+(o.intlPend?'　<b style="color:#9e1b1b">國際運費待填</b> <button class="btn" style="padding:4px 8px;font-size:12px" onclick="intlFee(\''+o.id+'\')">填國際運費</button>':'')+'</div>':'')+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff">'+esc(o.diff)+'</div>':'')+
   '<details><summary>品項・收件資料・修改</summary>'+o.lines.map((l,i)=>'<div class="it"><span class="n">'+esc(l.n)+'<br><small style="color:#888">'+fmt(l.price)+' × '+l.q+' = '+fmt(l.sub)+'</small></span><input type="number" min="0" value="'+l.q+'" data-i="'+i+'"><button class="btn" onclick="setQ(\''+o.id+'\','+i+',this)">改</button></div>').join("")+
   '<div class="meta" style="margin-top:8px;color:#333">收件人：'+esc(o.form.name)+'　'+esc(o.form.phone)+'<br>寄送：'+esc(o.form.ship)+'　'+esc(o.form.addr)+(o.form.note?'<br>備註：'+esc(o.form.note):'')+(o.paid5?'<br>後五碼：'+esc(o.paid5):'')+(o.track?'<br>物流單號：'+esc(o.track):'')+'</div>'+
   (o.notes.length?'<div class="meta" style="color:#8c2a1f;margin-top:6px">'+o.notes.map(esc).join("<br>")+'</div>':'')+
@@ -195,8 +195,9 @@ function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'
   '<div class="btns">'+(["待付款","已回報匯款","待確認"].includes(o.status)?'<button class="dark" onclick="st(\''+o.id+'\',\'已付款\')">✓ 確認已付款</button>':'')+(o.status==="已付款"?'<button class="dark" onclick="ship(\''+o.id+'\')">🚚 出貨</button>':'')+(o.status!=="已取消"&&o.status!=="已出貨"?'<button onclick="st(\''+o.id+'\',\'取消\')">取消訂單</button>':'')+'</div></div>'}
 const ord=id=>D.orders.find(o=>o.id===id);
 window.st=async(id,s)=>{if(s==="取消"&&!confirm("確定取消 "+id+"？會通知客人"))return;await cmd(id+" "+s)};
-window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;const kg=prompt("國際運費重量（公斤，每公斤 NT$220；不知道可空白，之後再跟客人報價）","");if(kg===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:"")+(kg&&Number(kg)>0?" "+Number(kg)+"kg":""))};
-window.ship=async id=>{const t=prompt("物流單號（可空白）","");if(t===null)return;await cmd(id+" 已出貨"+(t?" "+t:""))};
+window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;const v=prompt("這次國際運費要收多少？（NT$，約每公斤 $220）\n客人有國際運費券會自動折抵；還不知道可空白，之後再填","");if(v===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:"")+(v&&Number(v)>0?" 國際"+Math.round(Number(v)):""))};
+window.intlFee=async id=>{const v=prompt("國際運費金額（NT$）","");if(!v||!(Number(v)>=0))return;await cmd(id+" 國際運費 "+Math.round(Number(v)))};
+window.ship=async id=>shipM(id,"全部");
 window.memo=async id=>{const t=prompt("備註（空白＝清除）",ord(id).memo||"");if(t===null)return;await cmd(id+" 備註 "+t)};
 window.delO=async id=>{if(!confirm("確定刪除訂單 "+id+"？刪除後無法復原"))return;await cmd("刪除 "+id)};
 window.setQ=async(id,i,btn)=>{const q=btn.previousElementSibling.value;const l=ord(id).lines[i];await cmd(id+" "+l.n+" 改 "+q)};
