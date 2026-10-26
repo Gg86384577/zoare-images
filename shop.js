@@ -1194,7 +1194,7 @@ async function init(){
   for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
   if(T&&Object.keys(cart).length)save(); // 打開商城時就把手機裡原本的購物車同步上來
   buildFam();
-  fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){filter();return}document.querySelectorAll("#grid .card").forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)})}}).catch(()=>{});
+  fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;filter()}}).catch(()=>{});
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
    Object.keys(byD).sort().reverse().forEach(d=>{const g={},ord=[];byD[d].forEach(x=>{if(!g[x.b]){g[x.b]=[];ord.push(x.b)}g[x.b].push(x)});let more=true;for(let i=0;more;i++){more=false;ord.forEach(b=>{if(g[b][i]){NEWV.push(g[b][i]);more=true}})}})}
   NEWV=grp(NEWV);
@@ -1212,11 +1212,12 @@ let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
 function hit(h,w){if(h.includes(w))return true;if(w.length<4)return false;for(let i=2;i<=w.length-2;i++){if(h.includes(w.slice(0,i))&&hit(h,w.slice(i)))return true}return false}
 let HOT=null;
 function filter(){
+  poolBar();
   if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=grp(HOT.map(k=>m.get(k)).filter(Boolean));shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
   if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）";return}
   if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%・還差 "+Math.max(0,100-p)+"%（湊滿約 NT$30,000 就叫貨，同廠商商品都能一起湊）";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
-  VIEW=grp(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.m||"")+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w)))));
+  VIEW=grp(pinSort(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.m||"")+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w))))));
   shown=0;$("#grid").innerHTML="";page();
   const qv=$("#q").value.trim();
   $("#info").innerHTML=(qv?'🔍 「'+esc(qv)+'」':'')+"共 "+VIEW.length+" 款"+(brand!=="全部"&&brand!=="新品上架"?"｜"+esc(brand):"")+(qv?' <a href="#" id="clrq" style="margin-left:8px;color:#9e1b1b">✕ 看全部商品</a>':'');
@@ -1253,16 +1254,17 @@ async function saveLB(){const x=LB.L[LB.i],nm=((x._v&&x._f?x._fb+"_"+x._v:x.n)||
   }catch(e){if(e&&e.name==="AbortError")return;window.open(x.img,"_blank")}}
 $("#lbc").onclick=()=>$("#lb").classList.remove("on");$("#lb").onclick=e=>{if(e.target.id==="lb")$("#lb").classList.remove("on")};
 $("#lbp").onclick=()=>{LB.i=(LB.i-1+LB.L.length)%LB.L.length;showLB()};$("#lbn").onclick=()=>{LB.i=(LB.i+1)%LB.L.length;showLB()};$("#lbs").onclick=saveLB;
-document.addEventListener("click",e=>{const z=e.target.closest&&e.target.closest("img.zm");if(z){e.stopPropagation();const y=byK(z.dataset.z);if(!y)return;const L=y._f&&FAM[y._f]?FAM[y._f]:[y];openLB(L,Math.max(0,L.indexOf(y)))}},true);
+document.addEventListener("click",e=>{const z=e.target.closest&&e.target.closest("img.zm");if(z){e.stopPropagation();const y=byK(z.dataset.z);if(!y)return;if(z.closest("#grid")&&!y._f&&!y.mem&&inPool(y.m)){openOne(y);return}const L=y._f&&FAM[y._f]?FAM[y._f]:[y];openLB(L,Math.max(0,L.indexOf(y)))}},true);
 let VK=null,VI=0;
 function vRefresh(k){document.querySelectorAll('#grid .card[data-g="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(el.dataset.r);if(x)el.outerHTML=card(x)})}
 function vClose(){const k=VK;VK=null;$("#panel").classList.remove("vmode");$("#sheet").classList.remove("on");if(k)vRefresh(k)}
 function openVar(k,i){const L=FAM[k];if(!L)return;VK=k;VI=i!=null?i:Math.max(0,L.findIndex(y=>cart[y.k]||(y.alt&&cart[y.alt])));
   const ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps);
   $("#panel").classList.add("vmode");
-  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vb">'+esc(L[0].b)+'</div>'+mfB(L[0])+'<div class="vtt">'+esc(L[0]._fb)+'</div><div class="vpr">'+fmt(mn)+(mx>mn?' ～ '+fmt(mx):'')+'</div></div><div class="vsec"><div class="vh2">選擇款式・規格<span>共 '+L.length+' 種</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div><div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
+  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vb">'+esc(L[0].b)+'</div>'+mfB(L[0])+'<div class="vtt">'+esc(L[0]._fb)+'</div><div class="vpr">'+fmt(mn)+(mx>mn?' ～ '+fmt(mx):'')+'</div></div><div class="vsec"><div class="vh2">選擇款式・規格<span>共 '+L.length+' 種</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div>'+mfStrip(L[0])+'<div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
   $("#sheet").classList.add("on");$("#panel").scrollTop=0;$("#vx").onclick=vClose;$("#vok").onclick=vClose;
   $("#vgrid").onclick=e=>{const t=e.target.closest("[data-vi]");if(!t)return;VI=+t.dataset.vi;renderVar();const d=$("#vdet");if(d)d.scrollIntoView({behavior:"smooth",block:"nearest"})};
+  if(L.length===1)$("#vgrid").parentNode.style.display="none";
   renderVar()}
 function renderVar(){const L=FAM[VK];if(!L)return;const y=L[VI]||L[0],A=y.alt?byK(y.alt):null;
   $("#vhero").innerHTML=(y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'" alt="">':'')+'<span class="vz">🔍 點圖放大・儲存照片</span>';
@@ -1285,6 +1287,18 @@ function card(x){
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
 let POOL={pct:{}};
+function inPool(m){const p=POOL.pct[m]||0;return !!m&&p>0&&p<100}
+function pinSort(L){if(!Object.keys(POOL.pct||{}).length)return L;const a=[],b=[];L.forEach(x=>(!x.mem&&inPool(x.m)?a:b).push(x));a.sort((x,y)=>(POOL.pct[y.m]||0)-(POOL.pct[x.m]||0));return a.concat(b)}
+function poolBar(){let el=document.getElementById("poolbar");if(!el){el=document.createElement("div");el.id="poolbar";$("#grid").parentNode.insertBefore(el,$("#grid"))}
+  const show=(brand==="新品上架"||brand==="全部")&&!$("#q").value.trim();const ms=Object.keys(POOL.pct||{}).filter(inPool).sort((a,b)=>POOL.pct[b]-POOL.pct[a]);
+  if(!show||!ms.length){el.innerHTML="";el.style.display="none";return}
+  el.style.display="block";el.innerHTML='<div style="margin:4px 0 10px;padding:10px 12px;border-radius:14px;background:linear-gradient(90deg,#fff3d6,#e3f0ff);border:1px solid #f0e2bf"><div style="font-weight:800;font-size:14px;margin-bottom:6px">🔥 正在湊單・一起湊更快叫貨</div><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">'+ms.map(m=>{const p=POOL.pct[m],n=grp(ALL.filter(x=>!x.hid&&x.m===m)).length;return '<button data-mf="'+esc(m)+'" style="flex:0 0 auto;border:0;border-radius:12px;background:#fff;padding:8px 12px;text-align:left;box-shadow:0 2px 6px rgba(0,0,0,.08);font:inherit"><b style="font-size:13px">'+esc(m)+'</b><div style="height:5px;width:110px;background:#eee;border-radius:3px;margin:5px 0 3px;overflow:hidden"><i style="display:block;height:100%;width:'+p+'%;background:#e0a33a"></i></div><small style="color:#9e1b1b">'+p+'%・還差 '+(100-p)+'%</small><small style="color:#888">・'+n+' 款</small></button>'}).join("")+'</div></div>'}
+function mfStrip(x){if(!x||x.mem||!inPool(x.m))return"";const p=POOL.pct[x.m],tot=grp(ALL.filter(y=>!y.hid&&y.m===x.m)).length;const L=grp(ALL.filter(y=>!y.hid&&y.m===x.m&&y.img&&!(x._f&&y._f===x._f)&&y.k!==x.k));if(!L.length)return"";
+  return '<div class="vsec"><div class="vh2">🏭 同廠商一起湊・還差 '+(100-p)+'%<span>'+esc(x.m)+'</span></div><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px">'+L.slice(0,20).map(y=>'<div data-open="'+esc(y.k)+'" style="flex:0 0 96px;cursor:pointer"><div style="height:96px;border-radius:10px;background:#f6f6f6;display:flex;align-items:center;justify-content:center;overflow:hidden"><img loading="lazy" src="'+esc(y.img)+'" style="max-width:100%;max-height:100%" alt=""></div><div style="font-size:11px;line-height:1.3;height:2.6em;overflow:hidden;margin-top:4px">'+esc(y._f&&FAM[y._f]?y._fb:y.n)+'</div><div style="font-size:12px;font-weight:700">'+fmt(price(y))+(y._f&&FAM[y._f]&&FAM[y._f].length>1?' 起':'')+'</div></div>').join("")+'</div><button class="go" data-mf="'+esc(x.m)+'" style="width:100%;margin-top:6px">看這家全部 '+tot+' 款，一起湊 →</button></div>'}
+function openOne(y){const k="1:"+y.k;FAM[k]=[y];if(!y._v)y._v=y.n;y._fb=y.n;openVar(k,0)}
+function openItem(y){if(!y)return;if(y._f&&FAM[y._f])openVar(y._f);else openOne(y)}
+document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-open]");if(t){e.stopPropagation();e.preventDefault();openItem(byK(t.dataset.open));return}
+  const n=e.target.closest&&e.target.closest("#grid .card[data-k] .nm");if(n){const y=byK(n.closest(".card").dataset.k);if(y&&!y.mem&&inPool(y.m))openOne(y)}},true);
 function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div><div class="mg"><span class="ml">湊滿約 NT$30,000 叫貨・</span>還差 '+Math.max(0,100-p)+'%</div>'}
 function goMf(m){if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+m;$("#q").value="";document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)}
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-mf]");if(!t)return;e.stopPropagation();e.preventDefault();goMf(t.dataset.mf)},true);
