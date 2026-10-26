@@ -884,6 +884,7 @@ async function shipPart(env, deps, id, rest) {
   if (!o) return `找不到訂單 ${id}`;
   if (!["已付款", "已出貨"].includes(o.status)) return `訂單 ${id} 目前是「${o.status}」，付款後才能出貨`;
   const ms = orderMfrs(o), todo = ms.filter((x) => !(o.sh && o.sh[x]));
+  if (!ms.length) { if (o.status === "已出貨") return `訂單 ${id} 已經是完成狀態了`; o.status = "已出貨"; o.doneAt = nowMin(); await saveOrder(env, o); return `好👌 ${id} 是會員費訂單（沒有實體商品），已標記完成`; }
   let group, tail;
   if (/^全部(\s|$)/.test(rest)) { group = todo; tail = rest.slice(2); }
   else if (/^已到貨(\s|$)/.test(rest)) { group = arrivalState(o).arrived; tail = rest.slice(3); }
@@ -948,6 +949,16 @@ export async function shopOwnerCommand(env, text, deps = {}) {
   if (crm) { const n = await runCartReminders(env, deps, { force: true, uid: crm[1] === "全部" ? "" : crm[1] }); return n ? `好👌 已發購物車結帳提醒給 ${n} 位客人` : "目前沒有可以提醒的購物車"; }
   if (/^購物車提醒\s*(開|關|開啟|關閉)$/.test(text)) { const off = /關/.test(text); await env.SESSIONS.put("cartremind", off ? "off" : "on"); return off ? "好👌 已關閉購物車提醒" : "好👌 已開啟購物車提醒：客人放了 6 小時沒結帳，會在 11:00～21:00 傳一則提醒（每次只提醒一次）"; }
   const t = text.trim();
+  const dm = t.match(/^(ZO\w{10})\s*差額已處理$/i);
+  if (dm) {
+    const id = dm[1].toUpperCase(), o = await env.SESSIONS.get("o:" + id, "json");
+    if (!o) return `找不到訂單 ${id}`;
+    const d = payDiff(o).trim();
+    if (!d) return `${id} 目前沒有差額要處理`;
+    o.diffDone = o.total; o.diffLog = (o.diffLog || []).concat({ at: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " "), note: d.replace(/^⚠️\s*/, "") });
+    await saveOrder(env, o);
+    return `好👌 ${id} 差額已標記處理（${d.replace(/^⚠️\s*/, "")}）`;
+  }
   const om2 = await ownerOrders(env, t, deps);
   if (om2) return om2;
   if (/^(收款統計|統計|營收|收款)$/.test(t)) return await payStats(env);
@@ -1599,7 +1610,7 @@ export async function reconcileCoupons(env, o, opt = {}) {
 function payDiff(o) {
   if (!["已付款", "已出貨"].includes(o.status)) return "";
   const paid = (o.payInfo && o.payInfo.amount) || 0;
-  if (!paid || paid === o.total) return "";
+  if (!paid || paid === o.total || o.diffDone === o.total) return "";
   return o.total > paid ? `\n⚠️ 已付 NT$${paid.toLocaleString()}，還需補 NT$${(o.total - paid).toLocaleString()}` : `\n⚠️ 已付 NT$${paid.toLocaleString()}，需退 NT$${(paid - o.total).toLocaleString()}`;
 }
 async function notifyCustomer(env, deps, o, msg) {
