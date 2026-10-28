@@ -362,7 +362,8 @@ export async function handleShop(request, env, ctx, deps) {
       const q = Math.floor(Number(r.q));
       if (!it || !(q > 0) || q > 100000) continue;
       const price = tier === "vip" ? it.v : it.g;
-      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : it.g - 80, sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
+      const rw = RAWK(await deps.loadCatalog(env)).get(it.k), rp = rw && rw.pb;
+      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : it.g - 80, ...(rp && rp.cd && rp.d && !it.mem ? { rc: Math.round(((it.g - 80) * rp.cd) / rp.d) } : {}), sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
     if (tier === "member") { const pcs = lines.filter((l) => !l.mem).reduce((x, l) => x + l.q, 0); if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `一般會員整張訂單混批合計要 21 件以上（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上\n\n加入 VIP 會員就沒有總件數限制，可以真正少量叫貨` }, { status: 400 }); }
@@ -838,7 +839,17 @@ export async function costFactors(env) {
   for (const b of await listBatches(env, 200)) if (b.cost && b.cost.est > 0) { const f = b.cost.nt / b.cost.est; for (const id of b.orders) F.set(id + "|" + b.m, f); }
   return F;
 }
-export const lineCostReal = (o, l, F) => { const c = lineCost(o, l); if (l.mem || !F) return c; const f = F.get(o.id + "|" + (l.m || mfrOf(l.b))); return f ? c * f : c; };
+// 內部成本折扣（只影響報表淨利，不影響售價／湊單進度）：三麗鷗日幣商品實際 55 折進貨，售價仍照 65 折計算
+const COST_RULE = { re: /三麗鷗|Sanrio|Hello Kitty|美樂蒂|酷洛米|大耳狗|布丁狗|帕恰狗|人魚漢頓|雙子星|山姆企鵝|大眼蛙|酷企鵝|可樂鈴|巧克力貓|優莎娜|栗子兔/, skip: /^(景品|日本現貨|萬代|RE-MENT|GPS)/, ratio: 0.55 / 0.65 };
+let RAWK_SRC = null, RAWK_MAP = null;
+function RAWK(items) { if (RAWK_SRC !== items) { RAWK_SRC = items; RAWK_MAP = new Map(items.map((x) => [keyOf(x), x])); } return RAWK_MAP; }
+export const lineCostReal = (o, l, F) => {
+  const c = lineCost(o, l); if (l.mem) return c;
+  const f = F && F.get(o.id + "|" + (l.m || mfrOf(l.b))); if (f) return c * f;
+  if (l.rc != null) return l.rc;
+  if (l.cost != null && COST_RULE.re.test((l.b || "") + (l.n || "")) && !COST_RULE.skip.test(l.b || "")) return c * COST_RULE.ratio;
+  return c;
+};
 async function setBatchCost(env, key, rest) {
   const bs = await listBatches(env, 200);
   const b = bs.find((x) => x.id.toUpperCase() === key.toUpperCase()) || bs.find((x) => x.m === key);
