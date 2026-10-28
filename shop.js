@@ -1124,7 +1124,7 @@ header{position:sticky;top:0;z-index:5;background:#161616;color:#fff;padding:12p
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px 12px}
 @media(min-width:640px){.grid{grid-template-columns:repeat(3,1fr)}}@media(min-width:960px){.grid{grid-template-columns:repeat(4,1fr)}}
 .card{background:var(--card);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
-.ph{aspect-ratio:1;background:#f6f6f7;display:flex;align-items:center;justify-content:center}
+.ph{aspect-ratio:1;background:#f6f6f7;display:flex;align-items:center;justify-content:center;position:relative}.pz{position:absolute;left:6px;top:6px;z-index:2;font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.15);pointer-events:none}.pz.pre{background:#7b5cd6}.pz.now{background:#1f9d63}.pzd{display:inline-block;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;color:#fff;margin:4px 0}
 .ph img{width:100%;height:100%;object-fit:contain}
 .bd{padding:8px 10px 10px;display:flex;flex-direction:column;gap:3px;flex:1}
 .bn{font-size:11px;color:var(--sub)}
@@ -1280,7 +1280,7 @@ function buildFam(){FAM={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const[
 function grp(list){const seen=new Set(),out=[];for(const x of list){if(x._f){if(seen.has(x._f))continue;seen.add(x._f)}out.push(x)}return out}
 function gsel(k){let n=0;FAM[k].forEach(y=>{n+=cart[y.k]||0;if(y.alt)n+=cart[y.alt]||0});return n}
 function gcard(x){const L=FAM[x._f],ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps),sel=gsel(x._f),hasA=L.some(y=>y.alt);
-  return '<div class="card" data-g="'+esc(x._f)+'" data-r="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x._fb)+'</div><div class="tag">共 '+L.length+' 種規格／款式'+(hasA?'・部分有現貨':'')+'</div><div class="pr"><b>'+fmt(mn)+(mx>mn?'～'+fmt(mx):'')+'</b></div><button class="add'+(sel?' sel':'')+'">'+(sel?'已選 '+sel+' 件・修改':'選擇規格')+'</button></div></div>'}
+  return '<div class="card" data-g="'+esc(x._f)+'" data-r="'+esc(x.k)+'"><div class="ph">'+pzF(L)+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x._fb)+'</div><div class="tag">共 '+L.length+' 種規格／款式'+(hasA?'・部分有現貨':'')+'</div><div class="pr"><b>'+fmt(mn)+(mx>mn?'～'+fmt(mx):'')+'</b></div><button class="add'+(sel?' sel':'')+'">'+(sel?'已選 '+sel+' 件・修改':'選擇規格')+'</button></div></div>'}
 function vrow(y){const A=y.alt?byK(y.alt):null,im=y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'">':'';
   if(A)return '<div class="vg"><div class="vh">'+im+'<b>'+esc(y._v)+'</b></div>'+opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起")+'</div>';
   return '<div class="row vrow" data-k="'+esc(y.k)+'">'+im+'<div class="t">'+esc(y._v)+'<br><small>'+fmt(price(y))+'・'+(y.box?"整盒 "+y.box+" 個":step(y)+" 件起")+(y.sh?"・"+esc(y.sh):"")+'</small></div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
@@ -1310,7 +1310,7 @@ function renderVar(){const L=FAM[VK];if(!L)return;const y=L[VI]||L[0],A=y.alt?by
   $("#vhero").innerHTML=(y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'" alt="">':'')+'<span class="vz">🔍 點圖放大・儲存照片</span>';
   $("#vgrid").innerHTML=L.map((z,i)=>{const n=(cart[z.k]||0)+(z.alt?cart[z.alt]||0:0);return '<div class="vt'+(i===VI?' on':'')+'" data-vi="'+i+'"><div class="vti">'+(z.img?'<img loading="lazy" src="'+esc(z.img)+'" alt="">':'')+(n?'<b>'+n+'</b>':'')+(z.alt?'<i>現貨</i>':'')+'</div><div class="vtn">'+esc(z._v)+'</div><div class="vtp">'+fmt(price(z))+'</div></div>'}).join("");
   const sub=y.box?"整盒 "+y.box+" 個・只能整盒訂":step(y)+" 件起";
-  $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div><div class="vdm">'+esc(sub)+(y.sh?"・📦 "+esc(y.sh):"")+'</div>'+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
+  $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div>'+pzLine(y)+'<div class="vdm">'+esc(sub)+'</div>'+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
   let n=0,amt=0;L.forEach(z=>[z.k,z.alt].forEach(k=>{if(k&&cart[k]){const w=byK(k);if(w){n+=cart[k];amt+=price(w)*cart[k]}}}));
   $("#vsum").innerHTML=n?'這款已選 <b>'+n+'</b> 件<br><small>'+fmt(amt)+'</small>':'<small>點上面的款式，再按「加入」</small>'}
 document.addEventListener("click",e=>{if(e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");if(g)openVar(g.dataset.g)});
@@ -1319,14 +1319,18 @@ function card(x){
   if(x._f&&FAM[x._f])return gcard(x);
   const A=x.alt&&!x.hid?byK(x.alt):null;
   if(A){const tg=[dlTxt(x.dl)].filter(Boolean).join("｜");
-    return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x.n)+'</div>'+(tg?'<div class="tag">'+esc(tg)+'</div>':'')+
+    return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+pz(x)+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x.n)+'</div>'+(tg?'<div class="tag">'+esc(tg)+'</div>':'')+
     '<div class="opts"><div class="oh">請選擇要等還是要現貨 👇</div>'+opt(x,"⏳ 要等・較便宜","向日本訂貨・"+step(x)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起")+'</div></div></div>'}
   const p=price(x),q=cart[x.k]||0;
-  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.sh?"📦 "+x.sh:"",x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
-  return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+(x.img?'<img class="zm" data-z="'+esc(x.k)+'" loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
+  const tags=[x.box?("整盒 "+x.box+" 個・只能整盒訂"):(!x.mem?step(x)+" 件起":""),x.mem?"":dlTxt(x.dl),x.st&&/庫存較少|洽詢|請洽/.test(x.st)?x.st.replace(/^.*・/,""):""].filter(Boolean).join("｜");
+  return '<div class="card" data-k="'+esc(x.k)+'"><div class="ph">'+pz(x)+(x.img?'<img class="zm" data-z="'+esc(x.k)+'" loading="lazy" src="'+esc(x.img)+'" alt="">':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x.n)+'</div>'+(tags?'<div class="tag">'+esc(tags)+'</div>':'')+
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
 let POOL={pct:{}};
+function pre(x){if(x.mem)return null;const sh=x.sh||"";if(/^(預計|下一批)/.test(sh))return{p:1,t:"預購",d:sh.replace(/^預計\s*/,"")};if(/預購/.test(x.st||""))return{p:1,t:"預購",d:"到貨時間待確認"};return{p:0,t:"現貨",d:""}}
+function pz(x){const r=pre(x);return r?'<span class="pz '+(r.p?'pre':'now')+'">'+(r.p?'預購｜'+esc(r.d):'現貨')+'</span>':''}
+function pzF(L){const rs=L.map(pre).filter(Boolean);if(!rs.length)return"";const ps=rs.filter(r=>r.p);if(!ps.length)return'<span class="pz now">現貨</span>';const ds=[...new Set(ps.map(r=>r.d))];return'<span class="pz pre">'+(ps.length<rs.length?'部分預購':'預購｜'+esc(ds.length===1?ds[0]:"依款式"))+'</span>'}
+function pzLine(x){const r=pre(x);return r?'<div class="pzd" style="background:'+(r.p?'#7b5cd6':'#1f9d63')+'">'+(r.p?'預購｜'+esc(r.d):'現貨')+'</div>':''}
 function inPool(m){const p=POOL.pct[m]||0;return !!m&&p>0&&p<100}
 function pinSort(L){if(!Object.keys(POOL.pct||{}).length)return L;const a=[],b=[];L.forEach(x=>(!x.mem&&inPool(x.m)?a:b).push(x));a.sort((x,y)=>(POOL.pct[y.m]||0)-(POOL.pct[x.m]||0));return a.concat(b)}
 function poolBar(){let el=document.getElementById("poolbar");if(!el){el=document.createElement("div");el.id="poolbar";$("#grid").parentNode.insertBefore(el,$("#grid"))}
