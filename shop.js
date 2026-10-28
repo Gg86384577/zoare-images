@@ -832,6 +832,33 @@ export async function listBatches(env, n = 60) {
   const ids = JSON.parse((await env.SESSIONS.get("batches")) || "[]").slice(0, n);
   return (await Promise.all(ids.map((id) => env.SESSIONS.get("batch:" + id)))).filter(Boolean).map((x) => JSON.parse(x));
 }
+// 實際進價：叫貨後填實際付給廠商的日圓＋運費，報表的成本照實際比例調整（售價不受影響）
+export async function costFactors(env) {
+  const F = new Map();
+  for (const b of await listBatches(env, 200)) if (b.cost && b.cost.est > 0) { const f = b.cost.nt / b.cost.est; for (const id of b.orders) F.set(id + "|" + b.m, f); }
+  return F;
+}
+export const lineCostReal = (o, l, F) => { const c = lineCost(o, l); if (l.mem || !F) return c; const f = F.get(o.id + "|" + (l.m || mfrOf(l.b))); return f ? c * f : c; };
+async function setBatchCost(env, key, rest) {
+  const bs = await listBatches(env, 200);
+  const b = bs.find((x) => x.id.toUpperCase() === key.toUpperCase()) || bs.find((x) => x.m === key);
+  if (!b) return `找不到批次「${key}」。傳「批次」看編號，或用廠商名，例如：進價 K-company ¥93291 運費1100`;
+  const jm = rest.match(/[¥￥]?\s*([\d,]+)\s*(?:円|日圓|日幣)?/), rm = rest.match(/匯率\s*([\d.]+)/), sm = rest.match(/運費\s*\$?\s*([\d,]+)/), fm = rest.match(/(?:手續費|其他)\s*\$?\s*([\d,]+)/);
+  const clean = rest.replace(/匯率\s*[\d.]+|運費\s*\$?\s*[\d,]+|(?:手續費|其他)\s*\$?\s*[\d,]+/g, "");
+  const jm2 = clean.match(/[¥￥]?\s*([\d,]+)/);
+  if (!jm2) return `請輸入實際付給廠商的日圓，例如：進價 ${b.id} ¥93291 運費1100（匯率不填就用今天的牌告）`;
+  const jpy = Number(jm2[1].replace(/,/g, ""));
+  let rate = rm ? Number(rm[1]) : null;
+  if (!rate) { const r = JSON.parse((await env.SESSIONS.get("rates")) || "null"); rate = (r && r.JPY) || 0.21; }
+  const ship = sm ? Number(sm[1].replace(/,/g, "")) : 0, fee = fm ? Number(fm[1].replace(/,/g, "")) : 0;
+  let est = 0;
+  for (const id of b.orders) { const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null"); if (!o || o.status === "已取消") continue; for (const l of o.lines) if (!l.mem && (l.m || mfrOf(l.b)) === b.m) est += lineCost(o, l) * l.q; }
+  const nt = Math.round(jpy * rate + ship + fee);
+  b.cost = { jpy, rate, ship, fee, nt, est: Math.round(est), at: nowMin() };
+  await env.SESSIONS.put("batch:" + b.id, JSON.stringify(b));
+  const d = Math.round(est) - nt;
+  return `好👌 ${b.id}（${b.m}）實際進價已記錄\n日圓 ¥${jpy.toLocaleString()} × ${rate}${ship ? ` ＋運費 $${ship.toLocaleString()}` : ""}${fee ? ` ＋其他 $${fee.toLocaleString()}` : ""}\n＝實際成本 NT$${nt.toLocaleString()}（原本估 NT$${Math.round(est).toLocaleString()}，${d >= 0 ? "省了" : "多花"} NT$${Math.abs(d).toLocaleString()}）\n銷售報表的淨利會照實際成本計算，商城售價不變`;
+}
 // 訂單裡已到貨、還沒寄的廠商；還沒到貨的廠商
 export function arrivalState(o) {
   const ms = orderMfrs(o).filter((m) => !(o.sh && o.sh[m]));
@@ -959,6 +986,8 @@ export async function shopOwnerCommand(env, text, deps = {}) {
     await saveOrder(env, o);
     return `好👌 ${id} 差額已標記處理（${d.replace(/^⚠️\s*/, "")}）`;
   }
+  const cm = t.match(/^進價\s+(\S+)\s+([\s\S]+)$/);
+  if (cm) return await setBatchCost(env, cm[1], cm[2]);
   const om2 = await ownerOrders(env, t, deps);
   if (om2) return om2;
   if (/^(收款統計|統計|營收|收款)$/.test(t)) return await payStats(env);
@@ -1708,7 +1737,7 @@ async function salesReport(env, range) {
   else if (/全部|累計|總/.test(range)) { from = "2000-01-01"; label = "累計"; }
   else { const m = range.match(/(\d{1,2})\s*月/); if (m) { from = `${today.slice(0, 4)}-${String(m[1]).padStart(2, "0")}-01`; label = `${Number(m[1])} 月`; } }
   const to = label.endsWith("月") && label !== `${Number(today.slice(5, 7))} 月` ? from.slice(0, 7) : null;
-  const all = await allOrders(env);
+  const all = await allOrders(env), CF = await costFactors(env);
   const items = {}; let rev = 0, profit = 0, n = 0, pcs = 0, pend = 0, pendAmt = 0;
   const mem = { vip: { q: 0, amt: 0 }, member: { q: 0, amt: 0 } };
   for (const o of all) {
@@ -1718,7 +1747,7 @@ async function salesReport(env, range) {
     if (o.status === "已付款" || o.status === "已出貨") {
       n++; rev += o.total;
       for (const l of o.lines) {
-        const c = lineCost(o, l); profit += (l.price - c) * l.q;
+        const c = lineCostReal(o, l, CF); profit += (l.price - c) * l.q;
         if (l.mem && mem[l.mem]) { mem[l.mem].q += l.q; mem[l.mem].amt += l.sub; continue; }
         pcs += l.q;
         const k = l.n; items[k] = items[k] || { q: 0, amt: 0 }; items[k].q += l.q; items[k].amt += l.sub;
@@ -1728,7 +1757,7 @@ async function salesReport(env, range) {
   const act = await memberCounts(env);
   const memTxt = `\n\n👑 會員方案\nVIP NT$1,000：賣出 ${mem.vip.q} 份 NT$${mem.vip.amt.toLocaleString()}\n一般 NT$100：賣出 ${mem.member.q} 份 NT$${mem.member.amt.toLocaleString()}\n目前有效會員：VIP ${act.vip} 位｜一般 ${act.member} 位`;
   const top = Object.entries(items).sort((a, b) => b[1].q - a[1].q).slice(0, 15).map(([k, v], i) => `${i + 1}. ${k}　×${v.q}　NT$${v.amt.toLocaleString()}`);
-  return `📈 銷售狀況｜${label}\n\n已付款訂單：${n} 筆\n銷售件數：${pcs} 件（${Object.keys(items).length} 個品項）\n銷售額：NT$${rev.toLocaleString()}\n淨利：NT$${profit.toLocaleString()}${rev ? `（毛利率 ${Math.round((profit / rev) * 100)}%）` : ""}\n\n🏆 品項銷量${top.length ? "\n" + top.join("\n") : "：還沒有"}${memTxt}\n\n⏳ 未付款訂單：${pend} 筆 NT$${pendAmt.toLocaleString()}（不算進銷售額）\n\n※ 淨利＝售價－成本（成本用報價公式算），還沒扣運費、匯款手續費等其他支出；會員費全額算淨利\n可以傳「銷售狀況 今天／本週／9月／累計」`;
+  return `📈 銷售狀況｜${label}\n\n已付款訂單：${n} 筆\n銷售件數：${pcs} 件（${Object.keys(items).length} 個品項）\n銷售額：NT$${rev.toLocaleString()}\n淨利：NT$${Math.round(profit).toLocaleString()}${rev ? `（毛利率 ${Math.round((profit / rev) * 100)}%）` : ""}\n\n🏆 品項銷量${top.length ? "\n" + top.join("\n") : "：還沒有"}${memTxt}\n\n⏳ 未付款訂單：${pend} 筆 NT$${pendAmt.toLocaleString()}（不算進銷售額）\n\n※ 淨利＝售價－成本（成本用報價公式算），還沒扣運費、匯款手續費等其他支出；會員費全額算淨利\n可以傳「銷售狀況 今天／本週／9月／累計」`;
 }
 
 async function ownerOrders(env, t, deps) {

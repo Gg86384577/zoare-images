@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { canMerge, fillLineImgs, listBatches, arrivalState, orderMfrs, computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
+import { costFactors, lineCostReal, canMerge, fillLineImgs, listBatches, arrivalState, orderMfrs, computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -47,6 +47,7 @@ async function poolData(env, deps, orders) {
 }
 async function buildData(env, deps = {}) {
   const orders = await allOrders(env, 200);
+  const CF = await costFactors(env);
   await fillLineImgs(env, deps, orders).catch(() => {});
   const mgroups = {}; for (const o of orders) if (canMerge(o)) (mgroups[o.uid] = mgroups[o.uid] || []).push(o.id);
   const today = tw().toISOString().slice(0, 10), month = today.slice(0, 7);
@@ -64,7 +65,7 @@ async function buildData(env, deps = {}) {
     if (o.status === "已付款" || o.status === "已出貨") {
       c.spent += o.total;
       const d = (o.paidAt || o.at).slice(0, 10);
-      const profit = o.lines.reduce((a, l) => a + (l.price - lineCost(o, l)) * l.q, 0), pcs = o.lines.reduce((a, l) => a + l.q, 0);
+      const profit = Math.round(o.lines.reduce((a, l) => a + (l.price - lineCostReal(o, l, CF)) * l.q, 0)), pcs = o.lines.reduce((a, l) => a + l.q, 0);
       const add = (x) => { x.n++; x.rev += o.total; x.profit += profit; x.pcs += pcs; };
       add(st.all); if (d.startsWith(month)) add(st.month); if (d >= week) add(st.week); if (d === today) add(st.today);
       if (d in daily) daily[d] += o.total;
@@ -177,7 +178,7 @@ function pools(){const P=D.pools||{list:[]},L=P.list||[],R=L.filter(p=>p.ready);
   p.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:44px;height:44px;object-fit:cover;border-radius:6px">':'<span style="width:44px"></span>')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'<br><small class="meta">JAN '+esc(i.jan||"—")+'</small></span><b>×'+i.q+'</b></div>').join("")+'</details>'+
   (!p.ready?'<button class="btn" style="margin-top:8px" onclick="invite(\''+esc(p.m).replace(/'/g,"")+'\')">📣 提醒買家一起湊</button>':'')+(p.ready?'<button class="btn" style="margin-top:8px" onclick="poDone(\''+esc(p.m).replace(/'/g,"")+'\')">標記已叫貨</button>':'')+'</div>').join(""):'<div class="card"><p class="meta">目前沒有已付款待叫貨的訂單</p></div>')+
   '<div class="card"><h3>📦 批次（每批＝同廠商湊滿 NT$'+(P.need||20000).toLocaleString()+' 叫的一次貨）</h3><p class="meta">貨備好／到貨就按「這批到貨了」。訂單只有這家的商品、或其他廠商也都到了 → 直接進「待出貨」；還有其他廠商沒到 → 系統 LINE 問客人要先寄（付一次 $60）還是等齊再寄。</p></div>'+
-  ((P.batches||[]).filter(b=>b.status!=="已到貨").map(b=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(b.m)+'</b>　<small class="meta">'+esc(b.id)+'・叫貨 '+esc((b.at||"").slice(5,10))+'・'+b.n+' 筆・NT$'+(b.nt||0).toLocaleString()+'</small></span><button class="btn" style="background:#161616;color:#fff" onclick="arrB(\''+esc(b.id)+'\')">📦 這批到貨了</button></div></div>').join("")||'<div class="card"><p class="meta">目前沒有等到貨的批次</p></div>')+
+  ((P.batches||[]).filter(b=>b.status!=="已到貨"||!b.cost).map(b=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(b.m)+'</b>　<small class="meta">'+esc(b.id)+'・叫貨 '+esc((b.at||"").slice(5,10))+'・'+b.n+' 筆・估 NT$'+(b.nt||0).toLocaleString()+(b.status==="已到貨"?'・已到貨':'')+'</small></span>'+(b.status!=="已到貨"?'<button class="btn" style="background:#161616;color:#fff" onclick="arrB(\''+esc(b.id)+'\')">📦 這批到貨了</button>':'')+'</div><div class="meta" style="display:flex;gap:8px;align-items:center;margin-top:6px"><span style="flex:1">'+(b.cost?'💴 實際成本 <b>NT$'+b.cost.nt.toLocaleString()+'</b>（¥'+b.cost.jpy.toLocaleString()+'×'+b.cost.rate+(b.cost.ship?'＋運費 $'+b.cost.ship.toLocaleString():'')+'）':'<span style="color:#9e1b1b">還沒填實際進價（淨利先用估算）</span>')+'</span><button class="btn" style="padding:5px 9px;font-size:12px" onclick="costB(\''+esc(b.id)+'\')">'+(b.cost?'改進價':'💴 填實際進價')+'</button></div></div>').join("")||'<div class="card"><p class="meta">目前沒有等到貨的批次</p></div>')+
   '<div class="card"><h3>🚚 待出貨（'+(P.ready||[]).length+'）</h3><p class="meta">已到貨的商品，依付款先後。按「出貨」會把這張訂單已到貨的商品一次寄出（算一次運費），寄出的商品會在訂單裡劃掉。</p></div>'+
   (P.ready||[]).map(r=>'<div class="card"><div class="row" style="cursor:default"><span><b>'+esc(r.name||"")+'</b>　<small class="meta">'+esc(r.id)+'・'+esc(r.tier)+(r.waiting.length?'・客人選先寄（還在等 '+esc(r.waiting.join("、"))+'）':'')+'</small></span><button class="btn" style="background:#161616;color:#fff" onclick="shipM(\''+r.id+'\',\'已到貨\')">🚚 出貨</button></div><div class="meta">寄：'+esc(r.arrived.join("、"))+'</div>'+r.items.map(i=>'<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid #eee">'+(i.img?'<img src="'+esc(i.img)+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px">':'')+'<span style="flex:1;font-size:13px">'+esc(i.n)+'</span><b>×'+i.q+'</b></div>').join("")+'</div>').join("")+
   ((P.hold||[]).length?'<div class="card"><h3>⏳ 已到貨、留著等齊（'+P.hold.length+'）</h3>'+P.hold.map(r=>'<div class="meta" style="padding:4px 0;border-top:1px solid #eee"><b>'+esc(r.id)+'</b>　'+esc(r.name||"")+'<br>已到：'+esc(r.arrived.join("、"))+'　還在等：'+esc(r.waiting.join("、"))+'　'+(r.choice==="等齊"?'<b>客人選等齊再寄</b>':'<b style="color:#8a5a00">等客人回覆</b>')+' <button class="btn" style="padding:4px 8px;font-size:12px" onclick="shipM(\''+r.id+'\',\'已到貨\')">還是先寄</button></div>').join("")+'</div>':'')}
@@ -219,6 +220,7 @@ window.st=async(id,s)=>{if(s==="取消"&&!confirm("確定取消 "+id+"？會通�
 window.shipM=async(id,m)=>{const t=prompt(m+" 的商品已出貨\n物流單號（可空白）","");if(t===null)return;const v=prompt("這次國際運費要收多少？（NT$，約每公斤 $220）\n客人有國際運費券會自動折抵；還不知道可空白，之後再填","");if(v===null)return;await cmd(id+" 分批出貨 "+m+(t?" "+t:"")+(v&&Number(v)>0?" 國際"+Math.round(Number(v)):""))};
 window.intlFee=async id=>{const v=prompt("國際運費金額（NT$）","");if(!v||!(Number(v)>=0))return;await cmd(id+" 國際運費 "+Math.round(Number(v)))};
 window.ship=async id=>shipM(id,"全部");
+window.costB=async id=>{const j=prompt("這批實際付給廠商多少日圓？（含稅總額，例如 93291）","");if(!j)return;const r=prompt("付款時的匯率（空白＝用今天的台銀牌告）","");if(r===null)return;const s=prompt("國際運費＋其他費用（NT$，沒有就空白）","");if(s===null)return;await cmd("進價 "+id+" ¥"+j.replace(/[^0-9]/g,"")+(r&&Number(r)>0?" 匯率"+Number(r):"")+(s&&Number(s)>0?" 運費"+Math.round(Number(s)):""))};
 window.memo=async id=>{const t=prompt("備註（空白＝清除）",ord(id).memo||"");if(t===null)return;await cmd(id+" 備註 "+t)};
 window.delO=async id=>{if(!confirm("確定刪除訂單 "+id+"？刪除後無法復原"))return;await cmd("刪除 "+id)};
 window.setQ=async(id,i,btn)=>{const q=Math.floor(Number(btn.previousElementSibling.value));if(!(q>=0))return;const l=ord(id).lines[i];if(q===l.q)return toast("數量沒有變");if(q===0&&!confirm("數量 0 會把「"+l.n+"」從訂單移除，確定？"))return;await cmd(id+" #"+(i+1)+" 改 "+q)};
@@ -234,7 +236,7 @@ function sales(){const P={today:"今天",week:"本週",month:"本月",all:"累�
   '<div class="k" style="margin-top:12px">'+kc("銷售額",fmt(s.rev))+kc("淨利",fmt(s.profit),s.rev?"毛利率 "+Math.round(s.profit/s.rev*100)+"%":"")+kc("已付款訂單",s.n+" 筆")+kc("銷售件數",s.pcs+" 件")+'</div>'+
   (D.members?'<div class="card"><h3>👑 會員方案</h3><div class="row"><span>VIP NT$1,000｜本月 '+D.members.vip.m+' 份</span><b>'+fmt(D.members.vip.mamt)+'</b></div><div class="row"><span>一般 NT$100｜本月 '+D.members.member.m+' 份</span><b>'+fmt(D.members.member.mamt)+'</b></div><div class="row"><span>累計賣出 VIP '+D.members.vip.q+' 份・一般 '+D.members.member.q+' 份</span><b>'+fmt(D.members.vip.amt+D.members.member.amt)+'</b></div><div class="row"><span>目前有效會員</span><b>VIP '+D.members.active.vip+'｜一般 '+D.members.active.member+'</b></div></div>':'')+
   '<div class="card"><h3>本月品項銷量</h3>'+(D.top.map((t,i)=>'<div class="row"><span>'+(i+1)+'. '+esc(t.n)+'</span><b style="white-space:nowrap">×'+t.q+'　'+fmt(t.amt)+'</b></div>').join("")||'<div class="meta">還沒有銷售</div>')+'</div>'+
-  '<p class="meta" style="margin-top:10px">淨利＝售價－成本（報價公式），未扣運費、匯款手續費；會員費全額算淨利。只統計已付款／已出貨的線上訂單。</p>';
+  '<p class="meta" style="margin-top:10px">淨利＝售價－成本：已在「叫貨」頁填實際進價的批次用實際成本（含運費），其他用報價公式估算；未扣收款手續費；會員費全額算淨利。只統計已付款／已出貨的線上訂單。</p>';
   document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{SP=b.dataset.p;sales()})}
 function set(){const S=D.settings;
   $("#m").innerHTML='<div class="card"><h3>🏦 轉帳資料</h3><textarea class="f" id="bank" rows="4">'+esc(S.bank)+'</textarea><button class="btn dark" style="margin-top:8px" id="sb">儲存</button></div>'+
