@@ -1254,7 +1254,7 @@ let HOT=null;
 function filter(){
   poolBar();
   if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=grp(HOT.map(k=>m.get(k)).filter(Boolean));shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
-  if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）";return}
+  if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）"+PZ_LEG;return}
   if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%・還差 "+Math.max(0,100-p)+"%（湊滿約 NT$30,000 就叫貨，同廠商商品都能一起湊）";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
   VIEW=grp(pinSort(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.m||"")+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w))))));
@@ -1308,7 +1308,7 @@ function openVar(k,i){const L=FAM[k];if(!L)return;VK=k;VI=i!=null?i:Math.max(0,L
   renderVar()}
 function renderVar(){const L=FAM[VK];if(!L)return;const y=L[VI]||L[0],A=y.alt?byK(y.alt):null;
   $("#vhero").innerHTML=(y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'" alt="">':'')+'<span class="vz">🔍 點圖放大・儲存照片</span>';
-  $("#vgrid").innerHTML=L.map((z,i)=>{const n=(cart[z.k]||0)+(z.alt?cart[z.alt]||0:0);return '<div class="vt'+(i===VI?' on':'')+'" data-vi="'+i+'"><div class="vti">'+(z.img?'<img loading="lazy" src="'+esc(z.img)+'" alt="">':'')+(n?'<b>'+n+'</b>':'')+(z.alt?'<i>現貨</i>':'')+'</div><div class="vtn">'+esc(z._v)+'</div><div class="vtp">'+fmt(price(z))+'</div></div>'}).join("");
+  $("#vgrid").innerHTML=L.map((z,i)=>{const n=(cart[z.k]||0)+(z.alt?cart[z.alt]||0:0);return '<div class="vt'+(i===VI?' on':'')+'" data-vi="'+i+'"><div class="vti">'+(z.img?'<img loading="lazy" src="'+esc(z.img)+'" alt="">':'')+(n?'<b>'+n+'</b>':'')+(z.alt?'<i>日本現貨</i>':'')+'</div><div class="vtn">'+esc(z._v)+'</div><div class="vtp">'+fmt(price(z))+'</div></div>'}).join("");
   const sub=y.box?"整盒 "+y.box+" 個・只能整盒訂":step(y)+" 件起";
   $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div>'+pzLine(y)+'<div class="vdm">'+esc(sub)+'</div>'+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
   let n=0,amt=0;L.forEach(z=>[z.k,z.alt].forEach(k=>{if(k&&cart[k]){const w=byK(k);if(w){n+=cart[k];amt+=price(w)*cart[k]}}}));
@@ -1327,10 +1327,12 @@ function card(x){
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
 let POOL={pct:{}};
-function pre(x){if(x.mem)return null;const sh=x.sh||"";if(/^(預計|下一批)/.test(sh))return{p:1,t:"預購",d:sh.replace(/^預計\s*/,"")};if(/預購/.test(x.st||""))return{p:1,t:"預購",d:"到貨時間待確認"};return{p:0,t:"現貨",d:""}}
-function pz(x){const r=pre(x);return r?'<span class="pz '+(r.p?'pre':'now')+'">'+(r.p?'預購｜'+esc(r.d):'現貨')+'</span>':''}
-function pzF(L){const rs=L.map(pre).filter(Boolean);if(!rs.length)return"";const ps=rs.filter(r=>r.p);if(!ps.length)return'<span class="pz now">現貨</span>';const ds=[...new Set(ps.map(r=>r.d))];return'<span class="pz pre">'+(ps.length<rs.length?'部分預購':'預購｜'+esc(ds.length===1?ds[0]:"依款式"))+'</span>'}
-function pzLine(x){const r=pre(x);return r?'<div class="pzd" style="background:'+(r.p?'#7b5cd6':'#1f9d63')+'">'+(r.p?'預購｜'+esc(r.d):'現貨')+'</div>':''}
+const PZ_LEG='<div style="margin-top:6px;font-size:11.5px;line-height:1.6"><span style="background:#1f9d63;color:#fff;border-radius:999px;padding:1px 7px;font-weight:800">日本現貨</span> 日本廠商有庫存，湊單達標就能馬上向日本叫貨<br><span style="background:#7b5cd6;color:#fff;border-radius:999px;padding:1px 7px;font-weight:800">日本預購</span> 可以先下單叫貨，要到標示的時間日本才會出貨<br>※ 都不是台灣現貨，貨都是從日本叫進來</div>';
+function pre(x){if(x.mem)return null;const sh=x.sh||"";if(/^(預計|下一批)/.test(sh))return{p:1,t:"日本預購",d:sh.replace(/^預計\s*/,"").replace(/到貨|發售/,"日本出貨")};if(/預購/.test(x.st||""))return{p:1,t:"日本預購",d:"日本出貨時間待確認"};return{p:0,t:"日本現貨",d:""}}
+function pz(x){const r=pre(x);return r?'<span class="pz '+(r.p?'pre':'now')+'">'+(r.p?'日本預購｜'+esc(r.d):'日本現貨・可馬上叫貨')+'</span>':''}
+function pzF(L){const rs=L.map(pre).filter(Boolean);if(!rs.length)return"";const ps=rs.filter(r=>r.p);if(!ps.length)return'<span class="pz now">日本現貨・可馬上叫貨</span>';const ds=[...new Set(ps.map(r=>r.d))];return'<span class="pz pre">'+(ps.length<rs.length?'部分日本預購':'日本預購｜'+esc(ds.length===1?ds[0]:"依款式"))+'</span>'}
+const PZ_NOW="日本現貨：日本廠商有庫存，湊單達標就能馬上向日本叫貨（不是台灣現貨，湊滿後約 2～3 週到台灣）",PZ_PRE="日本預購：現在就能先下單叫貨，但要到標示的時間日本廠商才會出貨（不是台灣現貨）";
+function pzLine(x){const r=pre(x);return r?'<div class="pzd" style="background:'+(r.p?'#7b5cd6':'#1f9d63')+'">'+(r.p?'日本預購｜'+esc(r.d):'日本現貨・可馬上叫貨')+'</div><div style="font-size:11.5px;color:#6b6f75;margin:0 0 4px">'+(r.p?PZ_PRE:PZ_NOW)+'</div>':''}
 function inPool(m){const p=POOL.pct[m]||0;return !!m&&p>0&&p<100}
 function pinSort(L){if(!Object.keys(POOL.pct||{}).length)return L;const a=[],b=[];L.forEach(x=>(!x.mem&&inPool(x.m)?a:b).push(x));a.sort((x,y)=>(POOL.pct[y.m]||0)-(POOL.pct[x.m]||0));return a.concat(b)}
 function poolBar(){let el=document.getElementById("poolbar");if(!el){el=document.createElement("div");el.id="poolbar";$("#grid").parentNode.insertBefore(el,$("#grid"))}
