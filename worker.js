@@ -733,9 +733,9 @@ async function handleEvent(env, ev) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
       return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
     }
-    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字)/.test(text.trim())) {
+    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果)/.test(text.trim())) {
       const hr = await threadsOwnerCmd(env, text);
-      if (hr !== undefined) return hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
+      if (hr !== undefined) return hr && hr.msgs ? reply(env, ev.replyToken, hr.msgs) : hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
     }
     const ht = text.trim().match(/^#?(?:海巡測試|threads測試|Threads測試)\s*(.*)$/i);
     if (ht) return reply(env, ev.replyToken, [{ type: "text", text: await threadsTest(env, ht[1] || "三麗鷗") }]);
@@ -1462,6 +1462,10 @@ async function threadsTest(env, q) {
     out.push("✅ 關鍵字搜尋「" + q + "」：找到 " + d.length + " 篇" + (others.length ? "（含別人 " + others.length + " 篇）" : "（審核前只會搜到自己的貼文）"));
     for (const x of d.slice(0, 3)) out.push("　・@" + (x.username || "?") + "：" + (x.text || "").replace(/\s+/g, " ").slice(0, 30));
   }
+  const lr = JSON.parse((await env.SESSIONS.get("thr:lastrun")) || "null");
+  out.push(lr ? `🕘 上次海巡 ${lr.at}：${lr.found} 篇，${lr.push}${lr.errs && lr.errs.length ? "；" + lr.errs.join("；") : ""}` : "🕘 還沒跑過海巡");
+  if (await env.SESSIONS.get("thr:manual")) out.push("⏳ 有一次海巡排隊中（每 5 分鐘處理一次）");
+  const le = await env.SESSIONS.get("lasterr"); if (le) out.push("📮 LINE 最近錯誤：" + le.slice(0, 120));
   return out.join("\n");
 }
 // ── 海巡：Threads 關鍵字搜尋 → AI 擬留言 → LINE 傳給老闆確認 → 按發送才用 @zoare_2504 回覆 ──
@@ -1526,11 +1530,15 @@ async function threadsPatrol(env, opt = {}) {
   const owner = await env.SESSIONS.get("owner");
   const head = `🔍 Threads 海巡（${kws.length} 個關鍵字）：找到 ${cards.length} 篇在找貨的貼文` + (cards.length ? "\n按「發送」才會留言；想改內容就傳「海巡改 代號 新的留言」" : "") + (errs.length ? "\n⚠️ " + errs.slice(0, 2).join("；") : "");
   if (opt.silentIfEmpty && !cards.length) return head;
+  const msgs = [{ type: "text", text: head }];
+  if (cards.length) msgs.push({ type: "flex", altText: "Threads 海巡結果 " + cards.length + " 篇", contents: { type: "carousel", contents: cards } });
+  await env.SESSIONS.put("thr:inbox", JSON.stringify(msgs), { expirationTtl: 7 * 86400 });
+  let push = "沒有綁定老闆";
   if (owner) {
-    const msgs = [{ type: "text", text: head }];
-    if (cards.length) msgs.push({ type: "flex", altText: "Threads 海巡結果 " + cards.length + " 篇", contents: { type: "carousel", contents: cards } });
-    await lineApi(env, "/v2/bot/message/push", { to: owner, messages: msgs });
+    const pr = await lineApi(env, "/v2/bot/message/push", { to: owner, messages: msgs });
+    push = pr.ok ? "已推播" : "推播失敗 " + pr.status + " " + (await pr.text()).slice(0, 120);
   }
+  await env.SESSIONS.put("thr:lastrun", JSON.stringify({ at: new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 16).replace("T", " "), found: cards.length, errs: errs.slice(0, 2), push }), { expirationTtl: 30 * 86400 });
   return head;
 }
 async function threadsReplySend(env, sid, custom) {
@@ -1553,6 +1561,7 @@ async function threadsOwnerCmd(env, text) {
   if ((m = t.match(/^#?海巡發送\s*(\w{6})$/))) return threadsReplySend(env, m[1]);
   if ((m = t.match(/^#?海巡改\s*(\w{6})\s+([\s\S]+)$/))) return threadsReplySend(env, m[1], m[2]);
   if ((m = t.match(/^#?海巡跳過\s*(\w{6})$/))) return "好，跳過這則👌";
+  if (/^#?海巡結果$/.test(t)) { const ib = JSON.parse((await env.SESSIONS.get("thr:inbox")) || "null"); return ib ? { msgs: ib } : "最近 7 天還沒有海巡結果"; }
   if ((m = t.match(/^#?海巡關鍵字\s*(.*)$/))) {
     if (m[1].trim()) { const k = m[1].split(/[,，、\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 30); await env.SESSIONS.put("thr:kw", JSON.stringify(k)); return "好👌 海巡關鍵字改成：\n" + k.join("、"); }
     let k = THR_KW; try { k = JSON.parse((await env.SESSIONS.get("thr:kw")) || "null") || THR_KW; } catch (e) {}
