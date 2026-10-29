@@ -733,6 +733,8 @@ async function handleEvent(env, ev) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
       return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
     }
+    const ht = text.trim().match(/^#?(?:海巡測試|threads測試|Threads測試)\s*(.*)$/i);
+    if (ht) return reply(env, ev.replyToken, [{ type: "text", text: await threadsTest(env, ht[1] || "三麗鷗") }]);
     const r = await ownerCommand(env, text);
     if (r) return reply(env, ev.replyToken, (Array.isArray(r) ? r : [r]).map((x) => ({ type: "text", text: x })));
   }
@@ -1412,6 +1414,31 @@ async function threadsAuth(request, env, url) {
   const owner = await env.SESSIONS.get("owner");
   if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `✅ Threads @${me.username} 已連接（權杖約 ${Math.round(ttl / 86400)} 天，系統會自動續期）` }] }).catch(() => {});
   return thrPage("✅ 連接成功", "@" + me.username + " 已經接上 ZOARÉ 系統，可以關掉這頁回去跟 Claude 說「好了」。");
+}
+async function thrGet(env, path, params = {}) {
+  const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
+  if (!t) return { error: { message: "還沒連接 Threads（打開 /threads/login）" } };
+  const r = await fetch("https://graph.threads.net/v1.0/" + path + "?" + new URLSearchParams({ ...params, access_token: t.tok }));
+  return r.json().catch(() => ({ error: { message: "HTTP " + r.status } }));
+}
+async function threadsTest(env, q) {
+  const out = ["🧪 Threads 連線測試"];
+  const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
+  if (!t) return out.concat("❌ 還沒連接，請打開 /threads/login").join("\n");
+  out.push("權杖到期：" + new Date(t.exp + 8 * 3600e3).toISOString().slice(0, 10));
+  const me = await thrGet(env, "me", { fields: "id,username,name" });
+  out.push(me.error ? "❌ 帳號：" + me.error.message : "✅ 帳號：@" + me.username);
+  const mine = await thrGet(env, "me/threads", { fields: "id,text,timestamp", limit: "3" });
+  if (mine.error) out.push("❌ 讀自己貼文：" + mine.error.message);
+  else { out.push("✅ 讀自己貼文：最近 " + (mine.data || []).length + " 篇"); for (const x of mine.data || []) out.push("　・" + (x.text || "（圖片）").replace(/\s+/g, " ").slice(0, 30)); }
+  const ks = await thrGet(env, "keyword_search", { q, search_type: "RECENT", fields: "id,text,username,timestamp,permalink", limit: "5" });
+  if (ks.error) out.push("❌ 關鍵字搜尋「" + q + "」：" + ks.error.message);
+  else {
+    const d = ks.data || [], others = d.filter((x) => x.username && x.username !== t.user);
+    out.push("✅ 關鍵字搜尋「" + q + "」：找到 " + d.length + " 篇" + (others.length ? "（含別人 " + others.length + " 篇）" : "（審核前只會搜到自己的貼文）"));
+    for (const x of d.slice(0, 3)) out.push("　・@" + (x.username || "?") + "：" + (x.text || "").replace(/\s+/g, " ").slice(0, 30));
+  }
+  return out.join("\n");
 }
 // 每天檢查一次：剩不到 10 天就自動續期（長效權杖 60 天）
 async function threadsRefresh(env) {
