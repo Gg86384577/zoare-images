@@ -1374,6 +1374,46 @@ async function runFollowups(env) {
     if (!r.ok) console.log("followup failed", r.status, await r.text());
   }
 }
+// ── Threads 官方 API 連接（海巡用）──
+// 金鑰不經過任何人：老闆打開 /threads/login → Threads 授權 → /threads/callback 用 App 密鑰換成長效權杖，存在 KV（thr:tok）
+const THREADS_APP_ID = "1130913892781479";
+const THREADS_OWNER = "zoare_2504"; // 只接受這個帳號，別人授權會被拒絕
+const THREADS_SCOPE = "threads_basic,threads_content_publish,threads_keyword_search,threads_manage_replies,threads_read_replies";
+const thrPage = (t, b) => new Response(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${t}</title><body style="font-family:system-ui;padding:32px 20px;max-width:520px;margin:auto;line-height:1.7;background:#faf8f3;color:#222"><h2>${t}</h2><p>${b}</p></body>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+async function threadsAuth(request, env, url) {
+  const redirect = url.origin + "/threads/callback";
+  if (url.pathname === "/threads/login") {
+    if (!env.THREADS_APP_SECRET) return thrPage("還差一步", "Cloudflare 還沒設定 THREADS_APP_SECRET，設定好再開這個網址。");
+    const state = crypto.randomUUID();
+    await env.SESSIONS.put("thr:state:" + state, "1", { expirationTtl: 1800 });
+    const q = new URLSearchParams({ client_id: THREADS_APP_ID, redirect_uri: redirect, scope: THREADS_SCOPE, response_type: "code", state });
+    return Response.redirect("https://threads.com/oauth/authorize?" + q, 302);
+  }
+  const err = url.searchParams.get("error_description") || url.searchParams.get("error");
+  if (err) return thrPage("沒有連接成功", "Threads 回覆：" + err.replace(/[<>&]/g, "") + "<br>可以回到上一頁再試一次。");
+  const state = url.searchParams.get("state") || "", code = (url.searchParams.get("code") || "").replace(/#_$/, "");
+  if (!code || !(await env.SESSIONS.get("thr:state:" + state))) return thrPage("連結過期了", "請重新打開「/threads/login」再授權一次。");
+  await env.SESSIONS.delete("thr:state:" + state);
+  const r1 = await fetch("https://graph.threads.net/oauth/access_token", { method: "POST", body: new URLSearchParams({ client_id: THREADS_APP_ID, client_secret: env.THREADS_APP_SECRET, code, grant_type: "authorization_code", redirect_uri: redirect }) });
+  const j1 = await r1.json().catch(() => ({}));
+  if (!j1.access_token) return thrPage("換取權杖失敗", "錯誤：" + String((j1.error && (j1.error.message || j1.error)) || j1.error_message || r1.status).replace(/[<>&]/g, "").slice(0, 200) + "<br>請截圖這頁給 Claude。");
+  const r2 = await fetch("https://graph.threads.net/access_token?" + new URLSearchParams({ grant_type: "th_exchange_token", client_secret: env.THREADS_APP_SECRET, access_token: j1.access_token }));
+  const j2 = await r2.json().catch(() => ({}));
+  const tok = j2.access_token || j1.access_token, ttl = j2.expires_in || 3600;
+  const me = await (await fetch("https://graph.threads.net/v1.0/me?fields=id,username&access_token=" + encodeURIComponent(tok))).json().catch(() => ({}));
+  if (me.username !== THREADS_OWNER) return thrPage("帳號不對", "授權的是 @" + String(me.username || "?").replace(/[<>&]/g, "") + "，只接受 @" + THREADS_OWNER + "。請在 Threads 登出後換帳號再試。");
+  await env.SESSIONS.put("thr:tok", JSON.stringify({ tok, uid: me.id, user: me.username, exp: Date.now() + ttl * 1000, at: Date.now() }));
+  const owner = await env.SESSIONS.get("owner");
+  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `✅ Threads @${me.username} 已連接（權杖約 ${Math.round(ttl / 86400)} 天，系統會自動續期）` }] }).catch(() => {});
+  return thrPage("✅ 連接成功", "@" + me.username + " 已經接上 ZOARÉ 系統，可以關掉這頁回去跟 Claude 說「好了」。");
+}
+// 每天檢查一次：剩不到 10 天就自動續期（長效權杖 60 天）
+async function threadsRefresh(env) {
+  const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
+  if (!t || t.exp - Date.now() > 10 * 86400e3 || Date.now() - t.at < 86400e3) return;
+  const j = await (await fetch("https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=" + encodeURIComponent(t.tok))).json().catch(() => ({}));
+  if (j.access_token) await env.SESSIONS.put("thr:tok", JSON.stringify({ ...t, tok: j.access_token, exp: Date.now() + (j.expires_in || 5184000) * 1000, at: Date.now() }));
+}
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runFollowups(env));
@@ -1389,6 +1429,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 4) { try { await runCartReminders(env, { lineApi }); } catch (e) { console.log("cartRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
+      if (Math.floor(hm / 5) % 288 === 7) { try { await threadsRefresh(env); } catch (e) { console.log("thrRefresh", e); } }
       try { await runBootTasks(env); } catch (e) { console.log("boot", e); }
       try { if ((await env.SESSIONS.get("menuver")) !== RICHMENU_VER && env.LINE_CHANNEL_ACCESS_TOKEN) { const r2 = await setupRichMenu(env); console.log("richmenu", r2); if (!/^好/.test(r2)) await env.SESSIONS.put("menuver", RICHMENU_VER + "-fail"); } } catch (e) { console.log("richmenu", e); }
       if (hm >= 9 * 60 + 15 && (!r || r.date !== today)) { try { await updateRates(env, true); } catch (e) { console.log("rate update failed", e); } }
@@ -1396,7 +1437,7 @@ export default {
   },
   async fetch(request, env, ctx) {
     // 去掉金鑰前後不小心多貼的空白或換行
-    for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL"])
+    for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL", "THREADS_APP_SECRET"])
       if (typeof env[k] === "string") env[k] = env[k].trim();
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/check") {
@@ -1408,8 +1449,11 @@ export default {
         ANTHROPIC_API_KEY: a ? { length: a.length, looks_ok: a.startsWith("sk-ant-") } : "missing",
         CATALOG_URL: env.CATALOG_URL ? "set" : "missing",
         SESSIONS_KV: env.SESSIONS ? "bound" : "not bound",
+        THREADS_APP_SECRET: env.THREADS_APP_SECRET ? { length: env.THREADS_APP_SECRET.length, looks_ok: /^[0-9a-f]{32}$/i.test(env.THREADS_APP_SECRET) } : "missing",
+        THREADS_CONNECTED: env.SESSIONS ? !!(await env.SESSIONS.get("thr:tok")) : false,
       });
     }
+    if (url.pathname === "/threads/login" || url.pathname === "/threads/callback") return threadsAuth(request, env, url);
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
     // 介紹影片（LINE 影片訊息要 https＋正確的 content-type）
