@@ -1570,7 +1570,7 @@ async function threadsOwnerCmd(env, text) {
   if (/^#?(海巡|開始海巡|海巡示範)$/.test(t)) {
     if (!(await env.SESSIONS.get("thr:tok"))) return "❌ Threads 還沒連接，請先打開 /threads/login";
     await env.SESSIONS.put("thr:manual", /示範/.test(t) ? "demo" : "1", { expirationTtl: 3600 });
-    return "收到🔍 海巡開始，大約 5 分鐘內把結果傳給你" + (/示範/.test(t) ? "（示範模式：會包含你自己的貼文，方便錄影）" : "");
+    return "收到🔍 海巡開始，大約 5 分鐘後傳「海巡結果」就能看到" + (/示範/.test(t) ? "（示範模式：會包含你自己的貼文，方便錄影）" : "");
   }
   return undefined;
 }
