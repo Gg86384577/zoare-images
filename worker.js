@@ -733,6 +733,10 @@ async function handleEvent(env, ev) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
       return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
     }
+    if (/threads\.(?:com|net)\/@[\w.]+\/post\//.test(text)) {
+      const lr = await threadsFromLink(env, text);
+      if (lr) return lr.msgs ? reply(env, ev.replyToken, lr.msgs) : reply(env, ev.replyToken, [{ type: "text", text: lr }]);
+    }
     if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果)/.test(text.trim())) {
       const hr = await threadsOwnerCmd(env, text);
       if (hr !== undefined) return hr && hr.msgs ? reply(env, ev.replyToken, hr.msgs) : hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
@@ -1511,21 +1515,7 @@ async function threadsPatrol(env, opt = {}) {
     if (!draft) draft = "我們有在做日本角色商品批發，小量也可以～有需要可以私訊或搜尋 LINE「ZOARÉ」看看喔";
     const sid = x.id.slice(-6);
     await env.SESSIONS.put("thr:c:" + sid, JSON.stringify({ id: x.id, user: x.username, link: x.permalink, text: (x.text || "").slice(0, 300), draft }), { expirationTtl: 30 * 86400 });
-    cards.push({ type: "bubble", size: "kilo",
-      body: { type: "box", layout: "vertical", spacing: "sm", contents: [
-        { type: "text", text: "@" + (x.username || "?") + (x.timestamp ? "・" + new Date(Date.parse(x.timestamp) + 8 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : ""), size: "xs", color: "#888888" },
-        { type: "text", text: (x.text || "（無文字）").slice(0, 140), wrap: true, size: "sm" },
-        { type: "separator", margin: "md" },
-        { type: "text", text: "💬 擬好的留言", size: "xs", color: "#B08D57", margin: "md" },
-        { type: "text", text: draft, wrap: true, size: "sm", weight: "bold" },
-      ] },
-      footer: { type: "box", layout: "vertical", spacing: "sm", contents: [
-        { type: "button", style: "primary", color: "#B08D57", height: "sm", action: { type: "message", label: "✅ 發送這則留言", text: "海巡發送 " + sid } },
-        { type: "box", layout: "horizontal", spacing: "sm", contents: [
-          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "看原文", uri: x.permalink || "https://www.threads.com/" } },
-          { type: "button", style: "secondary", height: "sm", action: { type: "message", label: "跳過", text: "海巡跳過 " + sid } },
-        ] },
-      ] } });
+    cards.push(thrCard({ ...x, draft, sid }));
   }
   const owner = await env.SESSIONS.get("owner");
   const head = `🔍 Threads 海巡（${kws.length} 個關鍵字）：找到 ${cards.length} 篇在找貨的貼文` + (cards.length ? "\n按「發送」才會留言；想改內容就傳「海巡改 代號 新的留言」" : "") + (errs.length ? "\n⚠️ " + errs.slice(0, 2).join("；") : "");
@@ -1540,6 +1530,39 @@ async function threadsPatrol(env, opt = {}) {
   }
   await env.SESSIONS.put("thr:lastrun", JSON.stringify({ at: new Date(Date.now() + 8 * 3600e3).toISOString().slice(5, 16).replace("T", " "), found: cards.length, errs: errs.slice(0, 2), push }), { expirationTtl: 30 * 86400 });
   return head;
+}
+function thrCard(x) {
+  const draft = x.draft, sid = x.sid;
+  return ({ type: "bubble", size: "kilo",
+      body: { type: "box", layout: "vertical", spacing: "sm", contents: [
+        { type: "text", text: "@" + (x.username || "?") + (x.timestamp ? "・" + new Date(Date.parse(x.timestamp) + 8 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : ""), size: "xs", color: "#888888" },
+        { type: "text", text: (x.text || "（無文字）").slice(0, 140), wrap: true, size: "sm" },
+        { type: "separator", margin: "md" },
+        { type: "text", text: "💬 擬好的留言", size: "xs", color: "#B08D57", margin: "md" },
+        { type: "text", text: draft, wrap: true, size: "sm", weight: "bold" },
+      ] },
+      footer: { type: "box", layout: "vertical", spacing: "sm", contents: [
+        { type: "button", style: "primary", color: "#B08D57", height: "sm", action: { type: "message", label: "✅ 發送這則留言", text: "海巡發送 " + sid } },
+        { type: "box", layout: "horizontal", spacing: "sm", contents: [
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "看原文", uri: x.permalink || "https://www.threads.com/" } },
+          { type: "button", style: "secondary", height: "sm", action: { type: "message", label: "跳過", text: "海巡跳過 " + sid } },
+        ] },
+      ] } });
+}
+const SC_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+function thrCodeToId(code) { let n = 0n; for (const ch of code) { const v = SC_ALPHA.indexOf(ch); if (v < 0) return null; n = n * 64n + BigInt(v); } return n.toString(); }
+async function threadsFromLink(env, text) {
+  const m = text.match(/threads\.(?:com|net)\/@([\w.]+)\/post\/([\w-]{6,})/);
+  if (!m) return undefined;
+  const id = thrCodeToId(m[2].slice(0, 11)); if (!id) return "連結看不懂，請在 Threads 按「分享 → 複製連結」再貼一次";
+  let postText = text.replace(/https?:\/\/\S+/g, "").trim();
+  if (!postText) { const g = await thrGet(env, id, { fields: "text,username" }); if (g && g.text) postText = g.text; }
+  let draft = ""; try { draft = postText ? await thrDraft(env, { username: m[1], text: postText }) : ""; } catch (e) {}
+  if (!draft) draft = "我們有在做日本角色商品批發（三麗鷗、吉伊卡哇、盒玩扭蛋都有），小量也能拿～有需要可以私訊或 LINE 搜「ZOARÉ」看看";
+  const sid = id.slice(-6);
+  await env.SESSIONS.put("thr:c:" + sid, JSON.stringify({ id, user: m[1], link: "https://www.threads.com/@" + m[1] + "/post/" + m[2], text: postText.slice(0, 300), draft }), { expirationTtl: 30 * 86400 });
+  return { msgs: [{ type: "text", text: "幫你擬好留言了👇 確認沒問題就按「發送」\n想改內容：傳「海巡改 " + sid + " 新的留言」" + (postText ? "" : "\n（讀不到原文，是用通用留言；想更貼切可以把原文一起貼給我）") },
+    { type: "flex", altText: "Threads 留言草稿", contents: thrCard({ id, username: m[1], permalink: "https://www.threads.com/@" + m[1] + "/post/" + m[2], text: postText || "（原文請點「看原文」）", draft, sid }) }] };
 }
 async function threadsReplySend(env, sid, custom) {
   const c = JSON.parse((await env.SESSIONS.get("thr:c:" + sid)) || "null");
