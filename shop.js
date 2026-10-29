@@ -1459,7 +1459,7 @@ async function submit(e){
   e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));form=fd;try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr,pay:fd.pay}))}catch(_){}
   const btn=$("#go");btn.disabled=true;btn.textContent="送出中…";
   try{
-    const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,items:lines().map(l=>({k:l.x.k,q:l.q})),form:fd,coupon:CPSEL||""})}).then(r=>r.json());
+    const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,items:lines().map(l=>({k:l.x.k,q:l.q})),form:fd,coupon:CPSEL||""})}).then(async res=>{const tx=await res.text();try{return JSON.parse(tx)}catch(_){return{ok:false,error:"系統暫時忙不過來（"+res.status+"），請等 1 分鐘再按一次「送出訂單」。\\n如果一直不行，請直接在 LINE 告訴我們，我們幫你建單🙏"}}});
     if(!r.ok)throw new Error(r.error||"送出失敗");
     CPSEL="";try{const me2=await fetch("/shop/me?t="+encodeURIComponent(T)).then(r=>r.json());if(me2.ok){ME.coupons=me2.coupons;ME.camp=me2.camp}}catch(_){}
     cart={};save();bar();document.querySelectorAll(".qty").forEach(el=>{const c=el.closest(".card");if(c)el.outerHTML=qtyBox(byK(c.dataset.k),0)});

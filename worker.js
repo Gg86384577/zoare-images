@@ -741,6 +741,10 @@ async function handleEvent(env, ev) {
       const hr = await threadsOwnerCmd(env, text);
       if (hr !== undefined) return hr && hr.msgs ? reply(env, ev.replyToken, hr.msgs) : hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
     }
+    if (/^#?(系統錯誤|錯誤紀錄)$/.test(text.trim())) {
+      const se = await env.SESSIONS.get("shoperr"), le = await env.SESSIONS.get("lasterr");
+      return reply(env, ev.replyToken, [{ type: "text", text: "🛠 最近錯誤紀錄\n\n商城：" + (se || "沒有") + "\n\nLINE：" + (le || "沒有") }]);
+    }
     const ht = text.trim().match(/^#?(?:海巡測試|threads測試|Threads測試)\s*(.*)$/i);
     if (ht) return reply(env, ev.replyToken, [{ type: "text", text: await threadsTest(env, ht[1] || "三麗鷗") }]);
     const r = await ownerCommand(env, text);
@@ -1676,7 +1680,15 @@ export default {
       const q = (url.searchParams.get("q") || decodeURIComponent(url.pathname.slice(4)) || "商品目錄").slice(0, 50);
       return Response.redirect(`https://line.me/R/oaMessage/${encodeURIComponent(id)}/?${encodeURIComponent(q)}`, 302);
     }
-    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) return handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi, ver: CATALOG_VERSION, catStamp });
+    if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) {
+      try { return await handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi, ver: CATALOG_VERSION, catStamp }); }
+      catch (e) {
+        const msg = String((e && e.stack) || e).slice(0, 600);
+        console.log("shop error", msg);
+        if (env.SESSIONS) await env.SESSIONS.put("shoperr", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + " " + url.pathname + " " + msg, { expirationTtl: 30 * 86400 }).catch(() => {});
+        return Response.json({ ok: false, error: "系統暫時出錯，請等 1 分鐘再試一次；一直不行請在 LINE 告訴我們🙏" }, { status: 500 });
+      }
+    }
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");
