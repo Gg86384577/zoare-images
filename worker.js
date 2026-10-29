@@ -733,6 +733,10 @@ async function handleEvent(env, ev) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
       return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
     }
+    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字)/.test(text.trim())) {
+      const hr = await threadsOwnerCmd(env, text);
+      if (hr !== undefined) return hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
+    }
     const ht = text.trim().match(/^#?(?:海巡測試|threads測試|Threads測試)\s*(.*)$/i);
     if (ht) return reply(env, ev.replyToken, [{ type: "text", text: await threadsTest(env, ht[1] || "三麗鷗") }]);
     const r = await ownerCommand(env, text);
@@ -1382,6 +1386,26 @@ const THREADS_APP_ID = "1130913892781479";
 const THREADS_OWNER = "zoare_2504"; // 只接受這個帳號，別人授權會被拒絕
 const THREADS_SCOPE = "threads_basic,threads_content_publish,threads_keyword_search,threads_manage_replies,threads_read_replies";
 const thrPage = (t, b) => new Response(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${t}</title><body style="font-family:system-ui;padding:32px 20px;max-width:520px;margin:auto;line-height:1.7;background:#faf8f3;color:#222"><h2>${t}</h2><p>${b}</p></body>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+function legalPage(path) {
+  const del = path === "/data-deletion";
+  const css = "body{font-family:system-ui,-apple-system,'Noto Sans TC',sans-serif;max-width:720px;margin:auto;padding:32px 20px;line-height:1.8;color:#222;background:#faf8f3}h1{font-size:24px}h2{font-size:17px;margin-top:28px}small{color:#777}";
+  const zh = del ? `<h1>ZOARÉ 資料刪除說明</h1>
+<p>ZOARÉ 的 Threads 功能只供 ZOARÉ 自有帳號 @zoare_2504 使用。我們不會為其他 Threads 用戶建立帳號，也不會保存他們的個人資料。</p>
+<h2>我們保存哪些資料</h2><p>為了找出正在詢問商品來源的公開貼文，我們會暫時保存公開貼文的編號、內容摘要、作者帳號名稱與連結，最多保存 30 天，之後自動刪除。</p>
+<h2>如何要求刪除</h2><p>任何人如果希望我們刪除與其 Threads 帳號有關的資料，請透過 ZOARÉ 的 LINE 官方帳號或 Threads 私訊 @zoare_2504 告知帳號名稱，我們會在 7 天內刪除並回覆確認。</p>
+<p>@zoare_2504 帳號擁有者也可以隨時在 Threads「設定 → 帳號 → 網站權限」移除本應用程式，移除後我們會刪除授權權杖。</p>`
+  : `<h1>ZOARÉ 隱私權政策</h1><small>最後更新：2026-10-29</small>
+<p>ZOARÉ 是台灣的日本角色商品批發服務。本政策說明我們透過 Threads API 處理資料的方式。</p>
+<h2>使用範圍</h2><p>本應用程式只由 ZOARÉ 自有 Threads 帳號 @zoare_2504 使用，用途是：搜尋公開貼文中正在詢問批發或商品來源的貼文，並由 ZOARÉ 人員確認後，以 @zoare_2504 的身分回覆該貼文。</p>
+<h2>我們取得的資料</h2><ul><li>@zoare_2504 的帳號基本資料與授權權杖</li><li>關鍵字搜尋結果中的公開貼文：貼文編號、內容、作者帳號名稱、時間與連結</li><li>對 @zoare_2504 貼文的公開回覆</li></ul>
+<h2>使用方式</h2><p>資料只用於讓 ZOARÉ 人員判斷是否回覆，以及追蹤回覆狀態。我們不會出售、出租或分享資料給第三方，不會用於廣告投放，也不會建立用戶檔案或自動私訊。每則回覆都由人員確認後才發出。</p>
+<h2>保存期限</h2><p>公開貼文資料最多保存 30 天後自動刪除；授權權杖保存在加密的伺服器環境，帳號擁有者移除授權後即刪除。</p>
+<h2>刪除資料</h2><p>請參考<a href="/data-deletion">資料刪除說明</a>。</p>
+<h2>聯絡我們</h2><p>LINE 官方帳號 ZOARÉ，或 Threads @zoare_2504。</p>`;
+  const en = del ? `<h1>Data Deletion Instructions</h1><p>ZOARÉ's Threads integration is used only by ZOARÉ's own account @zoare_2504. We do not create accounts for other Threads users. Public post data found via keyword search (post ID, text excerpt, username, permalink) is kept for at most 30 days and then deleted automatically. To request deletion of any data related to your Threads account, message @zoare_2504 on Threads or ZOARÉ's LINE Official Account with your username; we will delete it within 7 days and confirm. The account owner can also remove the app under Threads Settings → Account → Website permissions, after which the access token is deleted.</p>`
+  : `<h1>Privacy Policy</h1><p>ZOARÉ is a Japanese character-goods wholesale service in Taiwan. This app is used only by ZOARÉ's own Threads account @zoare_2504 to search public posts asking for wholesale suppliers, and to reply to those posts as @zoare_2504 after a staff member reviews each reply. We access @zoare_2504's basic profile and access token, public posts returned by keyword search (ID, text, username, timestamp, permalink), and public replies to @zoare_2504's posts. Data is used only to decide whether to reply and to track reply status. We never sell or share data with third parties, use it for advertising, build user profiles, or send automated direct messages. Public post data is deleted after 30 days. See <a href="/data-deletion">Data Deletion Instructions</a>. Contact: @zoare_2504 on Threads.</p>`;
+  return new Response(`<!doctype html><html lang="zh-Hant"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${del ? "ZOARÉ 資料刪除說明" : "ZOARÉ 隱私權政策"}</title><style>${css}</style><body>${zh}<hr style="margin:36px 0">${en}</body></html>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+}
 async function thrState(env, ts) {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.THREADS_APP_SECRET || ""), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("thr" + ts)));
@@ -1440,6 +1464,107 @@ async function threadsTest(env, q) {
   }
   return out.join("\n");
 }
+// ── 海巡：Threads 關鍵字搜尋 → AI 擬留言 → LINE 傳給老闆確認 → 按發送才用 @zoare_2504 回覆 ──
+const THR_KW = ["求貨源", "找貨源", "三麗鷗 批發", "日本 批發", "批發 盤商", "想開團", "團購 廠商", "盒玩 批發", "扭蛋 批發", "吉伊卡哇 批發", "周邊 批發"];
+const THR_INTENT = /求|找|徵|哪裡|哪邊|推薦|有沒有|有人|請問|貨源|盤商|廠商|批發|開團|進貨|拿貨|代理/;
+const THR_SKIP = /代購.{0,6}(收單|開單|連線)|現貨販售|出清|徵才|求職/;
+async function thrPost(env, path, params) {
+  const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
+  if (!t) return { error: { message: "還沒連接 Threads" } };
+  const r = await fetch("https://graph.threads.net/v1.0/" + path, { method: "POST", body: new URLSearchParams({ ...params, access_token: t.tok }) });
+  return r.json().catch(() => ({ error: { message: "HTTP " + r.status } }));
+}
+async function thrDraft(env, post) {
+  const sys = `你是台灣日本角色商品批發商 ZOARÉ 的小編，要在 Threads 上回覆一則別人的貼文。
+規則：繁體中文、口語自然、像真人隨手回，不要有 AI 感、不要用「您好」開頭、不要條列、最多 2 句、60 字以內、最多 1 個表情符號。
+內容：針對對方問的東西簡短回應，提到我們做日本角色商品批發（三麗鷗、吉伊卡哇、盒玩扭蛋等，小量也能批），請對方私訊或搜尋 LINE「ZOARÉ」看商品。
+絕對不要：提到廠商名、進價、折數、人民幣、保證價格、貶低別人；貼文跟批發／找貨無關時，只回一個字：SKIP`;
+  const out = (await claude(env, sys, [{ role: "user", content: "貼文作者 @" + post.username + "：\n" + (post.text || "").slice(0, 600) }], 200)).trim();
+  return /^SKIP/i.test(out) ? "" : out.replace(/^["「]|["」]$/g, "");
+}
+async function threadsPatrol(env, opt = {}) {
+  const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
+  if (!t) return "❌ Threads 還沒連接";
+  let kws = THR_KW; try { const k = JSON.parse((await env.SESSIONS.get("thr:kw")) || "null"); if (k && k.length) kws = k; } catch (e) {}
+  const since = Date.now() - 3 * 86400e3, found = new Map(), errs = [];
+  for (const q of kws) {
+    const j = await thrGet(env, "keyword_search", { q, search_type: "RECENT", fields: "id,text,username,timestamp,permalink", limit: "25" });
+    if (j.error) { errs.push(q + "：" + j.error.message); continue; }
+    for (const x of j.data || []) {
+      if (!x.id || found.has(x.id)) continue;
+      if (!opt.demo && (x.username === t.user)) continue;
+      if (x.timestamp && Date.parse(x.timestamp) < since) continue;
+      if (!opt.demo && (!THR_INTENT.test(x.text || "") || THR_SKIP.test(x.text || ""))) continue;
+      if (!opt.demo && (await env.SESSIONS.get("thr:seen:" + x.id))) continue;
+      found.set(x.id, x);
+    }
+  }
+  const picks = [...found.values()].slice(0, opt.demo ? 3 : 10), cards = [];
+  for (const x of picks) {
+    await env.SESSIONS.put("thr:seen:" + x.id, "1", { expirationTtl: 30 * 86400 });
+    let draft = ""; try { draft = await thrDraft(env, x); } catch (e) { draft = ""; }
+    if (!draft && !opt.demo) continue;
+    if (!draft) draft = "我們有在做日本角色商品批發，小量也可以～有需要可以私訊或搜尋 LINE「ZOARÉ」看看喔";
+    const sid = x.id.slice(-6);
+    await env.SESSIONS.put("thr:c:" + sid, JSON.stringify({ id: x.id, user: x.username, link: x.permalink, text: (x.text || "").slice(0, 300), draft }), { expirationTtl: 30 * 86400 });
+    cards.push({ type: "bubble", size: "kilo",
+      body: { type: "box", layout: "vertical", spacing: "sm", contents: [
+        { type: "text", text: "@" + (x.username || "?") + (x.timestamp ? "・" + new Date(Date.parse(x.timestamp) + 8 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : ""), size: "xs", color: "#888888" },
+        { type: "text", text: (x.text || "（無文字）").slice(0, 140), wrap: true, size: "sm" },
+        { type: "separator", margin: "md" },
+        { type: "text", text: "💬 擬好的留言", size: "xs", color: "#B08D57", margin: "md" },
+        { type: "text", text: draft, wrap: true, size: "sm", weight: "bold" },
+      ] },
+      footer: { type: "box", layout: "vertical", spacing: "sm", contents: [
+        { type: "button", style: "primary", color: "#B08D57", height: "sm", action: { type: "message", label: "✅ 發送這則留言", text: "海巡發送 " + sid } },
+        { type: "box", layout: "horizontal", spacing: "sm", contents: [
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "看原文", uri: x.permalink || "https://www.threads.com/" } },
+          { type: "button", style: "secondary", height: "sm", action: { type: "message", label: "跳過", text: "海巡跳過 " + sid } },
+        ] },
+      ] } });
+  }
+  const owner = await env.SESSIONS.get("owner");
+  const head = `🔍 Threads 海巡（${kws.length} 個關鍵字）：找到 ${cards.length} 篇在找貨的貼文` + (cards.length ? "\n按「發送」才會留言；想改內容就傳「海巡改 代號 新的留言」" : "") + (errs.length ? "\n⚠️ " + errs.slice(0, 2).join("；") : "");
+  if (opt.silentIfEmpty && !cards.length) return head;
+  if (owner) {
+    const msgs = [{ type: "text", text: head }];
+    if (cards.length) msgs.push({ type: "flex", altText: "Threads 海巡結果 " + cards.length + " 篇", contents: { type: "carousel", contents: cards } });
+    await lineApi(env, "/v2/bot/message/push", { to: owner, messages: msgs });
+  }
+  return head;
+}
+async function threadsReplySend(env, sid, custom) {
+  const c = JSON.parse((await env.SESSIONS.get("thr:c:" + sid)) || "null");
+  if (!c) return "找不到代號 " + sid + "（可能超過 30 天了）";
+  if (c.sent) return "這則已經留過言了👌";
+  const text = (custom || c.draft || "").trim().slice(0, 500);
+  const a = await thrPost(env, "me/threads", { media_type: "TEXT", text, reply_to_id: c.id });
+  if (!a.id) return "❌ 留言失敗：" + ((a.error && a.error.message) || "未知錯誤");
+  await new Promise((r) => setTimeout(r, 2500));
+  const b = await thrPost(env, "me/threads_publish", { creation_id: a.id });
+  if (!b.id) return "❌ 發佈失敗：" + ((b.error && b.error.message) || "未知錯誤");
+  c.sent = Date.now(); c.replyId = b.id; c.final = text;
+  await env.SESSIONS.put("thr:c:" + sid, JSON.stringify(c), { expirationTtl: 30 * 86400 });
+  return "✅ 已用 @zoare_2504 留言給 @" + c.user + "\n「" + text + "」";
+}
+async function threadsOwnerCmd(env, text) {
+  const t = text.trim();
+  let m;
+  if ((m = t.match(/^#?海巡發送\s*(\w{6})$/))) return threadsReplySend(env, m[1]);
+  if ((m = t.match(/^#?海巡改\s*(\w{6})\s+([\s\S]+)$/))) return threadsReplySend(env, m[1], m[2]);
+  if ((m = t.match(/^#?海巡跳過\s*(\w{6})$/))) return "好，跳過這則👌";
+  if ((m = t.match(/^#?海巡關鍵字\s*(.*)$/))) {
+    if (m[1].trim()) { const k = m[1].split(/[,，、\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 30); await env.SESSIONS.put("thr:kw", JSON.stringify(k)); return "好👌 海巡關鍵字改成：\n" + k.join("、"); }
+    let k = THR_KW; try { k = JSON.parse((await env.SESSIONS.get("thr:kw")) || "null") || THR_KW; } catch (e) {}
+    return "目前海巡關鍵字：\n" + k.join("、") + "\n\n要改就傳「海巡關鍵字 求貨源、三麗鷗批發、…」";
+  }
+  if (/^#?(海巡|開始海巡|海巡示範)$/.test(t)) {
+    if (!(await env.SESSIONS.get("thr:tok"))) return "❌ Threads 還沒連接，請先打開 /threads/login";
+    await env.SESSIONS.put("thr:manual", /示範/.test(t) ? "demo" : "1", { expirationTtl: 3600 });
+    return "收到🔍 海巡開始，大約 5 分鐘內把結果傳給你" + (/示範/.test(t) ? "（示範模式：會包含你自己的貼文，方便錄影）" : "");
+  }
+  return undefined;
+}
 // 每天檢查一次：剩不到 10 天就自動續期（長效權杖 60 天）
 async function threadsRefresh(env) {
   const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
@@ -1462,6 +1587,14 @@ export default {
       if (Math.floor(hm / 5) % 12 === 4) { try { await runCartReminders(env, { lineApi }); } catch (e) { console.log("cartRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
+      const man = await env.SESSIONS.get("thr:manual");
+      if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
+      for (const [slot, at] of [["am", 9 * 60], ["pm", 20 * 60]]) {
+        if (hm >= at && hm < at + 30 && (await env.SESSIONS.get("thr:tok")) && !(await env.SESSIONS.get("thr:ran:" + today + slot))) {
+          await env.SESSIONS.put("thr:ran:" + today + slot, "1", { expirationTtl: 3 * 86400 });
+          try { await threadsPatrol(env, { silentIfEmpty: true }); } catch (e) { console.log("patrol", e); }
+        }
+      }
       if (Math.floor(hm / 5) % 288 === 7) { try { await threadsRefresh(env); } catch (e) { console.log("thrRefresh", e); } }
       try { await runBootTasks(env); } catch (e) { console.log("boot", e); }
       try { if ((await env.SESSIONS.get("menuver")) !== RICHMENU_VER && env.LINE_CHANNEL_ACCESS_TOKEN) { const r2 = await setupRichMenu(env); console.log("richmenu", r2); if (!/^好/.test(r2)) await env.SESSIONS.put("menuver", RICHMENU_VER + "-fail"); } } catch (e) { console.log("richmenu", e); }
@@ -1488,6 +1621,7 @@ export default {
       });
     }
     if (url.pathname === "/threads/login" || url.pathname === "/threads/callback") return threadsAuth(request, env, url);
+    if (url.pathname === "/privacy" || url.pathname === "/data-deletion") return legalPage(url.pathname);
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
     // 介紹影片（LINE 影片訊息要 https＋正確的 content-type）
