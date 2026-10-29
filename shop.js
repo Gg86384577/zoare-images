@@ -372,6 +372,7 @@ export async function handleShop(request, env, ctx, deps) {
     const f = body.form || {};
     const clean = (s, n = 100) => String(s || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
     const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: clean(f.ship, 20), addr: clean(f.addr, 150), note: clean(f.note, 300), pay: f.pay === "LINE Pay" ? "LINE Pay" : "轉帳" };
+    if (lines.every((l) => l.mem)) { form.name = form.name || "會員方案"; form.phone = form.phone || "-"; form.ship = "免寄送"; form.addr = form.addr || "-"; }
     if (!form.name || !form.phone || !form.ship || !form.addr) return Response.json({ ok: false, error: "請填寫收件人、電話、寄送方式與門市／地址" }, { status: 400 });
     const sumAll = lines.reduce((a, l) => a + l.sub, 0);
     const qty = lines.reduce((a, l) => a + l.q, 0);
@@ -1436,10 +1437,10 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   L.map(({x,q,sub})=>'<div class="row" data-k="'+esc(x.k)+'">'+(x.img?'<img src="'+esc(x.img)+'">':'')+'<div class="t">'+esc(x.n)+'<br><small>'+fmt(price(x))+' × '+q+' = '+fmt(sub)+'</small></div>'+qtyBox(x,q)+'</div>').join("")+
   (N.length?'<div class="warn"><b>訂購規則提醒</b><br>'+N.map(esc).join("<br>")+'</div>':'')+
   cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：依廠商分批寄出，每次出貨國內 NT$60，國際運費依物流報價（約每公斤 NT$220）'+(ME.sc&&TIER()===ME.tier?'<br>'+esc(scLine(ME.sc)):'<br>會員每月送運費券：一般會員 5 張國內、VIP 10 張國內＋10 張國際')+'</small></div>'+
-  '<form id="of"><label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
+  '<form id="of">'+(L.every(l=>l.x.mem)?'<div class="camp">只有會員方案，不用填收件資料，選好付款方式就能送出👌</div><input type="hidden" name="name" value="會員方案"><input type="hidden" name="phone" value="-"><input type="hidden" name="ship" value="免寄送"><input type="hidden" name="addr" value="-">':'<label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
   '<label>寄送方式</label><select class="f" name="ship" required>'+["7-11 店到店","全家店到店","萊爾富店到店","宅配","其他"].map(s=>'<option'+(form.ship===s?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
-  '<label>門市名稱／收件地址</label><input class="f" name="addr" required value="'+esc(form.addr||"")+'">'+
+  '<label>門市名稱／收件地址</label><input class="f" name="addr" required value="'+esc(form.addr||"")+'">')+
   '<label>付款方式</label><div class="pays">'+["轉帳","LINE Pay"].map(p=>'<label class="pay"><input type="radio" name="pay" value="'+p+'"'+((form.pay||"轉帳")===p?" checked":"")+'><span>'+(p==="轉帳"?"🏦 銀行轉帳":"💚 LINE Pay")+'</span></label>').join("")+'</div>'+
   '<label>備註（選填）</label><textarea class="f" name="note" rows="2"></textarea>'+
   '<button class="go" id="go">送出訂單</button></form>';
@@ -1456,7 +1457,7 @@ async function guestCheckout(){
   }catch(e){b.disabled=false;b.textContent="💚 用 LINE 確認身分並下單";alert("暫時無法處理，請稍後再試")}
 }
 async function submit(e){
-  e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));form=fd;try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr,pay:fd.pay}))}catch(_){}
+  e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));if(fd.ship!=="免寄送")form=fd;if(fd.ship!=="免寄送")try{localStorage.setItem("zo_form",JSON.stringify({name:fd.name,phone:fd.phone,ship:fd.ship,addr:fd.addr,pay:fd.pay}))}catch(_){}
   const btn=$("#go");btn.disabled=true;btn.textContent="送出中…";
   try{
     const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,items:lines().map(l=>({k:l.x.k,q:l.q})),form:fd,coupon:CPSEL||""})}).then(async res=>{const tx=await res.text();try{return JSON.parse(tx)}catch(_){return{ok:false,error:"系統暫時忙不過來（"+res.status+"），請等 1 分鐘再按一次「送出訂單」。\\n如果一直不行，請直接在 LINE 告訴我們，我們幫你建單🙏"}}});
