@@ -1380,20 +1380,26 @@ const THREADS_APP_ID = "1130913892781479";
 const THREADS_OWNER = "zoare_2504"; // 只接受這個帳號，別人授權會被拒絕
 const THREADS_SCOPE = "threads_basic,threads_content_publish,threads_keyword_search,threads_manage_replies,threads_read_replies";
 const thrPage = (t, b) => new Response(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${t}</title><body style="font-family:system-ui;padding:32px 20px;max-width:520px;margin:auto;line-height:1.7;background:#faf8f3;color:#222"><h2>${t}</h2><p>${b}</p></body>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+async function thrState(env, ts) {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.THREADS_APP_SECRET || ""), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("thr" + ts)));
+  return ts + "." + [...sig.slice(0, 12)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
 async function threadsAuth(request, env, url) {
   const redirect = url.origin + "/threads/callback";
   if (url.pathname === "/threads/login") {
     if (!env.THREADS_APP_SECRET) return thrPage("還差一步", "Cloudflare 還沒設定 THREADS_APP_SECRET，設定好再開這個網址。");
-    const state = crypto.randomUUID();
-    await env.SESSIONS.put("thr:state:" + state, "1", { expirationTtl: 1800 });
+    const state = await thrState(env, Date.now());
     const q = new URLSearchParams({ client_id: THREADS_APP_ID, redirect_uri: redirect, scope: THREADS_SCOPE, response_type: "code", state });
     return Response.redirect("https://threads.com/oauth/authorize?" + q, 302);
   }
   const err = url.searchParams.get("error_description") || url.searchParams.get("error");
   if (err) return thrPage("沒有連接成功", "Threads 回覆：" + err.replace(/[<>&]/g, "") + "<br>可以回到上一頁再試一次。");
   const state = url.searchParams.get("state") || "", code = (url.searchParams.get("code") || "").replace(/#_$/, "");
-  if (!code || !(await env.SESSIONS.get("thr:state:" + state))) return thrPage("連結過期了", "請重新打開「/threads/login」再授權一次。");
-  await env.SESSIONS.delete("thr:state:" + state);
+  await env.SESSIONS.put("thr:last", JSON.stringify({ at: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16), keys: [...url.searchParams.keys()], stateLen: state.length, codeLen: code.length }), { expirationTtl: 7 * 86400 });
+  if (!code) return thrPage("沒有收到授權碼", "請重新打開「/threads/login」，在 Threads 畫面按「繼續」。");
+  const ts = Number(state.split(".")[0]);
+  if (!ts || Date.now() - ts > 3600e3 || state !== (await thrState(env, ts))) return thrPage("連結過期了", "請重新打開「/threads/login」再授權一次。");
   const r1 = await fetch("https://graph.threads.net/oauth/access_token", { method: "POST", body: new URLSearchParams({ client_id: THREADS_APP_ID, client_secret: env.THREADS_APP_SECRET, code, grant_type: "authorization_code", redirect_uri: redirect }) });
   const j1 = await r1.json().catch(() => ({}));
   if (!j1.access_token) return thrPage("換取權杖失敗", "錯誤：" + String((j1.error && (j1.error.message || j1.error)) || j1.error_message || r1.status).replace(/[<>&]/g, "").slice(0, 200) + "<br>請截圖這頁給 Claude。");
@@ -1451,6 +1457,7 @@ export default {
         SESSIONS_KV: env.SESSIONS ? "bound" : "not bound",
         THREADS_APP_SECRET: env.THREADS_APP_SECRET ? { length: env.THREADS_APP_SECRET.length, looks_ok: /^[0-9a-f]{32}$/i.test(env.THREADS_APP_SECRET) } : "missing",
         THREADS_CONNECTED: env.SESSIONS ? !!(await env.SESSIONS.get("thr:tok")) : false,
+        THREADS_LAST_CALLBACK: env.SESSIONS ? JSON.parse((await env.SESSIONS.get("thr:last")) || "null") : null,
       });
     }
     if (url.pathname === "/threads/login" || url.pathname === "/threads/callback") return threadsAuth(request, env, url);
