@@ -16,7 +16,7 @@ const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const BUILD_TAG = "promo-1";
+const BUILD_TAG = "promo-2";
 const CATALOG_VERSION = "20261030-0938";
 const CATALOG_SHA = "6ec5098637bd0c3e4478ae00354458074d517ef3"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
@@ -1524,12 +1524,18 @@ async function promoScan(env, cat) {
   const dow = tw.getUTCDay();
   if ((dow === 2 || dow === 5) && hm >= 12 * 60 && !(await env.SESSIONS.get("promo:reg:" + today))) {
     await env.SESSIONS.put("promo:reg:" + today, "1", { expirationTtl: 10 * 86400 });
-    const rot = Number((await env.SESSIONS.get("promo:rot")) || 0); await env.SESSIONS.put("promo:rot", String(rot + 1));
-    await promoQueueSeries(env, PROMO_SERIES[rot % PROMO_SERIES.length], "reg:" + today, live);
+    await promoQueueSeries(env, PROMO_SERIES[promoRot(tw)], "reg:" + today, live);
   }
 }
+// 定期宣傳的系列：依日期固定輪流（每週二、五各一個），讓每天早上維護時能先把那天的圖做好
+function promoRot(tw) { const d = new Date(Date.UTC(tw.getUTCFullYear(), tw.getUTCMonth(), tw.getUTCDate())); const wk = Math.floor((d - Date.UTC(2026, 0, 5)) / (7 * 86400e3)); return ((wk * 2 + (d.getUTCDay() === 5 ? 1 : 0)) % PROMO_SERIES.length + PROMO_SERIES.length) % PROMO_SERIES.length; }
+// 宣傳圖庫：每天早上維護時產生、放在 GitHub promo/ 資料夾，bank.json 對照「事件 → 圖」
+async function promoBank() {
+  try { const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/promo/bank.json?t=" + Math.floor(Date.now() / 600e3), { cf: { cacheTtl: 300 } }); return r.ok ? await r.json() : {}; } catch (e) { return {}; }
+}
 async function promoQueueSeries(env, kw, key, live) {
-  const L = live.filter((x) => (x.n + " " + (x.s || "") + " " + (x.b || "")).toLowerCase().includes(kw.toLowerCase()));
+  const hay = (x) => (x.n + " " + (x.s || "") + (["盒玩", "動漫"].includes(kw) ? " " + (x.b || "") : "")).toLowerCase();
+  const L = live.filter((x) => hay(x).includes(kw.toLowerCase()) || (kw === "盒玩" && /食玩|扭蛋/.test(x.b || "")));
   if (!L.length) return false;
   const pool = L.slice().sort((a, b) => String(b.ad || "").localeCompare(String(a.ad || ""))).slice(0, 60);
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
@@ -1540,40 +1546,13 @@ async function promoCopy(env, ev) {
   const tone = { new: "新品剛上架，讓人想第一時間收", "3d": "提醒結單倒數 3 天，語氣輕鬆", "1d": "明天就結單，製造一點急迫感", "1h": "最後 1 小時，簡短直接、很急", reg: "日常推薦這個系列，讓人想逛" }[ev.type];
   const sys = `你是台灣日本角色商品批發商 ZOARÉ 的社群小編。客人是小賣家、團購主。
 寫一則宣傳貼文，回傳 JSON（不要其他文字）：
-{"headline":"放在圖上的中文標題，6～10 字","copy":"FB／IG 貼文：3～6 行，口語、自然、不要有 AI 感，第一行要抓眼球，列出 2～4 款商品名（可簡化），寫「批發價 NT$${minP} 起」，最後一行寫「LINE 搜尋 ZOARÉ」下單，再空一行放 3～5 個 #hashtag","threads":"Threads 版：1～2 句、60 字內、像真人隨手發","image_prompt":"給圖片 AI 的英文指令（見下方規則）"}
+{"headline":"放在圖上的中文標題，6～10 字","copy":"FB／IG 貼文：3～6 行，口語、自然、不要有 AI 感，第一行要抓眼球，列出 2～4 款商品名（可簡化），寫「批發價 NT$${minP} 起」，最後一行寫「LINE 搜尋 ZOARÉ」下單，再空一行放 3～5 個 #hashtag","threads":"Threads 版：1～2 句、60 字內、像真人隨手發"}
 規則：繁體中文；表情符號最多 3 個；不提廠商名、品牌代理、進價、折數、人民幣；不要寫保證、最便宜這類誇大字眼；價格只能用我給的數字。
-這則的重點：${tone}${ev.dl ? `；結單時間 ${ev.dl}` : ""}。
-image_prompt 規則：描述一張 1:1 的社群宣傳圖。產品照片會一起提供，要寫明「use the provided product photos exactly as they are, do not redraw, alter or add any characters」；場景用柔和粉彩、乾淨可愛的日系選物風，搭配少量黑灰與香檳金點綴；圖上只放兩段文字：中文標題（就是 headline）和小字「ZOARÉ」，不要放價格或其他數字；不要畫任何卡通角色、吉祥物或品牌 logo。`;
+這則的重點：${tone}${ev.dl ? `；結單時間 ${ev.dl}` : ""}。`;
   const user = `類型：${ev.title}${ev.series ? "（" + ev.series + "）" : ""}${ev.count ? `，共 ${ev.count} 款` : ""}\n商品：\n${ev.items.map((x) => `・${x.n}　NT$${x.g}`).join("\n")}`;
   const out = await claude(env, sys, [{ role: "user", content: user }], 900);
-  let j; try { j = JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { j = { headline: ev.title, copy: out.trim(), threads: "", image_prompt: "" }; }
-  return { headline: String(j.headline || ev.title).slice(0, 14), copy: String(j.copy || "").slice(0, 900), threads: String(j.threads || "").slice(0, 200), image_prompt: String(j.image_prompt || "") };
-}
-async function promoImage(env, ev, c) {
-  if (!env.OPENAI_API_KEY) return { err: "還沒設定 OPENAI_API_KEY" };
-  const prompt = (c.image_prompt || `A 1:1 pastel kawaii social media promo graphic for a Japanese character goods shop. Use the provided product photos exactly as they are, do not redraw, alter or add any characters.`) +
-    `\nText on the image (render exactly, nothing else): Chinese headline "${c.headline}" and small wordmark "ZOARÉ". No prices, no numbers, no logos, no extra characters.`;
-  const models = [env.OPENAI_IMAGE_MODEL, "gpt-image-2", "gpt-image-1.5", "gpt-image-1"].filter((x, i, a) => x && a.indexOf(x) === i);
-  const photos = [];
-  for (const it of ev.items.slice(0, 4)) { try { const r = await fetch(it.img); if (r.ok) photos.push(new Blob([await r.arrayBuffer()], { type: r.headers.get("content-type") || "image/jpeg" })); } catch (e) {} }
-  let last = "";
-  for (const model of models) {
-    try {
-      let r;
-      if (photos.length) {
-        const fd = new FormData(); fd.append("model", model); fd.append("prompt", prompt); fd.append("size", "1024x1024"); fd.append("quality", "medium"); fd.append("output_format", "jpeg"); fd.append("output_compression", "82");
-        photos.forEach((b, i) => fd.append("image[]", b, "p" + i + ".jpg"));
-        r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY }, body: fd });
-      } else {
-        r = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY, "content-type": "application/json" }, body: JSON.stringify({ model, prompt, size: "1024x1024", quality: "medium", output_format: "jpeg", output_compression: 82 }) });
-      }
-      const j = await r.json().catch(() => ({}));
-      if (j.data && j.data[0] && j.data[0].b64_json) return { b64: j.data[0].b64_json, model };
-      last = model + "：" + ((j.error && j.error.message) || "HTTP " + r.status);
-      if (!/model|not found|does not exist|invalid_model/i.test(last)) break; // 不是模型名稱問題就不再換模型
-    } catch (e) { last = model + "：" + String(e).slice(0, 120); }
-  }
-  return { err: last.slice(0, 200) };
+  let j; try { j = JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { j = { headline: ev.title, copy: out.trim(), threads: "" }; }
+  return { headline: String(j.headline || ev.title).slice(0, 14), copy: String(j.copy || "").slice(0, 900), threads: String(j.threads || "").slice(0, 200),  };
 }
 async function promoRun(env) {
   if (await env.SESSIONS.get("promo:lock")) return;
@@ -1583,10 +1562,11 @@ async function promoRun(env) {
   const ev = q.shift(); await env.SESSIONS.put("promo:q", JSON.stringify(q), { expirationTtl: 7 * 86400 });
   try {
     if (!ev.items || !ev.items.length) return;
-    const c = await promoCopy(env, ev), im = await promoImage(env, ev, c);
+    const c = await promoCopy(env, ev), bank = await promoBank();
+    const bk = ev.key.startsWith("man:") ? "series:" + ev.series : ev.key.startsWith("reg:") ? "reg:" + ev.key.slice(4) : ev.key;
+    const im = bank[bk] ? { url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/" + bank[bk] } : bank["series:" + (ev.series || "")] ? { url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/" + bank["series:" + ev.series] } : { err: "這則還沒有做好的圖" };
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-    if (im.b64) await env.SESSIONS.put("promo:img:" + id, im.b64, { expirationTtl: 30 * 86400 });
-    const rec = { id, type: ev.type, title: ev.title, series: ev.series || "", at: twNow().toISOString().slice(0, 16).replace("T", " "), headline: c.headline, copy: c.copy, threads: c.threads, img: im.b64 ? SHOP_BASE + "/promo/" + id + ".jpg" : "", fallbackImg: ev.items[0] && ev.items[0].img, imgErr: im.err || "", model: im.model || "" };
+    const rec = { id, type: ev.type, title: ev.title, series: ev.series || "", at: twNow().toISOString().slice(0, 16).replace("T", " "), headline: c.headline, copy: c.copy, threads: c.threads, img: im.url || "", fallbackImg: ev.items[0] && ev.items[0].img, imgErr: im.err || "" };
     await env.SESSIONS.put("promo:rec:" + id, JSON.stringify(rec), { expirationTtl: 30 * 86400 });
     const list = JSON.parse((await env.SESSIONS.get("promo:list")) || "[]"); list.unshift(id); await env.SESSIONS.put("promo:list", JSON.stringify(list.slice(0, 30)));
     const owner = await env.SESSIONS.get("owner");
@@ -1619,7 +1599,7 @@ async function promoOwnerCmd(env, text) {
     const kw = m[1].trim() || PROMO_SERIES[Math.floor(Math.random() * PROMO_SERIES.length)];
     const live = (await loadCatalog(env)).filter((x) => !isExpired(x));
     const ok = await promoQueueSeries(env, kw, "man:" + kw + ":" + Date.now(), live);
-    return ok ? `好👌 「${kw}」宣傳排進去了，大約 5 分鐘後${env.OPENAI_API_KEY ? "" : "（還沒設定 OpenAI 金鑰，這次只會有文案＋商品照）"}傳「宣傳素材」查看（有推播額度會直接傳給你）` : `目錄裡找不到「${kw}」的商品，換個關鍵字試試，例如：做宣傳 吉伊卡哇`;
+    return ok ? `好👌 「${kw}」宣傳排進去了，大約 5 分鐘後傳「宣傳素材」查看（有推播額度會直接傳給你）` : `目錄裡找不到「${kw}」的商品，換個關鍵字試試，例如：做宣傳 吉伊卡哇`;
   }
   return undefined;
 }
@@ -1786,7 +1766,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 4) { try { await runCartReminders(env, { lineApi }); } catch (e) { console.log("cartRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
-      try { if (env.OPENAI_API_KEY) await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); } // 設好 OpenAI 金鑰才自動排；手動「做宣傳」隨時可用
+      try { await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); }
       const man = await env.SESSIONS.get("thr:manual");
       if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
       for (const [slot, at] of [["am", 9 * 60], ["pm", 20 * 60]]) {
