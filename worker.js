@@ -897,6 +897,7 @@ async function handleEvent(env, ev) {
     await setHandoff(env, uid); return;
   }
   // 真人處理中：機器人不插話，並把 15 分鐘重新計時
+  if (uid && /^#?(團購主)?資源包$/.test(text.trim())) return reply(env, ev.replyToken, await resourcePack(env, uid));
   if (uid && (await inHandoff(env, uid))) { await setHandoff(env, uid); return; }
   // 有待付款訂單的客人傳圖片 → 先看是不是付款截圖，是的話自動對帳
   if (uid && env.SESSIONS && msg.type === "image") {
@@ -1488,6 +1489,32 @@ async function threadsTest(env, q) {
   if (await env.SESSIONS.get("thr:manual")) out.push("⏳ 有一次海巡排隊中（每 5 分鐘處理一次）");
   const le = await env.SESSIONS.get("lasterr"); if (le) out.push("📮 LINE 最近錯誤：" + le.slice(0, 120));
   return out.join("\n");
+}
+// ── 團購主資源包：一般會員／VIP 專屬，每個系列一張宣傳圖＋開團文案＋直接到商城下單 ──
+async function resourcePack(env, uid) {
+  const info = await memberInfo(env, uid);
+  if (info.tier === "none") return [{ type: "text", text: "團購主資源包是一般會員和 VIP 會員專屬的🙏\n裡面有每週更新的系列宣傳圖、開團文案，點一下就能到商城下單\n\n加入會員就能馬上領👇" }, ...(await membershipCards(env, uid))];
+  const bank = await promoBank(), link = await shopLink(env, uid);
+  const keys = Object.keys(bank).filter((k) => k.startsWith("series:")).slice(0, 10);
+  if (!keys.length) return [{ type: "text", text: "這週的資源包還在準備中，明天早上再來看看喔🙏" }];
+  const RAW = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/";
+  const bubbles = keys.map((k) => {
+    const kw = k.slice(7), e = bank[k], img = RAW + (typeof e === "string" ? e : e.img), its = (e.items || []).slice(0, 4);
+    const nameOf = (n) => n.replace(new RegExp("^" + kw + "\\s*"), "").slice(0, 18);
+    const copy = `${kw} 開團囉✨\n${its.map((x) => "・" + nameOf(x.n)).join("\n")}\n\n數量有限，想要的私訊我～\n（價格請填你自己的售價）`;
+    return { type: "bubble", size: "kilo",
+      hero: { type: "image", url: img, size: "full", aspectRatio: "1:1", aspectMode: "cover", action: { type: "uri", label: "看大圖", uri: img } },
+      body: { type: "box", layout: "vertical", spacing: "xs", contents: [
+        { type: "text", text: kw, weight: "bold", size: "md" },
+        ...its.map((x) => ({ type: "text", text: `・${nameOf(x.n)}　NT$${info.tier === "vip" ? Math.max(0, x.g - 30) : x.g}`, size: "xxs", color: "#555555", wrap: true })),
+        { type: "text", text: info.tier === "vip" ? "（已是 VIP 價）" : "（一般會員價）", size: "xxs", color: "#A0968A" },
+      ] },
+      footer: { type: "box", layout: "vertical", spacing: "xs", contents: [
+        { type: "button", style: "primary", color: "#2A2826", height: "sm", action: { type: "uri", label: "🛒 這系列到商城下單", uri: link + "&q=" + encodeURIComponent(kw) } },
+        { type: "button", style: "secondary", height: "sm", action: { type: "clipboard", label: "📋 複製開團文案", clipboardText: copy.slice(0, 1000) } },
+      ] } };
+  });
+  return [{ type: "text", text: `📦 團購主資源包（${info.tier === "vip" ? "VIP" : "一般會員"}專屬，每週更新）\n・每個系列一張宣傳圖，點圖片可以看大圖、存圖\n・「複製開團文案」是給你開團用的，沒有寫價格，記得填上你自己的售價\n・「到商城下單」會直接打開你的專屬商城，價格自動套用會員價` }, { type: "flex", altText: "團購主資源包", contents: { type: "carousel", contents: bubbles } }];
 }
 // ── 自動宣傳：新品／結單倒數 3 天・1 天・1 小時／定期宣傳 → Claude 寫文案、ChatGPT 做圖 → 推播或「宣傳素材」查看 ──
 const PROMO_SERIES = ["三麗鷗", "吉伊卡哇", "史努比", "寶可夢", "盒玩", "角落生物", "mofusand", "拉拉熊", "哆啦A夢", "動漫"];
