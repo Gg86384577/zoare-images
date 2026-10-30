@@ -1,6 +1,16 @@
 // ZOARÉ 線上訂購網站：客人在 LINE 裡點個人連結 → 瀏覽商品、加入購物車、送出訂單
 // 價格一律由伺服器依目錄與會員等級重新計算，客人改網頁也改不了價格。
 
+export const COMMUNITY_URL = "https://line.me/ti/g2/QObEHrBRTIFBep2NM-XNcM5bgyzH_uFH0afUgg?utm_source=invitation&utm_medium=QR_code&utm_campaign=default";
+export const COMMUNITY_QR = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/community_qr.jpg";
+export function communityCard() {
+  return { type: "flex", altText: "加入 ZOARÉ LINE 社群", contents: { type: "bubble", size: "kilo",
+    hero: { type: "image", url: COMMUNITY_QR, size: "full", aspectRatio: "1:1", aspectMode: "fit", backgroundColor: "#FFFFFF", action: { type: "uri", label: "加入社群", uri: COMMUNITY_URL } },
+    body: { type: "box", layout: "vertical", spacing: "sm", contents: [
+      { type: "text", text: "📣 加入 ZOARÉ LINE 社群", weight: "bold", size: "md" },
+      { type: "text", text: "新品、開團、結單倒數第一時間看到，還有社群限定消息", wrap: true, size: "sm", color: "#6E655B" } ] },
+    footer: { type: "box", layout: "vertical", contents: [{ type: "button", style: "primary", color: "#2A2826", height: "sm", action: { type: "uri", label: "掃碼或點這裡加入", uri: COMMUNITY_URL } }] } } };
+}
 export const SHOP_BASE = "https://shiny-mud-319f.ojason90816-a70.workers.dev";
 const TIER_NAME = { vip: "VIP 會員", member: "一般會員", none: "非會員" };
 
@@ -1988,7 +1998,11 @@ ${link}
   const cards = await membershipCards(env, uid);
   cards[0].quickReply = { items: qrs.map(([l, t]) => ({ type: "action", action: { type: "message", label: l, text: t } })) };
   const video = introVideoMsg();
-  return [{ type: "text", text }, video, { type: "text", text: text2 }, ...cards];
+  const base = [{ type: "text", text }, video, { type: "text", text: text2 }];
+  // 社群二維碼：放在會員卡片前面（快速回覆按鈕要留在最後一則）；超過 5 則就改成文字連結
+  if (base.length + 1 + cards.length <= 5) return [...base, communityCard(), ...cards];
+  base[2] = { type: "text", text: text2 + `\n\n📣 加入 ZOARÉ LINE 社群，新品、開團第一時間看到👇\n${COMMUNITY_URL}` };
+  return [...base, ...cards];
 }
 
 // 下單會員方案但 3 天內沒付款 → 恢復原本等級並通知老闆（每次排程檢查）

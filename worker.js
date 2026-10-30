@@ -10,13 +10,13 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { SHOP_BASE, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const BUILD_TAG = "promo-2";
+const BUILD_TAG = "promo-3";
 const CATALOG_VERSION = "20261030-0938";
 const CATALOG_SHA = "6ec5098637bd0c3e4478ae00354458074d517ef3"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
@@ -735,7 +735,7 @@ async function handleEvent(env, ev) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
       return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
     }
-    if (/^#?(宣傳素材|宣傳|文案素材|做宣傳)/.test(text.trim())) {
+    if (/^#?(宣傳素材|宣傳|文案素材|做宣傳|宣傳發送)/.test(text.trim())) {
       let pr; try { pr = await promoOwnerCmd(env, text); } catch (e) { pr = "⚠️ 指令出錯：" + String(e).slice(0, 200); }
       if (pr !== undefined) return pr && pr.msgs ? reply(env, ev.replyToken, pr.msgs) : reply(env, ev.replyToken, [{ type: "text", text: pr }]);
     }
@@ -1016,6 +1016,11 @@ async function handleEvent(env, ev) {
     if (!cardMsg) lineMsgs.push({ type: "text", text: replyText.slice(0, 4900) });
     if (!cardMsg && out.video && lineMsgs.length < 5) lineMsgs.push(introVideoMsg());
     if (!cardMsg && uid && /\{會員連結\}/.test(out.reply || "")) lineMsgs.push(...(await membershipCards(env, uid)));
+    // 引流到 LINE 社群：每位客人 14 天最多提一次，不影響原本的回覆
+    if (uid && !isOwnerUser && lineMsgs.length < 5 && env.SESSIONS && !(await env.SESSIONS.get("ci:" + uid))) {
+      lineMsgs.push({ type: "text", text: `📣 加入 ZOARÉ LINE 社群，新品、開團、結單提醒第一時間看到👇\n${COMMUNITY_URL}` });
+      await env.SESSIONS.put("ci:" + uid, "1", { expirationTtl: 14 * 86400 });
+    }
     await reply(env, ev.replyToken, lineMsgs, uid);
     if (uid && !isOwnerUser && shown.length) await noteContact(env, uid, { items: shown.map(itemRef), topic: text.slice(0, 20) });
     // 這則有報價（有附商品或出現價格）且客人不是說已經下單 → 30 分鐘後追蹤
@@ -1534,7 +1539,7 @@ async function promoBank() {
   try { const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/promo/bank.json?t=" + Math.floor(Date.now() / 600e3), { cf: { cacheTtl: 300 } }); return r.ok ? await r.json() : {}; } catch (e) { return {}; }
 }
 async function promoQueueSeries(env, kw, key, live) {
-  const hay = (x) => (x.n + " " + (x.s || "") + (["盒玩", "動漫"].includes(kw) ? " " + (x.b || "") : "")).toLowerCase();
+  const hay = (x) => (x.n + " " + (x.s || "") + (!["吉伊卡哇", "mofusand"].includes(kw) ? " " + (x.b || "") : "")).toLowerCase();
   const L = live.filter((x) => hay(x).includes(kw.toLowerCase()) || (kw === "盒玩" && /食玩|扭蛋/.test(x.b || "")));
   if (!L.length) return false;
   const pool = L.slice().sort((a, b) => String(b.ad || "").localeCompare(String(a.ad || ""))).slice(0, 60);
@@ -1542,17 +1547,24 @@ async function promoQueueSeries(env, kw, key, live) {
   return promoQueue(env, { key, type: "reg", title: kw + " 精選", series: kw, count: L.length, items: promoPick(pool) });
 }
 async function promoCopy(env, ev) {
-  const minP = Math.min(...ev.items.map((x) => x.g));
-  const tone = { new: "新品剛上架，讓人想第一時間收", "3d": "提醒結單倒數 3 天，語氣輕鬆", "1d": "明天就結單，製造一點急迫感", "1h": "最後 1 小時，簡短直接、很急", reg: "日常推薦這個系列，讓人想逛" }[ev.type];
-  const sys = `你是台灣日本角色商品批發商 ZOARÉ 的社群小編。客人是小賣家、團購主。
-寫一則宣傳貼文，回傳 JSON（不要其他文字）：
-{"headline":"放在圖上的中文標題，6～10 字","copy":"FB／IG 貼文：3～6 行，口語、自然、不要有 AI 感，第一行要抓眼球，列出 2～4 款商品名（可簡化），寫「批發價 NT$${minP} 起」，最後一行寫「LINE 搜尋 ZOARÉ」下單，再空一行放 3～5 個 #hashtag","threads":"Threads 版：1～2 句、60 字內、像真人隨手發"}
-規則：繁體中文；表情符號最多 3 個；不提廠商名、品牌代理、進價、折數、人民幣；不要寫保證、最便宜這類誇大字眼；價格只能用我給的數字。
+  const tone = { new: "新品剛上架，讓人想第一時間收", "3d": "提醒結單倒數 3 天，語氣輕鬆", "1d": "明天就結單，製造一點急迫感", "1h": "最後 1 小時，簡短直接、很急", reg: "日常推薦這個系列，讓人想逛" }[ev.type] || "推薦這個系列";
+  const sys = `你是台灣日本角色商品批發商 ZOARÉ 的社群小編，客人是小賣家、團購主。照下面格式寫一則宣傳貼文，只輸出這三段，不要 JSON、不要程式碼：
+【標題】6～10 字
+【FB】
+第一行抓眼球的一句話
+接著每款商品一行：「・品名（可簡化）NT$價格」，我給幾款就列幾款，價格照抄
+一句自然的推薦或提醒
+「LINE 搜尋 ZOARÉ」下單
+空一行後放 3～5 個 #hashtag
+【THREADS】1～2 句、80 字內，像真人隨手發，可以提 1～2 款和價格
+規則：繁體中文；口語自然不要有 AI 感；表情符號最多 3 個；不提廠商名、品牌代理、進價、折數、人民幣；不要寫保證、最便宜；價格只能用我給的數字。
 這則的重點：${tone}${ev.dl ? `；結單時間 ${ev.dl}` : ""}。`;
-  const user = `類型：${ev.title}${ev.series ? "（" + ev.series + "）" : ""}${ev.count ? `，共 ${ev.count} 款` : ""}\n商品：\n${ev.items.map((x) => `・${x.n}　NT$${x.g}`).join("\n")}`;
-  const out = await claude(env, sys, [{ role: "user", content: user }], 900);
-  let j; try { j = JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { j = { headline: ev.title, copy: out.trim(), threads: "" }; }
-  return { headline: String(j.headline || ev.title).slice(0, 14), copy: String(j.copy || "").slice(0, 900), threads: String(j.threads || "").slice(0, 200),  };
+  const user = `類型：${ev.title}${ev.series ? "（" + ev.series + "）" : ""}${ev.count ? `，這個系列共 ${ev.count} 款` : ""}\n商品：\n${ev.items.map((x) => `・${x.n}　NT$${x.g}`).join("\n")}`;
+  const out = (await claude(env, sys, [{ role: "user", content: user }], 900)).replace(/\\n/g, "\n");
+  const sec = (name) => { const m = out.match(new RegExp("【" + name + "】\\s*([\\s\\S]*?)(?=\\n?【(?:標題|FB|THREADS)】|$)")); return m ? m[1].trim() : ""; };
+  let copy = sec("FB"), threads = sec("THREADS"), headline = sec("標題");
+  if (!copy) copy = out.replace(/【[^】]+】/g, "").trim();
+  return { headline: (headline || ev.title).split("\n")[0].slice(0, 14), copy: copy.slice(0, 1500), threads: threads.slice(0, 450) };
 }
 async function promoRun(env) {
   if (await env.SESSIONS.get("promo:lock")) return;
@@ -1562,9 +1574,13 @@ async function promoRun(env) {
   const ev = q.shift(); await env.SESSIONS.put("promo:q", JSON.stringify(q), { expirationTtl: 7 * 86400 });
   try {
     if (!ev.items || !ev.items.length) return;
-    const c = await promoCopy(env, ev), bank = await promoBank();
+    const bank = await promoBank();
     const bk = ev.key.startsWith("man:") ? "series:" + ev.series : ev.key.startsWith("reg:") ? "reg:" + ev.key.slice(4) : ev.key;
-    const im = bank[bk] ? { url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/" + bank[bk] } : bank["series:" + (ev.series || "")] ? { url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/" + bank["series:" + ev.series] } : { err: "這則還沒有做好的圖" };
+    const be = bank[bk] || bank["series:" + (ev.series || "")];
+    const bimg = be ? (typeof be === "string" ? be : be.img) : "";
+    if (be && be.items && be.items.length) ev.items = be.items; // 文案用圖上的同一批商品和價格
+    const c = await promoCopy(env, ev);
+    const im = bimg ? { url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/" + bimg } : { err: "這則還沒有做好的圖" };
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     const rec = { id, type: ev.type, title: ev.title, series: ev.series || "", at: twNow().toISOString().slice(0, 16).replace("T", " "), headline: c.headline, copy: c.copy, threads: c.threads, img: im.url || "", fallbackImg: ev.items[0] && ev.items[0].img, imgErr: im.err || "" };
     await env.SESSIONS.put("promo:rec:" + id, JSON.stringify(rec), { expirationTtl: 30 * 86400 });
@@ -1578,10 +1594,41 @@ async function promoRun(env) {
   finally { await env.SESSIONS.delete("promo:lock"); }
 }
 function promoMsgs(rec) {
-  const img = rec.img || rec.fallbackImg, out = [];
-  if (img) out.push({ type: "image", originalContentUrl: img, previewImageUrl: img });
-  out.push({ type: "text", text: `📣 ${rec.title}${rec.series ? "・" + rec.series : ""}（${rec.at}）\n——FB／IG 文案——\n${rec.copy}${rec.threads ? "\n\n——Threads——\n" + rec.threads : ""}${rec.imgErr ? "\n\n⚠️ 圖片沒做成（" + rec.imgErr + "），先附商品照" : ""}`.slice(0, 4900) });
-  return out;
+  const img = rec.img || rec.fallbackImg;
+  const full = `${rec.copy}`;
+  const bubble = { type: "bubble", size: "giga",
+    ...(img ? { hero: { type: "image", url: img, size: "full", aspectRatio: "1:1", aspectMode: "cover", action: { type: "uri", label: "看大圖", uri: img } } } : {}),
+    body: { type: "box", layout: "vertical", spacing: "sm", contents: [
+      { type: "text", text: `📣 ${rec.title}・${rec.at.slice(5)}`, size: "xs", color: "#8A8177" },
+      { type: "text", text: full.slice(0, 1800) || "（文案產生失敗）", wrap: true, size: "sm" },
+      ...(rec.threads ? [{ type: "separator", margin: "md" }, { type: "text", text: "Threads 版：" + rec.threads, wrap: true, size: "xs", color: "#6E655B", margin: "md" }] : []),
+      ...(rec.posted ? [{ type: "text", text: "✅ 已發到 " + rec.posted.join("、"), size: "xs", color: "#3E7A55", margin: "md" }] : []),
+      ...(rec.imgErr ? [{ type: "text", text: "（這則先附商品照，宣傳圖會在每天早上維護時補做）", size: "xxs", color: "#A0968A", wrap: true }] : []),
+    ] },
+    footer: { type: "box", layout: "vertical", spacing: "sm", contents: [
+      { type: "button", style: "primary", color: "#2A2826", height: "sm", action: { type: "message", label: "📤 確認沒問題，發到 Threads", text: "宣傳發送 " + rec.id } },
+      { type: "box", layout: "horizontal", spacing: "sm", contents: [
+        { type: "button", style: "secondary", height: "sm", action: { type: "clipboard", label: "📋 複製 FB/IG 文案", clipboardText: full.slice(0, 1000) } },
+        ...(img ? [{ type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "🖼 存圖", uri: img } }] : []),
+      ] },
+    ] } };
+  return [{ type: "flex", altText: `📣 ${rec.title} 宣傳素材`, contents: bubble }];
+}
+async function promoPublish(env, id) {
+  const rec = await env.SESSIONS.get("promo:rec:" + id, "json");
+  if (!rec) return "找不到這則宣傳（可能超過 30 天了）";
+  if ((rec.posted || []).includes("Threads")) return "這則已經發過 Threads 了👌";
+  const text = (rec.threads || rec.copy || "").slice(0, 480) + (/ZOARÉ/.test(rec.threads || "") ? "" : "\nLINE 搜尋 ZOARÉ");
+  const img = rec.img || rec.fallbackImg;
+  const a = await thrPost(env, "me/threads", img ? { media_type: "IMAGE", image_url: img, text } : { media_type: "TEXT", text });
+  if (!a.id) return "❌ 發到 Threads 失敗：" + ((a.error && a.error.message) || "未知錯誤") + (a.error && /token|auth/i.test(a.error.message || "") ? "\n（Threads 授權可能過期，請重新打開 /threads/login）" : "");
+  await new Promise((r) => setTimeout(r, 4000)); // 圖片要先處理好才能發佈
+  let b = await thrPost(env, "me/threads_publish", { creation_id: a.id });
+  if (!b.id) { await new Promise((r) => setTimeout(r, 6000)); b = await thrPost(env, "me/threads_publish", { creation_id: a.id }); }
+  if (!b.id) return "❌ Threads 發佈失敗：" + ((b.error && b.error.message) || "未知錯誤");
+  rec.posted = [...(rec.posted || []), "Threads"]; rec.threadsId = b.id;
+  await env.SESSIONS.put("promo:rec:" + id, JSON.stringify(rec), { expirationTtl: 30 * 86400 });
+  return "✅ 已發到 Threads（@zoare_2504）\nFB／IG 請按「複製 FB/IG 文案」＋「存圖」後自己貼";
 }
 async function promoOwnerCmd(env, text) {
   const t = text.replace(/[​-‍﻿]/g, "").trim();
@@ -1591,9 +1638,11 @@ async function promoOwnerCmd(env, text) {
     if (!list.length) return { msgs: [{ type: "text", text: "還沒有宣傳素材。新品上架、結單倒數、每週二／五中午會自動產生；也可以傳「做宣傳 三麗鷗」馬上做一則" + (q.length ? `\n\n⏳ 排隊中 ${q.length} 則，約 5 分鐘一則` : "") }] };
     const recs = (await Promise.all(list.slice(0, 2).map((id) => env.SESSIONS.get("promo:rec:" + id, "json")))).filter(Boolean);
     const msgs = recs.flatMap(promoMsgs).slice(0, 4);
-    msgs.push({ type: "text", text: `以上是最新 ${recs.length} 則${list.length > 2 ? `（共 ${list.length} 則，30 天內都保留）` : ""}${q.length ? `\n⏳ 還有 ${q.length} 則排隊製作中` : ""}\n長按圖片可以存到相簿，文案直接複製貼上` });
+    msgs.push({ type: "text", text: `以上是最新 ${recs.length} 則${list.length > 2 ? `（共 ${list.length} 則，30 天內都保留）` : ""}${q.length ? `\n⏳ 還有 ${q.length} 則排隊製作中` : ""}\n看過沒問題按「發到 Threads」；FB／IG 用「複製文案」＋「存圖」自己貼` });
     return { msgs: msgs.slice(0, 5) };
   }
+  const pm = t.match(/^#?宣傳發送\s*([a-z0-9]{6,20})$/);
+  if (pm) return await promoPublish(env, pm[1]);
   const m = t.match(/^#?做宣傳\s*(.*)$/);
   if (m) {
     const kw = m[1].trim() || PROMO_SERIES[Math.floor(Math.random() * PROMO_SERIES.length)];

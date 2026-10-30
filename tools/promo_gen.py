@@ -57,7 +57,7 @@ def pick(L, n=6):  # 跟 worker.js 的 promoPick 同一套挑法（照目錄順�
         if len(out) >= n: break
     return out
 def series_items(kw):
-    hay = lambda x: (x['n'] + ' ' + (x.get('s') or '') + ((' ' + x.get('b', '')) if kw in ('盒玩', '動漫') else '')).lower()
+    hay = lambda x: (x['n'] + ' ' + (x.get('s') or '') + ((' ' + x.get('b', '')) if kw not in ('吉伊卡哇', 'mofusand') else '')).lower()
     L = [x for x in LIVE if kw.lower() in hay(x) or (kw == '盒玩' and re.search('食玩|扭蛋', x.get('b', '')))]
     L.sort(key=lambda x: x.get('ad', ''), reverse=True)
     return L
@@ -112,7 +112,7 @@ def prep(items):
     out = []
     for x in items:
         p = local(x)
-        if p: out.append({**cutout(p), 'n': x['n'], 'g': x['g']})
+        if p: out.append({**cutout(p), 'n': x['n'], 'g': x['g'], 'k': x.get('k', '')})
     return out
 
 # ---------- 版型 ----------
@@ -128,6 +128,16 @@ ROT = [-8, 6, -3, 9, -6, 4]
 STAR = '<svg viewBox="0 0 20 20" class="st" style="{s}"><path d="M10 0C10.8 6.5 13.5 9.2 20 10C13.5 10.8 10.8 13.5 10 20C9.2 13.5 6.5 10.8 0 10C6.5 9.2 9.2 6.5 10 0Z" fill="{c}"/></svg>'
 def stars(c, spots):
     return ''.join(STAR.format(s=f'left:{x}px;top:{y}px;width:{w}px;height:{w}px', c=c) for x, y, w in spots)
+def short(n):
+    """標籤上的品名：第一行商品類型、第二行款式（角色）"""
+    n = re.sub(r'^(三麗鷗|吉伊卡哇|史努比|寶可夢|角落生物|拉拉熊|哆啦A夢|mofusand|Hello Kitty|SANRIO|サンリオ)\s*', '', n, flags=re.I)
+    m = re.search(r'[（(]([^）)]+)[）)]\s*$', n)
+    if m: base, var = n[:m.start()].strip(), m.group(1)
+    else:
+        parts = n.split()
+        base, var = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 and len(parts[-1]) <= 10 else (n, '')
+    cut = lambda t, k: (t[:k] + '…') if len(t) > k else t
+    return cut(base, 10), cut(var, 9)
 def prod_html(P, boxes, ac):
     h = ''
     for i, (p, (x, y, w)) in enumerate(zip(P, boxes)):
@@ -136,12 +146,16 @@ def prod_html(P, boxes, ac):
             h += f'<img class="cut" src="file://{p["path"]}" style="left:{x}px;top:{y}px;width:{w}px;height:{w}px;transform:rotate({r}deg)">'
         else:
             h += f'<div class="pol" style="left:{x}px;top:{y}px;width:{w}px;transform:rotate({r}deg)"><div class="pi" style="background-image:url(\'file://{p["path"]}\')"></div><i class="tape" style="background:{ac}66"></i></div>'
+        tx = min(max(x + w * 0.42, 12), 1080 - 200); ty = min(y + w * (0.80 if p['cut'] else 0.98), 1080 - 96 - 122)
+        h += f'<div class="tag" style="left:{tx:.0f}px;top:{ty:.0f}px;transform:rotate({-r / 2:.0f}deg)"><span>{short(p["n"])[0]}</span>{('<em>' + short(p["n"])[1] + '</em>') if short(p["n"])[1] else ''}<b>NT${p["g"]}</b></div>'
     return h
 BASE = '''*{margin:0;padding:0;box-sizing:border-box}body{width:1080px;height:1080px;overflow:hidden;position:relative;font-family:tc,round,sans-serif}
 .st{position:absolute;z-index:8}.cut{position:absolute;object-fit:contain;filter:drop-shadow(0 18px 18px rgba(60,40,30,.22));z-index:4}
 .pol{position:absolute;background:#fff;padding:14px 14px 46px;box-shadow:0 18px 30px rgba(60,40,30,.22);z-index:4}.pi{width:100%;aspect-ratio:1;background-size:cover;background-position:50% 30%}
 .tape{position:absolute;left:50%;top:-16px;width:110px;height:34px;margin-left:-55px;transform:rotate(-4deg)}
-.wm{position:absolute;font-family:serif,ital;letter-spacing:6px;z-index:9}'''
+.wm{position:absolute;font-family:serif,ital;letter-spacing:6px;z-index:9}
+.tag{position:absolute;z-index:7;background:#fff;border-radius:14px;padding:6px 14px 7px;box-shadow:0 6px 14px rgba(40,30,20,.18);display:flex;flex-direction:column;align-items:flex-start;max-width:260px}
+.tag span{font-family:tc,sans-serif;font-size:18px;color:#7a7168;line-height:1.25;white-space:nowrap}.tag em{font-style:normal;font-family:tc,sans-serif;font-size:21px;font-weight:700;color:#2A2826;line-height:1.25;white-space:nowrap}.tag b{font-family:serif,tc;font-size:30px;color:#2A2826;line-height:1.1}'''
 
 def render(html, out):
     hp = WORK + '/p.html'; open(hp, 'w').write(html)
@@ -152,7 +166,7 @@ def render(html, out):
 def tpl_series(kw, P, price, count):
     bg, dk, ac, lt = PAL.get(kw, DEF)
     en = {'三麗鷗': 'SANRIO', '吉伊卡哇': 'CHIIKAWA', '史努比': 'SNOOPY', '寶可夢': 'POKÉMON', '盒玩': 'MINIATURE', '角落生物': 'SUMIKKO', 'mofusand': 'MOFUSAND', '拉拉熊': 'RILAKKUMA', '哆啦A夢': 'DORAEMON', '動漫': 'ANIME'}.get(kw, 'ZOARÉ')
-    boxes = [(320, 330, 430), (60, 430, 290), (720, 410, 300), (140, 700, 230), (700, 700, 240), (440, 760, 190)]
+    boxes = [(320, 300, 420), (50, 400, 280), (730, 390, 290), (110, 650, 210), (730, 650, 210), (450, 690, 180)]
     return f'''<html><head><meta charset="utf-8"><style>{ff()}{BASE}
 body{{background:radial-gradient(circle at 70% 30%,{lt} 0,{bg} 55%,{bg} 100%)}}
 .blob{{position:absolute;border-radius:50%;filter:blur(2px)}}
@@ -226,12 +240,13 @@ body{{background:radial-gradient(circle at 75% 20%,#3A3631 0,{dk} 60%)}}
 # ---------- 產生 ----------
 BANK_P = os.path.join(OUT, 'bank.json')
 BANK = json.load(open(BANK_P)) if os.path.exists(BANK_P) else {}
-def save(key, html):
+IMGOF = lambda v: v['img'] if isinstance(v, dict) else v
+def save(key, html, P=None):
     name = 'p_' + hashlib.md5((key + NOW.strftime('%Y%m%d')).encode()).hexdigest()[:10] + '.jpg'
     render(html, os.path.join(OUT, name))
-    old = BANK.get(key)
-    BANK[key] = 'promo/' + name
-    if old and old != BANK[key] and old not in BANK.values() and os.path.exists(os.path.join(REPO, old)): os.remove(os.path.join(REPO, old))
+    old = IMGOF(BANK[key]) if key in BANK else None
+    BANK[key] = {'img': 'promo/' + name, 'items': [{'n': p['n'], 'g': p['g'], 'k': p.get('k', '')} for p in (P or [])]}
+    if old and old != BANK[key]['img'] and old not in [IMGOF(v) for v in BANK.values()] and os.path.exists(os.path.join(REPO, old)): os.remove(os.path.join(REPO, old))
     print('made', key, '->', name)
 
 def make_series(kw, key=None):
@@ -239,7 +254,7 @@ def make_series(kw, key=None):
     if not L: print('no items', kw); return
     P = choose(L[:400], 6, NOW.strftime('%Y%m%d') + kw)
     if not P: return
-    save(key or 'series:' + kw, tpl_series(kw, P, min(x['g'] for x in L), len(L)))
+    save(key or 'series:' + kw, tpl_series(kw, P, min(x['g'] for x in L), len(L)), P)
 
 def rot_series(d):
     wk = (datetime.date(d.year, d.month, d.day) - datetime.date(2026, 1, 5)).days // 7
@@ -255,7 +270,7 @@ def daily():
         if x.get('ad') == today: fresh.setdefault(x.get('b') or '新品', []).append(x)
     for b, L in sorted(fresh.items(), key=lambda kv: -len(kv[1]))[:3]:
         P = choose(L, 6)
-        if P: save(f'new:{today}:{b}', tpl_new(re.sub(r'^(309|Kamio|CRUX|Nakajima|T\'s Factory|J\'s Planning|A Planning|OST|森本|Marimo Craft|RE-MENT|萬代南夢宮|萬代|Bushiroad|F-toys|GPS|Ensky|Sun Arrow)\s*', '', b) or '新品', P, min(x['g'] for x in L), len(L), today))
+        if P: save(f'new:{today}:{b}', P=P, html=tpl_new(re.sub(r'^(309|Kamio|CRUX|Nakajima|T\'s Factory|J\'s Planning|A Planning|OST|森本|Marimo Craft|RE-MENT|萬代南夢宮|萬代|Bushiroad|F-toys|GPS|Ensky|Sun Arrow)\s*', '', b) or '新品', P, min(x['g'] for x in L), len(L), today))
     # 3) 結單倒數：4 天內結單的每一組，3 天／1 天／1 小時三張都先做好
     groups = {}
     for x in LIVE:
@@ -266,7 +281,7 @@ def daily():
         if not P: continue
         for st in ('3d', '1d', '1h'):
             k = f'dl:{g}:{st}'
-            if k not in BANK: save(k, tpl_count(st, P, min(x['g'] for x in L), L[0]['dl']))
+            if k not in BANK: save(k, tpl_count(st, P, min(x['g'] for x in L), L[0]['dl']), P)
     # 4) 系列圖庫：每天輪流更新 2 個，給「做宣傳 系列」用
     i = NOW.toordinal() * 2
     for kw in (SERIES[i % len(SERIES)], SERIES[(i + 1) % len(SERIES)]): make_series(kw)
@@ -278,15 +293,15 @@ def daily():
         m = re.match(r'^(?:new|reg):(\d{4}-\d{2}-\d{2})', k)
         dm = re.match(r'^dl:.*\|(\d{4}-\d{1,2}-\d{1,2})', k)
         if (m and m.group(1) < cut) or (dm and dm.group(1) < NOW.strftime('%Y-%m-%d')):
-            p = os.path.join(REPO, BANK.pop(k))
-            if p not in [os.path.join(REPO, v) for v in BANK.values()] and os.path.exists(p): os.remove(p)
+            p = os.path.join(REPO, IMGOF(BANK.pop(k)))
+            if p not in [os.path.join(REPO, IMGOF(v)) for v in BANK.values()] and os.path.exists(p): os.remove(p)
 
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'daily'
     if cmd == 'series': make_series(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     elif cmd == 'count':  # 測試用：python3 tools/promo_gen.py count 1d 吉伊卡哇
-        L = series_items(sys.argv[3]); P = choose(L[:400], 4, 'x'); save('test:' + sys.argv[2], tpl_count(sys.argv[2], P, min(x['g'] for x in L), '2026-11-05 23:59'))
+        L = series_items(sys.argv[3]); P = choose(L[:400], 4, 'x'); save('test:' + sys.argv[2], P=P, html=tpl_count(sys.argv[2], P, min(x['g'] for x in L), '2026-11-05 23:59'))
     elif cmd == 'new':
-        L = series_items(sys.argv[2]); P = choose(L[:400], 6, 'y'); save('test:new', tpl_new(sys.argv[2], P, min(x['g'] for x in L), len(L), NOW.strftime('%Y-%m-%d')))
+        L = series_items(sys.argv[2]); P = choose(L[:400], 6, 'y'); save('test:new', P=P, html=tpl_new(sys.argv[2], P, min(x['g'] for x in L), len(L), NOW.strftime('%Y-%m-%d')))
     else: daily()
     json.dump(BANK, open(BANK_P, 'w'), ensure_ascii=False, indent=0)
