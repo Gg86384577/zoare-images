@@ -737,7 +737,7 @@ async function handleEvent(env, ev) {
       const lr = await threadsFromLink(env, text);
       if (lr) return lr.msgs ? reply(env, ev.replyToken, lr.msgs) : reply(env, ev.replyToken, [{ type: "text", text: lr }]);
     }
-    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果)/.test(text.trim())) {
+    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果|找客人|一鍵搜尋)/.test(text.trim())) {
       const hr = await threadsOwnerCmd(env, text);
       if (hr !== undefined) return hr && hr.msgs ? reply(env, ev.replyToken, hr.msgs) : hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
     }
@@ -1568,6 +1568,18 @@ async function threadsFromLink(env, text) {
   return { msgs: [{ type: "text", text: "幫你擬好留言了👇 確認沒問題就按「發送」\n想改內容：傳「海巡改 " + sid + " 新的留言」" + (postText ? "" : "\n（讀不到原文，是用通用留言；想更貼切可以把原文一起貼給我）") },
     { type: "flex", altText: "Threads 留言草稿", contents: thrCard({ id, username: m[1], permalink: "https://www.threads.com/@" + m[1] + "/post/" + m[2], text: postText || "（原文請點「看原文」）", draft, sid }) }] };
 }
+function huntCard(kws) {
+  const enc = encodeURIComponent, K = kws.slice(0, 8);
+  const btn = (label, uri) => ({ type: "button", style: "secondary", height: "sm", action: { type: "uri", label: label.slice(0, 20), uri } });
+  const bubble = (title, color, items) => ({ type: "bubble", size: "kilo",
+    header: { type: "box", layout: "vertical", backgroundColor: color, paddingAll: "12px", contents: [{ type: "text", text: title, color: "#FFFFFF", weight: "bold", size: "md" }, { type: "text", text: "點一下直接看最新貼文", color: "#FFFFFFCC", size: "xs" }] },
+    body: { type: "box", layout: "vertical", spacing: "sm", contents: items } });
+  return { type: "flex", altText: "找客人：一鍵搜尋", contents: { type: "carousel", contents: [
+    bubble("🧵 Threads", "#2A2826", K.map((k) => btn("🔍 " + k, "https://www.threads.com/search?q=" + enc(k) + "&filter=recent"))),
+    bubble("📘 Facebook", "#3B5A9A", K.map((k) => btn("🔍 " + k, "https://www.facebook.com/search/posts/?q=" + enc(k) + "&filters=eyJyZWNlbnRfcG9zdHM6MCI6IntcIm5hbWVcIjpcInJlY2VudF9wb3N0c1wiLFwiYXJnc1wiOlwiXCJ9In0%3D"))),
+    bubble("📷 Instagram", "#B08D57", K.slice(0, 6).map((k) => btn("# " + k.replace(/\s+/g, ""), "https://www.instagram.com/explore/tags/" + enc(k.replace(/\s+/g, "")) + "/"))),
+  ] } };
+}
 async function threadsReplySend(env, sid, custom) {
   const c = JSON.parse((await env.SESSIONS.get("thr:c:" + sid)) || "null");
   if (!c) return "找不到代號 " + sid + "（可能超過 30 天了）";
@@ -1588,6 +1600,10 @@ async function threadsOwnerCmd(env, text) {
   if ((m = t.match(/^#?海巡發送\s*(\w{6})$/))) return threadsReplySend(env, m[1]);
   if ((m = t.match(/^#?海巡改\s*(\w{6})\s+([\s\S]+)$/))) return threadsReplySend(env, m[1], m[2]);
   if ((m = t.match(/^#?海巡跳過\s*(\w{6})$/))) return "好，跳過這則👌";
+  if (/^#?(找客人|一鍵搜尋|海巡搜尋)$/.test(t)) {
+    let k = THR_KW; try { k = JSON.parse((await env.SESSIONS.get("thr:kw")) || "null") || THR_KW; } catch (e) {}
+    return { msgs: [{ type: "text", text: "🔍 找客人三步驟\n1. 點下面的按鈕，看最新貼文\n2. 看到有人在找貨 → 按「分享」→「複製連結」\n3. 貼回這裡（後面附上對方的原文更好），我幫你寫留言\n\nThreads 按「發送」就自動留言；FB、IG 複製留言自己貼上" }, huntCard(k)] };
+  }
   if (/^#?海巡結果$/.test(t)) { const ib = JSON.parse((await env.SESSIONS.get("thr:inbox")) || "null"); return ib ? { msgs: ib } : "最近 7 天還沒有海巡結果"; }
   if ((m = t.match(/^#?海巡關鍵字\s*(.*)$/))) {
     if (m[1].trim()) { const k = m[1].split(/[,，、\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 30); await env.SESSIONS.put("thr:kw", JSON.stringify(k)); return "好👌 海巡關鍵字改成：\n" + k.join("、"); }
