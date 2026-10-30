@@ -64,11 +64,11 @@ def series_items(kw):
 
 # ---------- 去背 ----------
 def cutout(p):
-    key = hashlib.md5(p.encode()).hexdigest()[:12]
+    key = 'hq' + hashlib.md5(p.encode()).hexdigest()[:12]
     out = f'{WORK}/cut/{key}.png'
     meta = out + '.json'
     if os.path.exists(meta): return json.load(open(meta))
-    im = Image.open(p).convert('RGB'); im.thumbnail((700, 700)); a = np.asarray(im).astype(int)
+    im = Image.open(p).convert('RGB'); im.thumbnail((1400, 1400)); a = np.asarray(im).astype(int)
     white = a.min(2) >= 246
     edge = np.concatenate([white[0], white[-1], white[:, 0], white[:, -1]]).mean()
     res = {'path': p, 'cut': False}
@@ -87,7 +87,7 @@ def cutout(p):
             keep = ndimage.binary_fill_holes(keep)
             if 0.08 < keep.mean() < 0.92:
                 al = Image.fromarray((keep * 255).astype('uint8')).filter(ImageFilter.GaussianBlur(1))
-                rgba = im.convert('RGBA'); rgba.putalpha(al); rgba = rgba.crop(al.getbbox()); rgba.save(out)
+                rgba = im.filter(ImageFilter.UnsharpMask(radius=1.6, percent=60, threshold=2)).convert('RGBA'); rgba.putalpha(al); rgba = rgba.crop(al.getbbox()); rgba.save(out, optimize=True)
                 res = {'path': out, 'cut': True}
     json.dump(res, open(meta, 'w')); return res
 PREF = re.compile('絨毛|娃娃|玩偶|公仔|吊飾|抱枕|盒玩|figure|ぬいぐるみ')
@@ -160,8 +160,14 @@ BASE = '''*{margin:0;padding:0;box-sizing:border-box}body{width:1080px;height:10
 def render(html, out):
     hp = WORK + '/p.html'; open(hp, 'w').write(html)
     js = WORK + '/shot.js'
-    open(js, 'w').write("""const {chromium}=require('playwright');(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1080,height:1080}});await p.goto('file://'+process.argv[2]);await p.waitForTimeout(700);await p.screenshot({path:process.argv[3],type:'jpeg',quality:86});await b.close()})();""")
-    subprocess.run(['node', js, hp, out], check=True, cwd='/home/claude', env={**os.environ, 'NODE_PATH': subprocess.run(['npm', 'root', '-g'], capture_output=True, text=True).stdout.strip()})
+    open(js, 'w').write("""const {chromium}=require('playwright');(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1080,height:1080},deviceScaleFactor:2});await p.goto('file://'+process.argv[2]);await p.waitForTimeout(900);await p.screenshot({path:process.argv[3],type:'png'});await b.close()})();""")
+    subprocess.run(['node', js, hp, out + '.png'], check=True, cwd='/home/claude', env={**os.environ, 'NODE_PATH': subprocess.run(['npm', 'root', '-g'], capture_output=True, text=True).stdout.strip()})
+    # 2160px 高清輸出；LINE 預覽圖上限 1MB，超過就降一點品質或尺寸
+    im = Image.open(out + '.png').convert('RGB'); os.remove(out + '.png')
+    for size, q in ((2160, 90), (2160, 84), (1620, 88), (1620, 80), (1080, 85)):
+        im2 = im if size == 2160 else im.resize((size, size), Image.LANCZOS)
+        im2.save(out, 'JPEG', quality=q, optimize=True, progressive=True)
+        if os.path.getsize(out) <= 980_000: break
 
 def tpl_series(kw, P, price, count, boxes=None):
     bg, dk, ac, lt = PAL.get(kw, DEF)
