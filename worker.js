@@ -10,13 +10,13 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { SHOP_BASE, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const BUILD_TAG = "hunt-3";
+const BUILD_TAG = "promo-1";
 const CATALOG_VERSION = "20261030-0938";
 const CATALOG_SHA = "6ec5098637bd0c3e4478ae00354458074d517ef3"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
@@ -734,6 +734,10 @@ async function handleEvent(env, ev) {
     if (/^#?(歡迎訊息|測試歡迎|歡迎文案)$/.test(text)) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
       return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
+    }
+    if (/^#?(宣傳素材|宣傳|文案素材|做宣傳)/.test(text.trim())) {
+      let pr; try { pr = await promoOwnerCmd(env, text); } catch (e) { pr = "⚠️ 指令出錯：" + String(e).slice(0, 200); }
+      if (pr !== undefined) return pr && pr.msgs ? reply(env, ev.replyToken, pr.msgs) : reply(env, ev.replyToken, [{ type: "text", text: pr }]);
     }
     if (/threads\.(?:com|net)\/@[\w.]+\/post\//.test(text)) {
       const lr = await threadsFromLink(env, text);
@@ -1480,6 +1484,145 @@ async function threadsTest(env, q) {
   const le = await env.SESSIONS.get("lasterr"); if (le) out.push("📮 LINE 最近錯誤：" + le.slice(0, 120));
   return out.join("\n");
 }
+// ── 自動宣傳：新品／結單倒數 3 天・1 天・1 小時／定期宣傳 → Claude 寫文案、ChatGPT 做圖 → 推播或「宣傳素材」查看 ──
+const PROMO_SERIES = ["三麗鷗", "吉伊卡哇", "史努比", "寶可夢", "盒玩", "角落生物", "mofusand", "拉拉熊", "哆啦A夢", "動漫"];
+const PROMO_STAGE = { "3d": "結單倒數 3 天", "1d": "結單倒數 1 天", "1h": "最後 1 小時" };
+const twNow = () => new Date(Date.now() + 8 * 3600e3);
+const twDate = (d = twNow()) => d.toISOString().slice(0, 10);
+function dlEnd(it) { const m = (it.dl || "").match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 23, m[5] ? +m[5] : 59) - 8 * 3600e3 : 0; }
+const promoPick = (L, n = 6) => { const w = L.filter((x) => x.img && x.g); const seen = new Set(), out = []; for (const x of w) { const key = (x.s || x.n).slice(0, 8); if (seen.has(key)) continue; seen.add(key); out.push({ n: x.n, g: x.g, img: x.img, k: x.k, dl: x.dl || "" }); if (out.length >= n) break; } return out; };
+async function promoQueue(env, ev) {
+  const q = JSON.parse((await env.SESSIONS.get("promo:q")) || "[]");
+  if (q.some((x) => x.key === ev.key)) return false;
+  q.push(ev); await env.SESSIONS.put("promo:q", JSON.stringify(q.slice(-20)), { expirationTtl: 7 * 86400 }); return true;
+}
+async function promoScan(env, cat) {
+  const now = Date.now(), tw = twNow(), today = twDate(), hm = tw.getUTCHours() * 60 + tw.getUTCMinutes();
+  const live = cat.filter((x) => !isExpired(x));
+  // 結單倒數：同品牌同結單時間一組，只發最緊急、還沒發過的那一段
+  const groups = {};
+  for (const x of live) { const e = dlEnd(x); if (e && e > now && e - now <= 3 * 86400e3 + 600e3) (groups[(x.b || "") + "|" + x.dl] = groups[(x.b || "") + "|" + x.dl] || { e, L: [] }).L.push(x); }
+  for (const [g, { e, L }] of Object.entries(groups)) {
+    const left = e - now, st = left <= 3600e3 + 300e3 ? "1h" : left <= 86400e3 + 300e3 ? "1d" : "3d";
+    if (await env.SESSIONS.get("promo:dl:" + g + ":" + st)) continue;
+    for (const s2 of ["3d", "1d", "1h"]) { await env.SESSIONS.put("promo:dl:" + g + ":" + s2, "1", { expirationTtl: 10 * 86400 }); if (s2 === st) break; }
+    await promoQueue(env, { key: "dl:" + g + ":" + st, type: st, title: PROMO_STAGE[st], dl: L[0].dl, items: promoPick(L) });
+  }
+  // 新品：上架當天 11 點後，依品牌各一則，一天最多 3 則
+  if (hm >= 11 * 60) {
+    const fresh = {}; for (const x of live) if (x.ad === today) (fresh[x.b || "新品"] = fresh[x.b || "新品"] || []).push(x);
+    let made = Number((await env.SESSIONS.get("promo:newcnt:" + today)) || 0);
+    for (const [b, L] of Object.entries(fresh).sort((a, b2) => b2[1].length - a[1].length)) {
+      if (made >= 3) break;
+      if (await env.SESSIONS.get("promo:new:" + today + ":" + b)) continue;
+      await env.SESSIONS.put("promo:new:" + today + ":" + b, "1", { expirationTtl: 10 * 86400 });
+      if (await promoQueue(env, { key: "new:" + today + ":" + b, type: "new", title: "新品上市", count: L.length, items: promoPick(L) })) made++;
+    }
+    await env.SESSIONS.put("promo:newcnt:" + today, String(made), { expirationTtl: 3 * 86400 });
+  }
+  // 定期宣傳：每週二、五 12:00
+  const dow = tw.getUTCDay();
+  if ((dow === 2 || dow === 5) && hm >= 12 * 60 && !(await env.SESSIONS.get("promo:reg:" + today))) {
+    await env.SESSIONS.put("promo:reg:" + today, "1", { expirationTtl: 10 * 86400 });
+    const rot = Number((await env.SESSIONS.get("promo:rot")) || 0); await env.SESSIONS.put("promo:rot", String(rot + 1));
+    await promoQueueSeries(env, PROMO_SERIES[rot % PROMO_SERIES.length], "reg:" + today, live);
+  }
+}
+async function promoQueueSeries(env, kw, key, live) {
+  const L = live.filter((x) => (x.n + " " + (x.s || "") + " " + (x.b || "")).toLowerCase().includes(kw.toLowerCase()));
+  if (!L.length) return false;
+  const pool = L.slice().sort((a, b) => String(b.ad || "").localeCompare(String(a.ad || ""))).slice(0, 60);
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return promoQueue(env, { key, type: "reg", title: kw + " 精選", series: kw, count: L.length, items: promoPick(pool) });
+}
+async function promoCopy(env, ev) {
+  const minP = Math.min(...ev.items.map((x) => x.g));
+  const tone = { new: "新品剛上架，讓人想第一時間收", "3d": "提醒結單倒數 3 天，語氣輕鬆", "1d": "明天就結單，製造一點急迫感", "1h": "最後 1 小時，簡短直接、很急", reg: "日常推薦這個系列，讓人想逛" }[ev.type];
+  const sys = `你是台灣日本角色商品批發商 ZOARÉ 的社群小編。客人是小賣家、團購主。
+寫一則宣傳貼文，回傳 JSON（不要其他文字）：
+{"headline":"放在圖上的中文標題，6～10 字","copy":"FB／IG 貼文：3～6 行，口語、自然、不要有 AI 感，第一行要抓眼球，列出 2～4 款商品名（可簡化），寫「批發價 NT$${minP} 起」，最後一行寫「LINE 搜尋 ZOARÉ」下單，再空一行放 3～5 個 #hashtag","threads":"Threads 版：1～2 句、60 字內、像真人隨手發","image_prompt":"給圖片 AI 的英文指令（見下方規則）"}
+規則：繁體中文；表情符號最多 3 個；不提廠商名、品牌代理、進價、折數、人民幣；不要寫保證、最便宜這類誇大字眼；價格只能用我給的數字。
+這則的重點：${tone}${ev.dl ? `；結單時間 ${ev.dl}` : ""}。
+image_prompt 規則：描述一張 1:1 的社群宣傳圖。產品照片會一起提供，要寫明「use the provided product photos exactly as they are, do not redraw, alter or add any characters」；場景用柔和粉彩、乾淨可愛的日系選物風，搭配少量黑灰與香檳金點綴；圖上只放兩段文字：中文標題（就是 headline）和小字「ZOARÉ」，不要放價格或其他數字；不要畫任何卡通角色、吉祥物或品牌 logo。`;
+  const user = `類型：${ev.title}${ev.series ? "（" + ev.series + "）" : ""}${ev.count ? `，共 ${ev.count} 款` : ""}\n商品：\n${ev.items.map((x) => `・${x.n}　NT$${x.g}`).join("\n")}`;
+  const out = await claude(env, sys, [{ role: "user", content: user }], 900);
+  let j; try { j = JSON.parse(out.match(/\{[\s\S]*\}/)[0]); } catch (e) { j = { headline: ev.title, copy: out.trim(), threads: "", image_prompt: "" }; }
+  return { headline: String(j.headline || ev.title).slice(0, 14), copy: String(j.copy || "").slice(0, 900), threads: String(j.threads || "").slice(0, 200), image_prompt: String(j.image_prompt || "") };
+}
+async function promoImage(env, ev, c) {
+  if (!env.OPENAI_API_KEY) return { err: "還沒設定 OPENAI_API_KEY" };
+  const prompt = (c.image_prompt || `A 1:1 pastel kawaii social media promo graphic for a Japanese character goods shop. Use the provided product photos exactly as they are, do not redraw, alter or add any characters.`) +
+    `\nText on the image (render exactly, nothing else): Chinese headline "${c.headline}" and small wordmark "ZOARÉ". No prices, no numbers, no logos, no extra characters.`;
+  const models = [env.OPENAI_IMAGE_MODEL, "gpt-image-2", "gpt-image-1.5", "gpt-image-1"].filter((x, i, a) => x && a.indexOf(x) === i);
+  const photos = [];
+  for (const it of ev.items.slice(0, 4)) { try { const r = await fetch(it.img); if (r.ok) photos.push(new Blob([await r.arrayBuffer()], { type: r.headers.get("content-type") || "image/jpeg" })); } catch (e) {} }
+  let last = "";
+  for (const model of models) {
+    try {
+      let r;
+      if (photos.length) {
+        const fd = new FormData(); fd.append("model", model); fd.append("prompt", prompt); fd.append("size", "1024x1024"); fd.append("quality", "medium"); fd.append("output_format", "jpeg"); fd.append("output_compression", "82");
+        photos.forEach((b, i) => fd.append("image[]", b, "p" + i + ".jpg"));
+        r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY }, body: fd });
+      } else {
+        r = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY, "content-type": "application/json" }, body: JSON.stringify({ model, prompt, size: "1024x1024", quality: "medium", output_format: "jpeg", output_compression: 82 }) });
+      }
+      const j = await r.json().catch(() => ({}));
+      if (j.data && j.data[0] && j.data[0].b64_json) return { b64: j.data[0].b64_json, model };
+      last = model + "：" + ((j.error && j.error.message) || "HTTP " + r.status);
+      if (!/model|not found|does not exist|invalid_model/i.test(last)) break; // 不是模型名稱問題就不再換模型
+    } catch (e) { last = model + "：" + String(e).slice(0, 120); }
+  }
+  return { err: last.slice(0, 200) };
+}
+async function promoRun(env) {
+  if (await env.SESSIONS.get("promo:lock")) return;
+  const q = JSON.parse((await env.SESSIONS.get("promo:q")) || "[]");
+  if (!q.length) return;
+  await env.SESSIONS.put("promo:lock", "1", { expirationTtl: 300 });
+  const ev = q.shift(); await env.SESSIONS.put("promo:q", JSON.stringify(q), { expirationTtl: 7 * 86400 });
+  try {
+    if (!ev.items || !ev.items.length) return;
+    const c = await promoCopy(env, ev), im = await promoImage(env, ev, c);
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    if (im.b64) await env.SESSIONS.put("promo:img:" + id, im.b64, { expirationTtl: 30 * 86400 });
+    const rec = { id, type: ev.type, title: ev.title, series: ev.series || "", at: twNow().toISOString().slice(0, 16).replace("T", " "), headline: c.headline, copy: c.copy, threads: c.threads, img: im.b64 ? SHOP_BASE + "/promo/" + id + ".jpg" : "", fallbackImg: ev.items[0] && ev.items[0].img, imgErr: im.err || "", model: im.model || "" };
+    await env.SESSIONS.put("promo:rec:" + id, JSON.stringify(rec), { expirationTtl: 30 * 86400 });
+    const list = JSON.parse((await env.SESSIONS.get("promo:list")) || "[]"); list.unshift(id); await env.SESSIONS.put("promo:list", JSON.stringify(list.slice(0, 30)));
+    const owner = await env.SESSIONS.get("owner");
+    if (owner) {
+      const pr = await lineApi(env, "/v2/bot/message/push", { to: owner, messages: promoMsgs(rec) });
+      if (!pr.ok) { const u = Number((await env.SESSIONS.get("promo:unseen")) || 0); await env.SESSIONS.put("promo:unseen", String(u + 1), { expirationTtl: 40 * 86400 }); }
+    }
+  } catch (e) { await env.SESSIONS.put("lasterr", twNow().toISOString().slice(0, 16) + " 自動宣傳 " + String((e && e.stack) || e).slice(0, 400), { expirationTtl: 30 * 86400 }); }
+  finally { await env.SESSIONS.delete("promo:lock"); }
+}
+function promoMsgs(rec) {
+  const img = rec.img || rec.fallbackImg, out = [];
+  if (img) out.push({ type: "image", originalContentUrl: img, previewImageUrl: img });
+  out.push({ type: "text", text: `📣 ${rec.title}${rec.series ? "・" + rec.series : ""}（${rec.at}）\n——FB／IG 文案——\n${rec.copy}${rec.threads ? "\n\n——Threads——\n" + rec.threads : ""}${rec.imgErr ? "\n\n⚠️ 圖片沒做成（" + rec.imgErr + "），先附商品照" : ""}`.slice(0, 4900) });
+  return out;
+}
+async function promoOwnerCmd(env, text) {
+  const t = text.replace(/[​-‍﻿]/g, "").trim();
+  if (/^#?(宣傳素材|宣傳|文案素材)$/.test(t)) {
+    const list = JSON.parse((await env.SESSIONS.get("promo:list")) || "[]"), q = JSON.parse((await env.SESSIONS.get("promo:q")) || "[]");
+    await env.SESSIONS.delete("promo:unseen");
+    if (!list.length) return { msgs: [{ type: "text", text: "還沒有宣傳素材。新品上架、結單倒數、每週二／五中午會自動產生；也可以傳「做宣傳 三麗鷗」馬上做一則" + (q.length ? `\n\n⏳ 排隊中 ${q.length} 則，約 5 分鐘一則` : "") }] };
+    const recs = (await Promise.all(list.slice(0, 2).map((id) => env.SESSIONS.get("promo:rec:" + id, "json")))).filter(Boolean);
+    const msgs = recs.flatMap(promoMsgs).slice(0, 4);
+    msgs.push({ type: "text", text: `以上是最新 ${recs.length} 則${list.length > 2 ? `（共 ${list.length} 則，30 天內都保留）` : ""}${q.length ? `\n⏳ 還有 ${q.length} 則排隊製作中` : ""}\n長按圖片可以存到相簿，文案直接複製貼上` });
+    return { msgs: msgs.slice(0, 5) };
+  }
+  const m = t.match(/^#?做宣傳\s*(.*)$/);
+  if (m) {
+    const kw = m[1].trim() || PROMO_SERIES[Math.floor(Math.random() * PROMO_SERIES.length)];
+    const live = (await loadCatalog(env)).filter((x) => !isExpired(x));
+    const ok = await promoQueueSeries(env, kw, "man:" + kw + ":" + Date.now(), live);
+    return ok ? `好👌 「${kw}」宣傳排進去了，大約 5 分鐘後${env.OPENAI_API_KEY ? "" : "（還沒設定 OpenAI 金鑰，這次只會有文案＋商品照）"}傳「宣傳素材」查看（有推播額度會直接傳給你）` : `目錄裡找不到「${kw}」的商品，換個關鍵字試試，例如：做宣傳 吉伊卡哇`;
+  }
+  return undefined;
+}
 // ── 海巡：Threads 關鍵字搜尋 → AI 擬留言 → LINE 傳給老闆確認 → 按發送才用 @zoare_2504 回覆 ──
 const THR_KW = ["求貨源", "找貨源", "三麗鷗 批發", "日本 批發", "批發 盤商", "想開團", "團購 廠商", "盒玩 批發", "扭蛋 批發", "吉伊卡哇 批發", "周邊 批發"];
 const THR_INTENT = /求|找|徵|哪裡|哪邊|推薦|有沒有|有人|請問|貨源|盤商|廠商|批發|開團|進貨|拿貨|代理/;
@@ -1643,6 +1786,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 4) { try { await runCartReminders(env, { lineApi }); } catch (e) { console.log("cartRemind", e); } }
       if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
+      try { if (env.OPENAI_API_KEY) await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); } // 設好 OpenAI 金鑰才自動排；手動「做宣傳」隨時可用
       const man = await env.SESSIONS.get("thr:manual");
       if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
       for (const [slot, at] of [["am", 9 * 60], ["pm", 20 * 60]]) {
@@ -1659,7 +1803,7 @@ export default {
   },
   async fetch(request, env, ctx) {
     // 去掉金鑰前後不小心多貼的空白或換行
-    for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL", "THREADS_APP_SECRET"])
+    for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL", "THREADS_APP_SECRET", "OPENAI_API_KEY", "OPENAI_IMAGE_MODEL"])
       if (typeof env[k] === "string") env[k] = env[k].trim();
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/check") {
@@ -1672,12 +1816,14 @@ export default {
         CATALOG_URL: env.CATALOG_URL ? "set" : "missing",
         SESSIONS_KV: env.SESSIONS ? "bound" : "not bound",
         THREADS_APP_SECRET: env.THREADS_APP_SECRET ? { length: env.THREADS_APP_SECRET.length, looks_ok: /^[0-9a-f]{32}$/i.test(env.THREADS_APP_SECRET) } : "missing",
+        OPENAI_API_KEY: env.OPENAI_API_KEY ? { length: env.OPENAI_API_KEY.length, looks_ok: env.OPENAI_API_KEY.startsWith("sk-") } : "missing",
         THREADS_CONNECTED: env.SESSIONS ? !!(await env.SESSIONS.get("thr:tok")) : false,
         THREADS_LAST_CALLBACK: env.SESSIONS ? JSON.parse((await env.SESSIONS.get("thr:last")) || "null") : null,
       });
     }
     if (url.pathname === "/threads/login" || url.pathname === "/threads/callback") return threadsAuth(request, env, url);
     if (url.pathname === "/privacy" || url.pathname === "/data-deletion") return legalPage(url.pathname);
+    { const pm = url.pathname.match(/^\/promo\/([a-z0-9]{6,20})\.jpg$/); if (pm) { const b = env.SESSIONS && (await env.SESSIONS.get("promo:img:" + pm[1])); if (!b) return new Response("Not found", { status: 404 }); const bin = Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0)); return new Response(bin, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=2592000" } }); } }
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
     // 介紹影片（LINE 影片訊息要 https＋正確的 content-type）
