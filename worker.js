@@ -16,6 +16,7 @@ const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
+const BUILD_TAG = "hunt-3";
 const CATALOG_VERSION = "20261030-0938";
 const CATALOG_SHA = "6ec5098637bd0c3e4478ae00354458074d517ef3"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
@@ -728,6 +729,7 @@ async function handleEvent(env, ev) {
   }
   // 老闆指令：「小美 停止回覆」（客人 15 分鐘沒訊息自動恢復）、「小美 開始回覆」（馬上恢復）、「名單」
   if (uid && env.SESSIONS && text && uid === (await env.SESSIONS.get("owner"))) {
+    if (await env.SESSIONS.get("h:" + uid)) await env.SESSIONS.delete("h:" + uid); // 老闆自己不會進「轉真人」狀態
     // 預覽新好友歡迎訊息
     if (/^#?(歡迎訊息|測試歡迎|歡迎文案)$/.test(text)) {
       let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
@@ -737,15 +739,15 @@ async function handleEvent(env, ev) {
       const lr = await threadsFromLink(env, text);
       if (lr) return lr.msgs ? reply(env, ev.replyToken, lr.msgs) : reply(env, ev.replyToken, [{ type: "text", text: lr }]);
     }
-    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果|找客人|一鍵搜尋)/.test(text.trim())) {
+    if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果|找客人|一鍵搜尋)/.test(text.replace(/[\s\u200b-\u200d\ufeff]/g, ""))) {
       let hr;
       try { hr = await threadsOwnerCmd(env, text); }
       catch (e) { const em = String((e && e.stack) || e).slice(0, 300); await env.SESSIONS.put("lasterr", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + " 海巡指令 " + em, { expirationTtl: 30 * 86400 }); return reply(env, ev.replyToken, [{ type: "text", text: "⚠️ 指令出錯：" + em.slice(0, 200) }]); }
       if (hr !== undefined) return hr && hr.msgs ? reply(env, ev.replyToken, hr.msgs) : hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
     }
     if (/^#?(系統錯誤|錯誤紀錄)$/.test(text.trim())) {
-      const se = await env.SESSIONS.get("shoperr"), le = await env.SESSIONS.get("lasterr");
-      return reply(env, ev.replyToken, [{ type: "text", text: "🛠 最近錯誤紀錄\n\n商城：" + (se || "沒有") + "\n\nLINE：" + (le || "沒有") }]);
+      const se = await env.SESSIONS.get("shoperr"), le = await env.SESSIONS.get("lasterr"), hs = await env.SESSIONS.get("h:" + uid);
+      return reply(env, ev.replyToken, [{ type: "text", text: "🛠 最近錯誤紀錄（系統版本 " + BUILD_TAG + "）\n\n商城：" + (se || "沒有") + "\n\nLINE：" + (le || "沒有") + (hs ? "\n\n你的帳號目前在「轉真人」狀態（" + hs + "），已幫你解除" : "") }]);
     }
     const ht = text.trim().match(/^#?(?:海巡測試|threads測試|Threads測試)\s*(.*)$/i);
     if (ht) return reply(env, ev.replyToken, [{ type: "text", text: await threadsTest(env, ht[1] || "三麗鷗") }]);
@@ -1597,7 +1599,7 @@ async function threadsReplySend(env, sid, custom) {
   return "✅ 已用 @zoare_2504 留言給 @" + c.user + "\n「" + text + "」";
 }
 async function threadsOwnerCmd(env, text) {
-  const t = text.trim();
+  const t = text.replace(/[\u200b-\u200d\ufeff]/g, "").trim();
   let m;
   if ((m = t.match(/^#?海巡發送\s*(\w{6})$/))) return threadsReplySend(env, m[1]);
   if ((m = t.match(/^#?海巡改\s*(\w{6})\s+([\s\S]+)$/))) return threadsReplySend(env, m[1], m[2]);
