@@ -126,6 +126,8 @@ PAL = {  # 背景、深色、強調、淡色
 DEF = ('#F4EEE4', '#2A2826', '#B8955A', '#FFFDF9')
 ROT = [-8, 6, -3, 9, -6, 4]
 STAR = '<svg viewBox="0 0 20 20" class="st" style="{s}"><path d="M10 0C10.8 6.5 13.5 9.2 20 10C13.5 10.8 10.8 13.5 10 20C9.2 13.5 6.5 10.8 0 10C6.5 9.2 9.2 6.5 10 0Z" fill="{c}"/></svg>'
+def LOGO(kind='dark', h=34, extra=''):
+    return f'<img src="file://{REPO}/img/logo_{kind}.png" style="height:{h}px;width:auto;display:inline-block;{extra}">'
 def stars(c, spots):
     return ''.join(STAR.format(s=f'left:{x}px;top:{y}px;width:{w}px;height:{w}px', c=c) for x, y, w in spots)
 def short(n):
@@ -188,7 +190,7 @@ body{{background:radial-gradient(circle at 70% 30%,{lt} 0,{bg} 55%,{bg} 100%)}}
 <div class="blob" style="left:520px;top:300px;width:520px;height:520px;background:{lt};opacity:.8"></div>
 <div class="blob" style="left:-120px;top:620px;width:420px;height:420px;background:{ac};opacity:.18"></div>
 <div class="big">{en} {en}</div>
-<div class="t1">{kw}</div><div class="t2">curated by ZOARÉ</div><div class="wm">ZOARÉ</div>
+<div class="t1">{kw}</div><div class="t2">curated by ZOARÉ</div><div class="wm">{LOGO("dark", 34)}</div>
 <div class="badge"><small>批發價</small><b>${price}</b><i>起</i></div>
 {prod_html(P, boxes, ac)}
 {stars(ac, [(300, 80, 34), (960, 420, 26), (60, 330, 22), (560, 640, 18)])}
@@ -219,7 +221,7 @@ def tpl_grid(kw, P, price, count):
 .cd b{{font-family:serif;font-size:34px;color:{ac};margin-top:2px}}
 .foot{{position:absolute;left:64px;right:64px;bottom:34px;display:flex;justify-content:space-between;font-size:25px;color:{dk};letter-spacing:3px}}"""
     return f"""<html><head><meta charset="utf-8"><style>{ff()}{BASE}{css}</style></head><body>
-<div class="hd"><h1>{kw}</h1><div class="r"><i>weekly picks</i><b>ZOARÉ</b></div></div>
+<div class="hd"><h1>{kw}</h1><div class="r"><i>weekly picks</i>{LOGO("dark", 28)}</div></div>
 <div class="grid">{cards}</div>
 <div class="foot"><span>共 {count:,} 款・批發價 NT${price} 起</span><span>LINE 搜尋 ZOARÉ</span></div>
 </body></html>"""
@@ -243,7 +245,7 @@ def tpl_arch(kw, P, price, count):
 .foot{{position:absolute;left:0;right:0;bottom:46px;text-align:center;font-size:25px;letter-spacing:5px;color:{gold}}}
 .ln{{position:absolute;left:340px;right:340px;bottom:100px;height:1px;background:{gold}88}}"""
     return f"""<html><head><meta charset="utf-8"><style>{ff()}{BASE}{css}</style></head><body>
-<div class="t"><small>ZOARÉ</small><h1>{kw}</h1><i>{EN.get(kw, '')} collection</i></div>
+<div class="t"><small>{LOGO("white", 32)}</small><h1>{kw}</h1><i>{EN.get(kw, '')} collection</i></div>
 <div class="row">{arches}</div><div class="ln"></div>
 <div class="foot">共 {count:,} 款　批發價 NT${price} 起　LINE 搜尋 ZOARÉ</div>
 </body></html>"""
@@ -299,7 +301,7 @@ body{{background:#F7F2EA}}
 <div class="sub">{brand_show}<span>日本正版</span></div>
 {prod_html(P, boxes, ac)}
 {stars(ac, [(640, 230, 30), (980, 560, 22), (60, 600, 20)])}
-<div class="wm">ZOARÉ</div><div class="price">批發價 NT${price} 起</div>
+<div class="wm">{LOGO("dark", 32)}</div><div class="price">批發價 NT${price} 起</div>
 <div class="foot">LINE 搜尋 ZOARÉ・現在就能下單</div></body></html>'''
 
 def tpl_count(stage, P, price, dl):
@@ -320,7 +322,7 @@ body{{background:radial-gradient(circle at 75% 20%,#3A3631 0,{dk} 60%)}}
 .glow{{position:absolute;left:300px;top:640px;width:760px;height:260px;border-radius:50%;background:radial-gradient({gold}55,transparent 70%)}}
 </style></head><body>
 <div class="num">{big}</div><div class="unit">{unit}</div><div class="lab">{label}</div><div class="dl">結單 {dl.replace('-', '/')}</div>
-<div class="wm">ZOARÉ</div><div class="price">批發價 NT${price} 起</div>
+<div class="wm">{LOGO("white", 32)}</div><div class="price">批發價 NT${price} 起</div>
 <div class="stripe"></div><div class="glow"></div>
 {prod_html(P, boxes, gold)}
 {stars(gold, [(980, 440, 26), (420, 60, 20), (60, 560, 18)])}
