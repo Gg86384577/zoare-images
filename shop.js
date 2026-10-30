@@ -181,8 +181,14 @@ export function dlLabel(it) {
     const ds = `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
     const tm = m[4] || "23:59";
     const tmr = new Date(Date.now() + 32 * 3600e3).toISOString().slice(0, 10);
+    // 結單倒數：3 天內開始倒數，給客人緊急感
+    const [hh, mm] = tm.split(":").map(Number);
+    const left = Date.UTC(+m[1], +m[2] - 1, +m[3], hh, mm) - 8 * 3600e3 - Date.now();
+    if (left > 0 && left <= 3600e3) return `🚨 最後 ${Math.max(1, Math.ceil(left / 60e3))} 分鐘結單！`;
+    if (left > 0 && left <= 24 * 3600e3) return `🔥 倒數 ${Math.ceil(left / 3600e3)} 小時結單（${ds === today ? "今天" : "明天"} ${tm}）`;
     if (ds === today) return `今天 ${tm} 結單！要訂請把握`;
     if (ds === tmr) return `明天 ${tm} 結單`;
+    if (left > 0 && left <= 3 * 86400e3) return `⏳ 倒數 ${Math.ceil(left / 86400e3)} 天結單（${+m[2]}/${+m[3]}）`;
     return `結單日 ${+m[2]}/${+m[3]}${m[4] && m[4] !== "23:59" ? " " + m[4] : ""}`;
   }
   if (d) return "結單日 " + d.split("（")[0];
@@ -1544,7 +1550,7 @@ function bubble(it, tier, link) {
     { type: "text", text: sub, size: "xxs", color: "#888888" },
   ];
   const dlt = dlLabel(it);
-  body.push({ type: "text", text: "⏰ " + dlt, size: "xs", weight: "bold", color: /今天|明天/.test(dlt) ? "#D0021B" : "#161616", margin: "sm", wrap: true });
+  body.push({ type: "text", text: "⏰ " + dlt, size: "xs", weight: "bold", color: /今天|明天|倒數|最後/.test(dlt) ? "#D0021B" : "#161616", margin: "sm", wrap: true });
   const shp = it._alt && !it.hid ? "這個價格需等待向日本訂貨" : shipLabel(it);
   if (shp) body.push({ type: "text", text: "📦 " + shp, size: "xxs", color: "#555555" });
   if (note) body.push({ type: "text", text: note.slice(0, 60), size: "xxs", color: "#9E1B1B", wrap: true });
