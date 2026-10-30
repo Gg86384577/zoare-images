@@ -949,7 +949,7 @@ async function shipPart(env, deps, id, rest) {
   const sc = await shipCoupons(env, o.uid);
   const items = o.lines.filter((l) => !l.mem && group.includes(l.m || mfrOf(l.b)));
   const pend = fee.intl === null;
-  const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : ms.length > group.length ? "最後一批商品出貨囉！" : "出貨囉！"}\n${ms.length > 1 ? "廠商：" + group.join("、") + "\n" : ""}${items.slice(0, 15).map((l) => `・${l.n} ×${l.q}`).join("\n")}${items.length > 15 ? `\n…共 ${items.length} 款` : ""}${track ? "\n物流單號：" + track : ""}\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : pend ? "依物流公司報價，確定後另外通知您" : "NT$" + fee.intl.toLocaleString()}${due ? `\n本次運費${pend ? "（目前）" : ""}合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}${left.length ? `\n\n其他廠商的商品（${left.join("、")}）到貨後會再寄出，可以傳「我的訂單」查看進度～` : ""}`;
+  const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : ms.length > group.length ? "最後一批商品出貨囉！" : "出貨囉！"}\n${ms.length > 1 ? "廠商：" + group.join("、") + "\n" : ""}${items.slice(0, 15).map((l) => `・${l.n} ×${l.q}`).join("\n")}${items.length > 15 ? `\n…共 ${items.length} 款` : ""}${track ? (/店到店|超商/.test(o.form.ship || "") ? `\n\n📮 ${(o.form.ship || "").replace(/\s*店到店/, "")}寄件代碼：${track}\n🏪 取貨門市：${o.form.addr}\n到店後會收到簡訊，請帶證件 7 天內取貨` : "\n物流單號：" + track) : ""}\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : pend ? "依物流公司報價，確定後另外通知您" : "NT$" + fee.intl.toLocaleString()}${due ? `\n本次運費${pend ? "（目前）" : ""}合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}${left.length ? `\n\n其他廠商的商品（${left.join("、")}）到貨後會再寄出，可以傳「我的訂單」查看進度～` : ""}`;
   const sent = await pushTo(deps, env, o.uid, msg);
   return `好👌 ${id}「${group.join("、")}」已標記出貨${track ? "（物流單號 " + track + "）" : ""}\n運費：國內 ${domCp ? "用券" : "NT$" + SHIP_DOM}・國際 ${intlCp ? "用券" : pend ? "❓待填" : "NT$" + fee.intl}${due ? `，目前要跟客人收 NT$${due}` : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}${pend ? `\n\n❓ 這次國際運費要收多少？請回覆：\n${id} 國際運費 金額\n例如：${id} 國際運費 440` : ""}`;
 }
@@ -987,6 +987,22 @@ export async function shopOwnerCommand(env, text, deps = {}) {
   const crm = text.match(/^購物車提醒\s*(全部|U[0-9a-f]{32})$/);
   if (crm) { const n = await runCartReminders(env, deps, { force: true, uid: crm[1] === "全部" ? "" : crm[1] }); return n ? `好👌 已發購物車結帳提醒給 ${n} 位客人` : "目前沒有可以提醒的購物車"; }
   if (/^購物車提醒\s*(開|關|開啟|關閉)$/.test(text)) { const off = /關/.test(text); await env.SESSIONS.put("cartremind", off ? "off" : "on"); return off ? "好👌 已關閉購物車提醒" : "好👌 已開啟購物車提醒：客人放了 6 小時沒結帳，會在 11:00～21:00 傳一則提醒（每次只提醒一次）"; }
+  // 批次出貨：一行一張「ZO訂單編號 交貨便代碼／物流單號 [國際N]」，已到貨的商品一起寄
+  if (/^批次出貨/.test(text.trim())) {
+    const rows = text.trim().replace(/^批次出貨[：:]?\s*/, "").split(/\n+/).map((x) => x.trim()).filter(Boolean).slice(0, 80);
+    if (!rows.length) return "格式：\n批次出貨\nZO261030ABCD E63045678901\nZO261030EFGH E63045678902 國際220\n（一行一張訂單：訂單編號、交貨便代碼或物流單號，要收國際運費就加「國際金額」）";
+    const ok = [], bad = [];
+    for (const r of rows) {
+      const m = r.match(/^(ZO\w{10})[\s,，、]+(.*)$/i);
+      if (!m) { bad.push(r.slice(0, 30) + "：看不懂格式"); continue; }
+      const id = m[1].toUpperCase(), o = await env.SESSIONS.get("o:" + id, "json");
+      if (!o) { bad.push(id + "：找不到訂單"); continue; }
+      const arr = arrivalState(o).arrived.filter((x) => !(o.sh && o.sh[x]));
+      const res = await shipPart(env, deps, id, (arr.length ? "已到貨" : "全部") + " " + m[2].trim());
+      (/^好👌/.test(res) ? ok : bad).push(/^好👌/.test(res) ? id + (/已通知客人/.test(res) ? " ✅已通知" : " ⚠️客人沒收到通知（可請他在 LINE 查訂單）") + (/待填/.test(res) ? "・國際運費待填" : "") : id + "：" + res.split("\n")[0].replace(/^好👌\s*/, ""));
+    }
+    return `🚚 批次出貨完成：${ok.length} 筆${bad.length ? `，${bad.length} 筆沒處理` : ""}\n${ok.map((x) => "・" + x).join("\n")}${bad.length ? "\n\n沒處理：\n" + bad.map((x) => "・" + x).join("\n") : ""}`;
+  }
   const t = text.trim();
   const dm = t.match(/^(ZO\w{10})\s*差額已處理$/i);
   if (dm) {
