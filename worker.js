@@ -738,7 +738,9 @@ async function handleEvent(env, ev) {
       if (lr) return lr.msgs ? reply(env, ev.replyToken, lr.msgs) : reply(env, ev.replyToken, [{ type: "text", text: lr }]);
     }
     if (/^#?(海巡|開始海巡|海巡示範|海巡發送|海巡改|海巡跳過|海巡關鍵字|海巡結果|找客人|一鍵搜尋)/.test(text.trim())) {
-      const hr = await threadsOwnerCmd(env, text);
+      let hr;
+      try { hr = await threadsOwnerCmd(env, text); }
+      catch (e) { const em = String((e && e.stack) || e).slice(0, 300); await env.SESSIONS.put("lasterr", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16) + " 海巡指令 " + em, { expirationTtl: 30 * 86400 }); return reply(env, ev.replyToken, [{ type: "text", text: "⚠️ 指令出錯：" + em.slice(0, 200) }]); }
       if (hr !== undefined) return hr && hr.msgs ? reply(env, ev.replyToken, hr.msgs) : hr ? reply(env, ev.replyToken, [{ type: "text", text: hr }]) : undefined;
     }
     if (/^#?(系統錯誤|錯誤紀錄)$/.test(text.trim())) {
@@ -1572,7 +1574,7 @@ function huntCard(kws) {
   const enc = encodeURIComponent, K = kws.slice(0, 8);
   const btn = (label, uri) => ({ type: "button", style: "secondary", height: "sm", action: { type: "uri", label: label.slice(0, 20), uri } });
   const bubble = (title, color, items) => ({ type: "bubble", size: "kilo",
-    header: { type: "box", layout: "vertical", backgroundColor: color, paddingAll: "12px", contents: [{ type: "text", text: title, color: "#FFFFFF", weight: "bold", size: "md" }, { type: "text", text: "點一下直接看最新貼文", color: "#FFFFFFCC", size: "xs" }] },
+    header: { type: "box", layout: "vertical", backgroundColor: color, paddingAll: "12px", contents: [{ type: "text", text: title, color: "#FFFFFF", weight: "bold", size: "md" }, { type: "text", text: "點一下直接看最新貼文", color: "#EEEEEE", size: "xs" }] },
     body: { type: "box", layout: "vertical", spacing: "sm", contents: items } });
   return { type: "flex", altText: "找客人：一鍵搜尋", contents: { type: "carousel", contents: [
     bubble("🧵 Threads", "#2A2826", K.map((k) => btn("🔍 " + k, "https://www.threads.com/search?q=" + enc(k) + "&filter=recent"))),
