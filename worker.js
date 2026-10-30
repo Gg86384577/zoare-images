@@ -1199,7 +1199,65 @@ async function inquiryCommand(env, t) {
   }
   return null;
 }
+// 會員群發：資源包宣傳影片 → 一般會員＋VIP（額度不夠時自動排隊，額度恢復後補發）
+const PACK_V = "1";
+async function activeMembers(env) {
+  const out = []; let cursor;
+  do {
+    const r = await env.SESSIONS.list({ prefix: "tier:", cursor });
+    for (const k of r.keys) {
+      const uid = k.name.slice(5), tier = await env.SESSIONS.get(k.name);
+      if (tier !== "vip" && tier !== "member") continue;
+      const until = Number(await env.SESSIONS.get("tx:" + uid)) || 0;
+      if (until && until < Date.now()) continue;
+      out.push({ uid, tier });
+    }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  return out;
+}
+function packVideoMsgs() {
+  return [
+    { type: "video", originalContentUrl: `${SHOP_BASE_URL}/m/pack.mp4?v=${PACK_V}`, previewImageUrl: `${SHOP_BASE_URL}/m/pack.jpg?v=${PACK_V}` },
+    { type: "text", text: "🎁 給我們一般會員跟 VIP 的專屬福利\n\n團購主資源包上線了！\n・每個系列一張有標價的宣傳圖\n・開團、結單倒數、到貨通知文案範本\n・點了直接到商城下單，自動套會員價\n\n每週更新，直接傳「資源包」三個字給我就能領👇",
+      quickReply: { items: [{ type: "action", action: { type: "message", label: "📦 領資源包", text: "資源包" } }] } },
+  ];
+}
+async function sendPackVideo(env) {
+  const done = new Set(JSON.parse((await env.SESSIONS.get("bc:memvid:done")) || "[]"));
+  const todo = (await activeMembers(env)).map((m) => m.uid).filter((u) => !done.has(u));
+  let ok = 0, err = "";
+  for (let i = 0; i < todo.length; i += 500) {
+    const part = todo.slice(i, i + 500);
+    const r = await lineApi(env, "/v2/bot/message/multicast", { to: part, messages: packVideoMsgs() });
+    if (r.ok) { ok += part.length; part.forEach((u) => done.add(u)); }
+    else { err = `${r.status}`; console.log("memvid failed", r.status, await r.text()); break; }
+  }
+  await env.SESSIONS.put("bc:memvid:done", JSON.stringify([...done]), { expirationTtl: 60 * 86400 });
+  if (!err) await env.SESSIONS.delete("bc:memvid");
+  await env.SESSIONS.put("bc:memvid:res", JSON.stringify({ at: Date.now(), ok, left: todo.length - ok, err }), { expirationTtl: 30 * 86400 });
+  return { ok, left: todo.length - ok, err };
+}
+async function memberVideoCmd(env, act) {
+  if (act === "取消") { await env.SESSIONS.delete("bc:memvid"); return "好👌 已取消會員群發（已經傳出去的收不回）"; }
+  const mem = await activeMembers(env);
+  const done = new Set(JSON.parse((await env.SESSIONS.get("bc:memvid:done")) || "[]"));
+  const left = mem.filter((m) => !done.has(m.uid));
+  if (act === "確認") {
+    if (!left.length) return `所有會員都已經收過了（共 ${mem.length} 位）`;
+    await env.SESSIONS.put("bc:memvid", "1", { expirationTtl: 14 * 86400 });
+    const r = await sendPackVideo(env);
+    if (!r.err) return `📣 已傳資源包影片給 ${r.ok} 位會員`;
+    return `📣 已傳 ${r.ok} 位，還有 ${r.left} 位沒傳到（LINE 回應 ${r.err}，${r.err === "429" ? "推播額度用完了" : "傳送失敗"}）\n系統已排隊，額度恢復後會自動補傳剩下的人，不會重複傳。要停止請回「會員群發 取消」`;
+  }
+  const vip = mem.filter((m) => m.tier === "vip").length;
+  const res = JSON.parse((await env.SESSIONS.get("bc:memvid:res")) || "null");
+  const q = await env.SESSIONS.get("bc:memvid");
+  return `📣 會員群發預覽：資源包宣傳影片\n收件人：一般會員 ${mem.length - vip} 位＋VIP ${vip} 位${done.size ? `（已收過 ${mem.length - left.length} 位，這次只傳剩下 ${left.length} 位）` : ""}\n每人 2 則訊息（影片＋說明文字），用掉 ${left.length} 則推播額度\n\n說明文字：\n————\n${packVideoMsgs()[1].text}\n————${q ? "\n⏳ 目前排隊中，額度恢復後會自動補傳" : ""}${res ? `\n上次結果：成功 ${res.ok} 位、剩 ${res.left} 位${res.err ? `（${res.err}）` : ""}` : ""}\n\n確定請回「會員群發 確認」`;
+}
 async function broadcastCommand(env, t) {
+  const mv = t.match(/^#?會員群發(?:影片)?\s*(確認|取消)?$/);
+  if (mv) return memberVideoCmd(env, mv[1]);
   const nm = t.match(/^#?新品群發\s*(確認|關|關閉|開|開啟)?$/);
   if (nm) {
     if (nm[1] && /關/.test(nm[1])) { await env.SESSIONS.put("bc:auto", "off"); return "好👌 每晚 8 點的新品自動群發已關閉，要恢復傳「新品群發 開」"; }
@@ -1843,6 +1901,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 5) { try { await computePools(env, { lineApi }); } catch (e) { console.log("pools", e); } }
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
       try { await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); }
+      if (Math.floor(hm / 5) % 12 === 7 && (await env.SESSIONS.get("bc:memvid"))) { try { await sendPackVideo(env); } catch (e) { console.log("memvid", e); } }
       const man = await env.SESSIONS.get("thr:manual");
       if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
       for (const [slot, at] of [["am", 9 * 60], ["pm", 20 * 60]]) {
@@ -1883,9 +1942,10 @@ export default {
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
     // 介紹影片（LINE 影片訊息要 https＋正確的 content-type）
-    if (url.pathname === "/m/intro.mp4" || url.pathname === "/m/intro.jpg") {
-      const mp4 = url.pathname.endsWith(".mp4");
-      const src = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/media/" + (mp4 ? "intro.mp4" : "intro_preview.jpg");
+    const mm = url.pathname.match(/^\/m\/(intro|pack)\.(mp4|jpg)$/);
+    if (mm) {
+      const mp4 = mm[2] === "mp4";
+      const src = "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/media/" + (mp4 ? mm[1] + ".mp4" : mm[1] + "_preview.jpg");
       const h = {}; const rg = request.headers.get("range"); if (rg) h.range = rg;
       const r = await fetch(src, { headers: h, cf: { cacheTtl: 86400, cacheEverything: true } });
       const hd = new Headers({ "content-type": mp4 ? "video/mp4" : "image/jpeg", "cache-control": "public, max-age=86400", "accept-ranges": "bytes" });
