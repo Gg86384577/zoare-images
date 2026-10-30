@@ -163,10 +163,10 @@ def render(html, out):
     open(js, 'w').write("""const {chromium}=require('playwright');(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1080,height:1080}});await p.goto('file://'+process.argv[2]);await p.waitForTimeout(700);await p.screenshot({path:process.argv[3],type:'jpeg',quality:86});await b.close()})();""")
     subprocess.run(['node', js, hp, out], check=True, cwd='/home/claude', env={**os.environ, 'NODE_PATH': subprocess.run(['npm', 'root', '-g'], capture_output=True, text=True).stdout.strip()})
 
-def tpl_series(kw, P, price, count):
+def tpl_series(kw, P, price, count, boxes=None):
     bg, dk, ac, lt = PAL.get(kw, DEF)
     en = {'三麗鷗': 'SANRIO', '吉伊卡哇': 'CHIIKAWA', '史努比': 'SNOOPY', '寶可夢': 'POKÉMON', '盒玩': 'MINIATURE', '角落生物': 'SUMIKKO', 'mofusand': 'MOFUSAND', '拉拉熊': 'RILAKKUMA', '哆啦A夢': 'DORAEMON', '動漫': 'ANIME'}.get(kw, 'ZOARÉ')
-    boxes = [(320, 300, 420), (50, 400, 280), (730, 390, 290), (110, 650, 210), (730, 650, 210), (450, 690, 180)]
+    boxes = boxes or [(320, 300, 420), (50, 400, 280), (730, 390, 290), (110, 650, 210), (730, 650, 210), (450, 690, 180)]
     return f'''<html><head><meta charset="utf-8"><style>{ff()}{BASE}
 body{{background:radial-gradient(circle at 70% 30%,{lt} 0,{bg} 55%,{bg} 100%)}}
 .blob{{position:absolute;border-radius:50%;filter:blur(2px)}}
@@ -189,9 +189,92 @@ body{{background:radial-gradient(circle at 70% 30%,{lt} 0,{bg} 55%,{bg} 100%)}}
 <div class="foot"><span>共 <b>{count:,}</b> 款・小量也能批</span><span>LINE 搜尋 <b>ZOARÉ</b></span></div>
 </body></html>'''
 
+# ---------- 更多系列版型（每張 4 款、留白多） ----------
+EN = {'三麗鷗': 'SANRIO', '吉伊卡哇': 'CHIIKAWA', '史努比': 'SNOOPY', '寶可夢': 'POKÉMON', '盒玩': 'MINIATURE', '角落生物': 'SUMIKKO', 'mofusand': 'MOFUSAND', '拉拉熊': 'RILAKKUMA', '哆啦A夢': 'DORAEMON', '動漫': 'ANIME'}
+def pimg(p):
+    if p['cut']: return f'<img src="file://{p["path"]}" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 10px 12px rgba(50,35,25,.18))">'
+    return f'<div style="width:100%;height:100%;background:url(\'file://{p["path"]}\') 50% 30%/cover;border-radius:inherit"></div>'
+
+def tpl_grid(kw, P, price, count):
+    """編輯風：上方大標，下面 2×2 商品卡，每張卡下有品名和價格"""
+    bg, dk, ac, lt = PAL.get(kw, DEF)
+    cards = ''
+    for p in P[:4]:
+        a, b = short(p['n'])
+        cards += f'<div class="cd"><div class="im">{pimg(p)}</div><div class="cap"><span>{a}</span><em>{b}</em></div><b>NT${p["g"]}</b></div>'
+    css = f"""body{{background:{bg}}}
+.hd{{position:absolute;left:64px;right:64px;top:50px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid {dk};padding-bottom:16px}}
+.hd h1{{font-family:round,tc;font-size:88px;color:{dk};letter-spacing:6px;line-height:1}}
+.hd .r{{text-align:right;color:{dk}}}.hd .r i{{font-family:ital,serif;font-size:34px;color:{ac};display:block}}.hd .r b{{font-family:serif;font-size:26px;letter-spacing:6px}}
+.grid{{position:absolute;left:64px;right:64px;top:196px;display:grid;grid-template-columns:1fr 1fr;gap:26px}}
+.cd{{background:{lt};border-radius:28px;padding:16px 16px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 10px 24px rgba(40,30,20,.07)}}
+.im{{width:240px;height:240px;border-radius:20px;overflow:hidden}}
+.cap{{margin-top:6px;text-align:center;line-height:1.3}}.cap span{{display:block;font-size:19px;color:#7a7168}}.cap em{{font-style:normal;font-weight:700;font-size:23px;color:{dk}}}
+.cd b{{font-family:serif;font-size:34px;color:{ac};margin-top:2px}}
+.foot{{position:absolute;left:64px;right:64px;bottom:34px;display:flex;justify-content:space-between;font-size:25px;color:{dk};letter-spacing:3px}}"""
+    return f"""<html><head><meta charset="utf-8"><style>{ff()}{BASE}{css}</style></head><body>
+<div class="hd"><h1>{kw}</h1><div class="r"><i>weekly picks</i><b>ZOARÉ</b></div></div>
+<div class="grid">{cards}</div>
+<div class="foot"><span>共 {count:,} 款・批發價 NT${price} 起</span><span>LINE 搜尋 ZOARÉ</span></div>
+</body></html>"""
+
+def tpl_arch(kw, P, price, count):
+    """精品風：深色底、香檳金拱門框，商品一字排開"""
+    gold = '#D8BE8C'
+    arches = ''
+    for i, p in enumerate(P[:4]):
+        a, b = short(p['n'])
+        arches += f'<div class="ar" style="margin-top:{[40, 0, 40, 0][i]}px"><div class="in">{pimg(p)}</div><div class="cap"><span>{a}</span><em>{b}</em><b>NT${p["g"]}</b></div></div>'
+    css = f"""body{{background:radial-gradient(circle at 50% 0%,#3A3631 0,#1E1C1A 70%)}}
+.t{{position:absolute;left:0;right:0;top:66px;text-align:center;color:{gold}}}
+.t small{{font-family:serif;font-size:28px;letter-spacing:12px;display:block}}
+.t h1{{font-family:round,tc;font-size:86px;color:#F4EDE0;letter-spacing:10px;margin-top:8px}}
+.t i{{font-family:ital,serif;font-size:34px;display:block;margin-top:2px}}
+.row{{position:absolute;left:48px;right:48px;top:350px;display:flex;justify-content:space-between}}
+.ar{{width:228px;display:flex;flex-direction:column;align-items:center}}
+.in{{width:228px;height:300px;border:3px solid {gold};border-radius:114px 114px 18px 18px;background:#F7F1E6;padding:22px 14px 14px;overflow:hidden}}
+.cap{{text-align:center;margin-top:14px;line-height:1.3}}.cap span{{display:block;font-size:19px;color:#B9AE9C}}.cap em{{display:block;font-style:normal;font-size:23px;color:#F4EDE0;font-weight:700}}.cap b{{font-family:serif;font-size:34px;color:{gold}}}
+.foot{{position:absolute;left:0;right:0;bottom:46px;text-align:center;font-size:25px;letter-spacing:5px;color:{gold}}}
+.ln{{position:absolute;left:340px;right:340px;bottom:100px;height:1px;background:{gold}88}}"""
+    return f"""<html><head><meta charset="utf-8"><style>{ff()}{BASE}{css}</style></head><body>
+<div class="t"><small>ZOARÉ</small><h1>{kw}</h1><i>{EN.get(kw, '')} collection</i></div>
+<div class="row">{arches}</div><div class="ln"></div>
+<div class="foot">共 {count:,} 款　批發價 NT${price} 起　LINE 搜尋 ZOARÉ</div>
+</body></html>"""
+
+def tpl_plate(kw, P, price, count):
+    """可愛風：彩色圓盤托著商品，波點背景、手寫英文"""
+    bg, dk, ac, lt = PAL.get(kw, DEF)
+    pos = [(60, 240), (560, 210), (100, 620), (590, 590)]
+    h = ''
+    for (x, y), p in zip(pos, P[:4]):
+        a, b = short(p['n'])
+        h += f'<div class="pl" style="left:{x}px;top:{y}px"><div class="disc"></div><div class="im">{pimg(p)}</div><div class="tg"><span>{a}</span><em>{b}</em><b>NT${p["g"]}</b></div></div>'
+    css = f"""body{{background:{bg};background-image:radial-gradient({lt} 18%,transparent 19%);background-size:48px 48px}}
+.t{{position:absolute;left:0;right:0;top:44px;text-align:center}}
+.t h1{{display:inline-block;font-family:round,tc;font-size:80px;color:#fff;background:{dk};padding:6px 44px 12px;border-radius:999px;letter-spacing:6px;transform:rotate(-2deg)}}
+.t i{{display:block;font-family:hand,ital;font-size:44px;color:{ac};margin-top:4px}}
+.pl{{position:absolute;width:420px;height:360px}}
+.disc{{position:absolute;left:30px;top:40px;width:300px;height:300px;border-radius:50%;background:{lt};border:10px solid #fff;box-shadow:0 14px 28px rgba(60,40,30,.12)}}
+.im{{position:absolute;left:45px;top:25px;width:270px;height:270px;border-radius:50%;overflow:hidden}}
+.tg{{position:absolute;left:250px;top:215px;background:#fff;border-radius:16px;padding:8px 16px;box-shadow:0 8px 16px rgba(60,40,30,.15);line-height:1.25;transform:rotate(4deg)}}
+.tg span{{display:block;font-size:18px;color:#7a7168;white-space:nowrap}}.tg em{{display:block;font-style:normal;font-weight:700;font-size:22px;color:{dk};white-space:nowrap}}.tg b{{font-family:serif;font-size:32px;color:{ac}}}
+.foot{{position:absolute;left:0;right:0;bottom:0;height:84px;background:{dk};color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 56px;font-size:26px;letter-spacing:3px}}"""
+    return f"""<html><head><meta charset="utf-8"><style>{ff()}{BASE}{css}</style></head><body>
+<div class="t"><h1>{kw}</h1><i>so cute, pick yours</i></div>{h}
+{stars(ac, [(500, 560, 34), (980, 200, 24), (40, 560, 20)])}
+<div class="foot"><span>共 {count:,} 款・批發價 NT${price} 起</span><span>LINE 搜尋 ZOARÉ</span></div>
+</body></html>"""
+
+def tpl_collage4(kw, P, price, count):
+    """拼貼風（原本的版型）改成 4 款、間距拉開"""
+    return tpl_series(kw, P[:4], price, count, boxes=[(340, 300, 390), (30, 440, 290), (770, 430, 270), (360, 690, 200)])
+
+STYLES = [tpl_grid, tpl_arch, tpl_plate, tpl_collage4]
+
 def tpl_new(brand_show, P, price, count, date):
     dk, ac, lt = '#2A2826', '#B8955A', '#FFFDF9'
-    boxes = [(80, 380, 310), (410, 360, 320), (740, 390, 280), (160, 680, 240), (470, 690, 240), (760, 690, 220)]
+    boxes = [(70, 390, 300), (400, 360, 310), (730, 400, 280), (330, 680, 230)]
     return f'''<html><head><meta charset="utf-8"><style>{ff()}{BASE}
 body{{background:#F7F2EA}}
 .grid{{position:absolute;inset:0;background-image:linear-gradient(#0000000a 1px,transparent 1px),linear-gradient(90deg,#0000000a 1px,transparent 1px);background-size:54px 54px}}
@@ -249,12 +332,13 @@ def save(key, html, P=None):
     if old and old != BANK[key]['img'] and old not in [IMGOF(v) for v in BANK.values()] and os.path.exists(os.path.join(REPO, old)): os.remove(os.path.join(REPO, old))
     print('made', key, '->', name)
 
-def make_series(kw, key=None):
+def make_series(kw, key=None, style=None):
     L = series_items(kw)
     if not L: print('no items', kw); return
-    P = choose(L[:400], 6, NOW.strftime('%Y%m%d') + kw)
+    P = choose(L[:400], 4, NOW.strftime('%Y%m%d') + kw)
     if not P: return
-    save(key or 'series:' + kw, tpl_series(kw, P, min(x['g'] for x in L), len(L)), P)
+    i = style if style is not None else int(hashlib.md5((NOW.strftime('%Y%m%d') + kw + (key or '')).encode()).hexdigest(), 16) % len(STYLES)
+    save(key or 'series:' + kw, STYLES[i](kw, P, min(x['g'] for x in L), len(L)), P)
 
 def rot_series(d):
     wk = (datetime.date(d.year, d.month, d.day) - datetime.date(2026, 1, 5)).days // 7
@@ -269,7 +353,7 @@ def daily():
     for x in LIVE:
         if x.get('ad') == today: fresh.setdefault(x.get('b') or '新品', []).append(x)
     for b, L in sorted(fresh.items(), key=lambda kv: -len(kv[1]))[:3]:
-        P = choose(L, 6)
+        P = choose(L, 4)
         if P: save(f'new:{today}:{b}', P=P, html=tpl_new(re.sub(r'^(309|Kamio|CRUX|Nakajima|T\'s Factory|J\'s Planning|A Planning|OST|森本|Marimo Craft|RE-MENT|萬代南夢宮|萬代|Bushiroad|F-toys|GPS|Ensky|Sun Arrow)\s*', '', b) or '新品', P, min(x['g'] for x in L), len(L), today))
     # 3) 結單倒數：4 天內結單的每一組，3 天／1 天／1 小時三張都先做好
     groups = {}
@@ -298,7 +382,7 @@ def daily():
 
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'daily'
-    if cmd == 'series': make_series(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
+    if cmd == 'series': make_series(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != '-' else None, int(sys.argv[4]) if len(sys.argv) > 4 else None)
     elif cmd == 'count':  # 測試用：python3 tools/promo_gen.py count 1d 吉伊卡哇
         L = series_items(sys.argv[3]); P = choose(L[:400], 4, 'x'); save('test:' + sys.argv[2], P=P, html=tpl_count(sys.argv[2], P, min(x['g'] for x in L), '2026-11-05 23:59'))
     elif cmd == 'new':
