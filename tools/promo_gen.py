@@ -394,6 +394,8 @@ if __name__ == '__main__':
     elif cmd == 'count':  # 測試用：python3 tools/promo_gen.py count 1d 吉伊卡哇
         L = series_items(sys.argv[3]); P = choose(L[:400], 4, 'x'); save('test:' + sys.argv[2], P=P, html=tpl_count(sys.argv[2], P, min(x['g'] for x in L), '2026-11-05 23:59'))
     elif cmd == 'new':
-        L = series_items(sys.argv[2]); P = choose(L[:400], 6, 'y'); save('test:new', P=P, html=tpl_new(sys.argv[2], P, min(x['g'] for x in L), len(L), NOW.strftime('%Y-%m-%d')))
+        kw = sys.argv[2]; day = sys.argv[3] if len(sys.argv) > 3 else NOW.strftime('%Y-%m-%d')
+        L = [x for x in series_items(kw) if x.get('ad') == day] or series_items(kw)
+        P = choose(L[:400], 6, 'y'); save(f'new:{day}:{kw}', P=P, html=tpl_new(kw, P, min(x['g'] for x in L), len(L), day))
     else: daily()
     json.dump(BANK, open(BANK_P, 'w'), ensure_ascii=False, indent=0)
