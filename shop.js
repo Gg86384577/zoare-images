@@ -201,7 +201,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it), m: mfrOf(it.b), ...(it.alt ? { alt: it.alt } : {}), ...(it.hid ? { hid: 1 } : {}) });
+      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", o: it.pb && it.pb.c === "CNY" ? "cn" : "jp", sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it), m: mfrOf(it.b), ...(it.alt ? { alt: it.alt } : {}), ...(it.hid ? { hid: 1 } : {}) });
   }
   out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
@@ -1360,12 +1360,15 @@ function card(x){
   '<div class="pr"><b>'+fmt(p)+'</b>'+(TIER()==="vip"&&x.v<x.g?'<s>'+fmt(x.g)+'</s>':'')+(x.box?'<span style="font-size:11px;color:#888">／個</span>':'')+'</div>'+qtyBox(x,q)+'</div></div>';
 }
 let POOL={pct:{}};
-const PZ_LEG='<div style="margin-top:6px;font-size:11.5px;line-height:1.6"><span style="background:#1f9d63;color:#fff;border-radius:999px;padding:1px 7px;font-weight:800">日本現貨</span> 日本廠商有庫存，湊單達標就能馬上向日本叫貨<br><span style="background:#7b5cd6;color:#fff;border-radius:999px;padding:1px 7px;font-weight:800">日本預購</span> 可以先下單叫貨，要到標示的時間日本才會出貨<br>※ 都不是台灣現貨，貨都是從日本叫進來</div>';
-function pre(x){if(x.mem)return null;const sh=x.sh||"";if(/^(預計|下一批)/.test(sh))return{p:1,t:"日本預購",d:sh.replace(/^預計\s*/,"").replace(/到貨|發售/,"日本出貨")};if(/預購/.test(x.st||""))return{p:1,t:"日本預購",d:"日本出貨時間待確認"};return{p:0,t:"日本現貨",d:""}}
-function pz(x){const r=pre(x);return r?'<span class="pz '+(r.p?'pre':'now')+'">'+(r.p?'日本預購｜'+esc(r.d):'日本現貨・可馬上叫貨')+'</span>':''}
-function pzF(L){const rs=L.map(pre).filter(Boolean);if(!rs.length)return"";const ps=rs.filter(r=>r.p);if(!ps.length)return'<span class="pz now">日本現貨・可馬上叫貨</span>';const ds=[...new Set(ps.map(r=>r.d))];return'<span class="pz pre">'+(ps.length<rs.length?'部分日本預購':'日本預購｜'+esc(ds.length===1?ds[0]:"依款式"))+'</span>'}
-const PZ_NOW="日本現貨：日本廠商有庫存，湊單達標就能馬上向日本叫貨（不是台灣現貨，湊滿後約 2～3 週到台灣）",PZ_PRE="日本預購：現在就能先下單叫貨，但要到標示的時間日本廠商才會出貨（不是台灣現貨）";
-function pzLine(x){const r=pre(x);return r?'<div class="pzd" style="background:'+(r.p?'#7b5cd6':'#1f9d63')+'">'+(r.p?'日本預購｜'+esc(r.d):'日本現貨・可馬上叫貨')+'</div><div style="font-size:11.5px;color:#6b6f75;margin:0 0 4px">'+(r.p?PZ_PRE:PZ_NOW)+'</div>':''}
+const PZ_LEG='<div style="margin-top:6px;font-size:11.5px;line-height:1.6"><span style="background:#1f9d63;color:#fff;border-radius:999px;padding:1px 7px;font-weight:800">日本現貨</span> 日本廠商有庫存，湊單達標就能馬上向日本叫貨<br><span style="background:#7b5cd6;color:#fff;border-radius:999px;padding:1px 7px;font-weight:800">日本預購</span> 可以先下單叫貨，要到標示的時間日本才會出貨<br>※ 都不是台灣現貨，標「日本」的從日本叫進來、標「中國」的從中國寄出</div>';
+function CO(x){return x&&x.o==="cn"?"中國":"日本"}
+function pre(x){if(x.mem)return null;const C=CO(x),sh=x.sh||"";if(/^(預計|下一批)/.test(sh))return{p:1,c:C,t:C+"預購",d:sh.replace(/^預計\s*/,"").replace(/到貨|發售/,C+"出貨")};if(/預購/.test(x.st||""))return{p:1,c:C,t:C+"預購",d:C+"出貨時間待確認"};return{p:0,c:C,t:C+"現貨",d:""}}
+function pzNow(C){return C+"現貨・從"+C+"寄出"}
+function pz(x){const r=pre(x);return r?'<span class="pz '+(r.p?'pre':'now')+'">'+(r.p?r.t+'｜'+esc(r.d):pzNow(r.c))+'</span>':''}
+function pzF(L){const rs=L.map(pre).filter(Boolean);if(!rs.length)return"";const C=rs[0].c,ps=rs.filter(r=>r.p);if(!ps.length)return'<span class="pz now">'+pzNow(C)+'</span>';const ds=[...new Set(ps.map(r=>r.d))];return'<span class="pz pre">'+(ps.length<rs.length?'部分'+C+'預購':C+'預購｜'+esc(ds.length===1?ds[0]:"依款式"))+'</span>'}
+function PZ_NOW_T(C){return C==="中國"?"中國現貨：供應商有庫存，付款後從中國出貨（不是台灣現貨，到台灣約 1～2 週）":"日本現貨：日本廠商有庫存，湊單達標就能馬上向日本叫貨（不是台灣現貨，湊滿後約 2～3 週到台灣）"}
+function PZ_PRE_T(C){return C+"預購：現在就能先下單叫貨，但要到標示的時間"+C+"廠商才會出貨（不是台灣現貨）"}
+function pzLine(x){const r=pre(x);return r?'<div class="pzd" style="background:'+(r.p?'#7b5cd6':'#1f9d63')+'">'+(r.p?r.t+'｜'+esc(r.d):pzNow(r.c))+'</div><div style="font-size:11.5px;color:#6b6f75;margin:0 0 4px">'+(r.p?PZ_PRE_T(r.c):PZ_NOW_T(r.c))+'</div>':''}
 function inPool(m){const p=POOL.pct[m]||0;return !!m&&p>0&&p<100}
 function pinSort(L){if(!Object.keys(POOL.pct||{}).length)return L;const a=[],b=[];L.forEach(x=>(!x.mem&&inPool(x.m)?a:b).push(x));a.sort((x,y)=>(POOL.pct[y.m]||0)-(POOL.pct[x.m]||0));return a.concat(b)}
 function poolBar(){let el=document.getElementById("poolbar");if(!el){el=document.createElement("div");el.id="poolbar";$("#grid").parentNode.insertBefore(el,$("#grid"))}
