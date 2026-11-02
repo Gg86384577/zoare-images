@@ -112,7 +112,7 @@ def prep(items):
     out = []
     for x in items:
         p = local(x)
-        if p: out.append({**cutout(p), 'n': x['n'], 'g': x['g'], 'k': x.get('k', '')})
+        if p: out.append({**cutout(p), 'n': x['n'], 'g': x['g'], 'k': x.get('k', ''), 'org': x.get('org') or ('cn' if (x.get('pb') or {}).get('c') == 'CNY' else 'jp')})
     return out
 
 # ---------- 版型 ----------
@@ -283,6 +283,8 @@ STYLES = [tpl_grid, tpl_arch, tpl_plate, tpl_collage4]
 def tpl_new(brand_show, P, price, count, date):
     dk, ac, lt = '#2A2826', '#B8955A', '#FFFDF9'
     boxes = [(70, 390, 300), (400, 360, 310), (730, 400, 280), (330, 680, 230)]
+    orgs = {x.get('org', 'jp') for x in P}
+    badge = {'jp': '日本正版', 'kr': '韓國正版', 'cn': '現貨直送'}[orgs.pop()] if len(orgs) == 1 else '現貨直送'
     return f'''<html><head><meta charset="utf-8"><style>{ff()}{BASE}
 body{{background:#F7F2EA}}
 .grid{{position:absolute;inset:0;background-image:linear-gradient(#0000000a 1px,transparent 1px),linear-gradient(90deg,#0000000a 1px,transparent 1px);background-size:54px 54px}}
@@ -298,7 +300,7 @@ body{{background:#F7F2EA}}
 </style></head><body><div class="grid"></div>
 <div class="new">New<em>!</em><br><span style="font-size:124px">arrivals</span></div>
 <div class="stamp"><small>{date[5:].replace('-', '/')}</small><b>新品上市</b><small>{count} 款上架</small></div>
-<div class="sub">{brand_show}<span>日本正版</span></div>
+<div class="sub">{brand_show}<span>{badge}</span></div>
 {prod_html(P, boxes, ac)}
 {stars(ac, [(640, 230, 30), (980, 560, 22), (60, 600, 20)])}
 <div class="wm">{LOGO("dark", 32)}</div><div class="price">批發價 NT${price} 起</div>
