@@ -93,7 +93,7 @@ def cutout(p):
 PREF = re.compile('絨毛|娃娃|玩偶|公仔|吊飾|抱枕|盒玩|figure|ぬいぐるみ')
 def choose(L, n=6, seed=''):
     """從一組商品挑出最上相的 n 款：白底能去背的優先、絨毛公仔優先、同款式不重複"""
-    C = [x for x in L if local(x)]
+    C = [x for x in L if local(x) and not x.get('wm')]
     if seed: random.Random(seed).shuffle(C)
     C = C[:60]
     scored = []
