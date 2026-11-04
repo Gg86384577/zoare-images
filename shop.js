@@ -387,9 +387,9 @@ export async function handleShop(request, env, ctx, deps) {
     if (badQ.length) return Response.json({ ok: false, error: "下列商品數量需為起批數或起批數的倍數，請調整後再送出：\n" + badQ.slice(0, 8).map((l) => `・${l.n}：${l.q} 件 → 請改成 ${fixQty(l, tier, l.q)} 件`).join("\n") }, { status: 400 });
     const f = body.form || {};
     const clean = (s, n = 100) => String(s || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
-    const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: clean(f.ship, 20), addr: clean(f.addr, 150), note: clean(f.note, 300), pay: f.pay === "LINE Pay" ? "LINE Pay" : "轉帳" };
+    const form = { name: clean(f.name, 40), phone: clean(f.phone, 20), ship: "7-11 賣貨便", addr: clean(f.addr, 150), note: clean(f.note, 300), pay: f.pay === "LINE Pay" ? "LINE Pay" : "轉帳" };
     if (lines.every((l) => l.mem)) { form.name = form.name || "會員方案"; form.phone = form.phone || "-"; form.ship = "免寄送"; form.addr = form.addr || "-"; }
-    if (!form.name || !form.phone || !form.ship || !form.addr) return Response.json({ ok: false, error: "請填寫收件人、電話、寄送方式與門市／地址" }, { status: 400 });
+    if (!form.name || !form.phone || !form.ship || !form.addr) return Response.json({ ok: false, error: "請填寫收件人、電話與 7-11 取貨門市" }, { status: 400 });
     const sumAll = lines.reduce((a, l) => a + l.sub, 0);
     const qty = lines.reduce((a, l) => a + l.q, 0);
     const d = new Date(Date.now() + 8 * 3600e3);
@@ -965,9 +965,9 @@ async function shipPart(env, deps, id, rest) {
   const sc = await shipCoupons(env, o.uid);
   const items = o.lines.filter((l) => !l.mem && group.includes(l.m || mfrOf(l.b)));
   const pend = fee.intl === null;
-  const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : ms.length > group.length ? "最後一批商品出貨囉！" : "出貨囉！"}\n${ms.length > 1 ? "廠商：" + group.join("、") + "\n" : ""}${items.slice(0, 15).map((l) => `・${l.n} ×${l.q}`).join("\n")}${items.length > 15 ? `\n…共 ${items.length} 款` : ""}${track ? (/店到店|超商/.test(o.form.ship || "") ? `\n\n📮 ${(o.form.ship || "").replace(/\s*店到店/, "")}寄件代碼：${track}\n🏪 取貨門市：${o.form.addr}\n到店後會收到簡訊，請帶證件 7 天內取貨` : "\n物流單號：" + track) : ""}\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : pend ? "依物流公司報價，確定後另外通知您" : "NT$" + fee.intl.toLocaleString()}${due ? `\n本次運費${pend ? "（目前）" : ""}合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}${left.length ? `\n\n其他廠商的商品（${left.join("、")}）到貨後會再寄出，可以傳「我的訂單」查看進度～` : ""}`;
+  const msg = `🚚 您的訂單 ${id} ${left.length ? "有商品先出貨囉！" : ms.length > group.length ? "最後一批商品出貨囉！" : "出貨囉！"}\n${ms.length > 1 ? "廠商：" + group.join("、") + "\n" : ""}${items.slice(0, 15).map((l) => `・${l.n} ×${l.q}`).join("\n")}${items.length > 15 ? `\n…共 ${items.length} 款` : ""}${track ? `\n\n📮 7-11 賣貨便寄件代碼：${track}\n🏪 取貨門市：${o.form.addr}\n到店後會收到簡訊，請帶證件 7 天內取貨` : ""}\n\n本次運費\n・國內：${domCp ? "已用國內運費券折抵 ✅" : "NT$" + SHIP_DOM}\n・國際：${intlCp ? "已用國際運費券折抵 ✅" : pend ? "依物流公司報價，確定後另外通知您" : "NT$" + fee.intl.toLocaleString()}${due ? `\n本次運費${pend ? "（目前）" : ""}合計 NT$${due.toLocaleString()}，客服會跟您確認付款～` : ""}\n${shipCouponLine(sc)}${left.length ? `\n\n其他廠商的商品（${left.join("、")}）到貨後會再寄出，可以傳「我的訂單」查看進度～` : ""}`;
   const sent = await pushTo(deps, env, o.uid, msg);
-  return `好👌 ${id}「${group.join("、")}」已標記出貨${track ? "（物流單號 " + track + "）" : ""}\n運費：國內 ${domCp ? "用券" : "NT$" + SHIP_DOM}・國際 ${intlCp ? "用券" : pend ? "❓待填" : "NT$" + fee.intl}${due ? `，目前要跟客人收 NT$${due}` : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}${pend ? `\n\n❓ 這次國際運費要收多少？請回覆：\n${id} 國際運費 金額\n例如：${id} 國際運費 440` : ""}`;
+  return `好👌 ${id}「${group.join("、")}」已標記出貨${track ? "（賣貨便寄件代碼 " + track + "）" : ""}\n運費：國內 ${domCp ? "用券" : "NT$" + SHIP_DOM}・國際 ${intlCp ? "用券" : pend ? "❓待填" : "NT$" + fee.intl}${due ? `，目前要跟客人收 NT$${due}` : ""}${left.length ? "\n還沒出貨：" + left.join("、") : "\n整張訂單都出貨了，狀態改成「已出貨」"}${sent ? "\n已通知客人" : ""}${pend ? `\n\n❓ 這次國際運費要收多少？請回覆：\n${id} 國際運費 金額\n例如：${id} 國際運費 440` : ""}`;
 }
 async function setIntlFee(env, deps, id, amt, mName) {
   const o = JSON.parse((await env.SESSIONS.get("o:" + id)) || "null");
@@ -1003,10 +1003,10 @@ export async function shopOwnerCommand(env, text, deps = {}) {
   const crm = text.match(/^購物車提醒\s*(全部|U[0-9a-f]{32})$/);
   if (crm) { const n = await runCartReminders(env, deps, { force: true, uid: crm[1] === "全部" ? "" : crm[1] }); return n ? `好👌 已發購物車結帳提醒給 ${n} 位客人` : "目前沒有可以提醒的購物車"; }
   if (/^購物車提醒\s*(開|關|開啟|關閉)$/.test(text)) { const off = /關/.test(text); await env.SESSIONS.put("cartremind", off ? "off" : "on"); return off ? "好👌 已關閉購物車提醒" : "好👌 已開啟購物車提醒：客人放了 6 小時沒結帳，會在 11:00～21:00 傳一則提醒（每次只提醒一次）"; }
-  // 批次出貨：一行一張「ZO訂單編號 交貨便代碼／物流單號 [國際N]」，已到貨的商品一起寄
+  // 批次出貨：一行一張「ZO訂單編號 賣貨便寄件代碼 [國際N]」，已到貨的商品一起寄
   if (/^批次出貨/.test(text.trim())) {
     const rows = text.trim().replace(/^批次出貨[：:]?\s*/, "").split(/\n+/).map((x) => x.trim()).filter(Boolean).slice(0, 80);
-    if (!rows.length) return "格式：\n批次出貨\nZO261030ABCD E63045678901\nZO261030EFGH E63045678902 國際220\n（一行一張訂單：訂單編號、交貨便代碼或物流單號，要收國際運費就加「國際金額」）";
+    if (!rows.length) return "格式：\n批次出貨\nZO261030ABCD E63045678901\nZO261030EFGH E63045678902 國際220\n（一行一張訂單：訂單編號、7-11 賣貨便寄件代碼，要收國際運費就加「國際金額」）";
     const ok = [], bad = [];
     for (const r of rows) {
       const m = r.match(/^(ZO\w{10})[\s,，、]+(.*)$/i);
@@ -1474,8 +1474,8 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   cpHTML+'<div class="tot">共 '+L.length+' 款 '+n+' 件<br>'+(sel?'小計 '+fmt(sum0)+'　🎟 折抵 −'+fmt(sel.amt)+'<br>':'')+'合計 <b>'+fmt(total)+'</b>（'+esc(TN[TIER()])+'價）'+(TIER()!==ME.tier?'<br><small style="color:#9e1b1b">🎉 購物車有會員方案，送出後自動升級為'+TN[TIER()]+'，這張訂單直接套用會員價</small>':'')+'<br><small style="color:#6b6f75">運費：依廠商分批寄出，每次出貨國內 NT$60，國際運費依物流報價（約每公斤 NT$220）'+(ME.sc&&TIER()===ME.tier?'<br>'+esc(scLine(ME.sc)):'<br>會員每月送運費券：一般會員 5 張國內、VIP 10 張國內＋10 張國際')+'</small></div>'+
   '<form id="of">'+(L.every(l=>l.x.mem)?'<div class="camp">只有會員方案，不用填收件資料，選好付款方式就能送出👌</div><input type="hidden" name="name" value="會員方案"><input type="hidden" name="phone" value="-"><input type="hidden" name="ship" value="免寄送"><input type="hidden" name="addr" value="-">':'<label>收件人姓名</label><input class="f" name="name" required value="'+esc(form.name||"")+'">'+
   '<label>手機號碼</label><input class="f" name="phone" type="tel" required value="'+esc(form.phone||"")+'">'+
-  '<label>寄送方式</label><select class="f" name="ship" required>'+["7-11 店到店","全家店到店","萊爾富店到店","宅配","其他"].map(s=>'<option'+(form.ship===s?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
-  '<label>門市名稱／收件地址</label><input class="f" name="addr" required value="'+esc(form.addr||"")+'">')+
+  '<label>寄送方式</label><div class="camp" style="margin:0 0 6px">🏪 7-11 賣貨便（統一用 7-11 取貨，到店後會收到簡訊）</div><input type="hidden" name="ship" value="7-11 賣貨便">'+
+  '<label>7-11 取貨門市（門市名稱或店號，例如：台北信義門市／123456）</label><input class="f" name="addr" required placeholder="例：中山門市 或 店號 123456" value="'+esc(form.addr||"")+'">')+
   '<label>付款方式</label><div class="pays">'+["轉帳","LINE Pay"].map(p=>'<label class="pay"><input type="radio" name="pay" value="'+p+'"'+((form.pay||"轉帳")===p?" checked":"")+'><span>'+(p==="轉帳"?"🏦 銀行轉帳":"💚 LINE Pay")+'</span></label>').join("")+'</div>'+
   '<label>備註（選填）</label><textarea class="f" name="note" rows="2"></textarea>'+
   '<button class="go" id="go">送出訂單</button></form>';
@@ -1988,7 +1988,8 @@ ${link}
 ・湊滿時會用 LINE 問您要這批出貨還是順延（想等其他廠商一起寄可以選順延）
 ・一張訂單有多家廠商時，哪家先到貨就先寄哪家
 
-━━ 運費 ━━
+━━ 運費／寄送 ━━
+・一律用 7-11 賣貨便寄出（下單時填 7-11 取貨門市）
 ・每次出貨國內運費 NT$60，國際運費依物流公司報價（約每公斤 NT$220）
 ・會員每月送運費券，出貨時自動折抵
 👉 想少量多樣進貨，加入會員最划算
