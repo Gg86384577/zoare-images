@@ -712,6 +712,23 @@ async function handleEvent(env, ev) {
     try { await rememberName(env, uid); } catch (e) {}
     return reply(env, ev.replyToken, await welcomeMessages(env, uid, name));
   }
+  // 群組／多人聊天室：只處理「#上架群組」綁定，其他訊息一律不回（避免在群裡亂回客人）
+  if (ev.source && ev.source.type && ev.source.type !== "user") {
+    const gid = ev.source.groupId || ev.source.roomId;
+    if (!gid || !env.SESSIONS) return;
+    if (ev.type === "join") {
+      const owner = await env.SESSIONS.get("owner");
+      if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: "我被加進一個群組了👋 如果那是「ZOARÉ 批發 定期上架」群，請你在群組裡傳一句「#上架群組」，之後新型錄、宣傳圖、文案就會自動貼到那裡" }] });
+      return;
+    }
+    if (ev.type === "message" && ev.message && ev.message.type === "text" && /^#?上架群組$/.test(ev.message.text.trim()) && ev.replyToken) {
+      const owner = await env.SESSIONS.get("owner");
+      if (!owner || ev.source.userId !== owner) return reply(env, ev.replyToken, [{ type: "text", text: "這個指令只有老闆本人能用喔" }]);
+      await env.SESSIONS.put("postgrp", gid);
+      return reply(env, ev.replyToken, [{ type: "text", text: "✅ 這個群組已設為「ZOARÉ 批發 定期上架」\n之後有新品更新，型錄、宣傳圖、文案會自動貼到這裡" }]);
+    }
+    return;
+  }
   if (ev.type !== "message" || !ev.replyToken) return;
   const uid = ev.source && ev.source.userId;
   const msg = ev.message;
@@ -1237,6 +1254,27 @@ async function sendPackVideo(env) {
   if (!err) await env.SESSIONS.delete("bc:memvid");
   await env.SESSIONS.put("bc:memvid:res", JSON.stringify({ at: Date.now(), ok, left: todo.length - ok, err }), { expirationTtl: 30 * 86400 });
   return { ok, left: todo.length - ok, err };
+}
+// 定期上架：repo 的 post/latest.json 有新 id 就自動貼到綁定的群組（文案 → 圖片（每則最多 5 張）→ 型錄 PDF 連結）
+async function runGroupPost(env) {
+  const gid = await env.SESSIONS.get("postgrp");
+  if (!gid) return;
+  const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/post/latest.json?t=" + Math.floor(Date.now() / 300000), { cf: { cacheTtl: 0 } });
+  if (!r.ok) return;
+  const post = await r.json();
+  if (!post || !post.id || post.id === (await env.SESSIONS.get("post:done"))) return;
+  const msgs = [];
+  if (post.text) msgs.push({ type: "text", text: post.text });
+  for (const im of (post.images || []).slice(0, 10)) msgs.push({ type: "image", originalContentUrl: im, previewImageUrl: im });
+  if (post.pdf) msgs.push({ type: "text", text: `📄 型錄 PDF：${SHOP_BASE_URL}/f/${encodeURIComponent(post.pdf)}` });
+  if (post.tail) msgs.push({ type: "text", text: post.tail });
+  for (let i = 0; i < msgs.length; i += 5) {
+    const res = await lineApi(env, "/v2/bot/message/push", { to: gid, messages: msgs.slice(i, i + 5) });
+    if (!res.ok) { console.log("grouppost", res.status, await res.text()); return; }
+  }
+  await env.SESSIONS.put("post:done", post.id);
+  const owner = await env.SESSIONS.get("owner");
+  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 已貼到「定期上架」群：${post.title || post.id}` }] });
 }
 async function memberVideoCmd(env, act) {
   if (act === "取消") { await env.SESSIONS.delete("bc:memvid"); return "好👌 已取消會員群發（已經傳出去的收不回）"; }
@@ -1902,6 +1940,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
       try { await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); }
       if (Math.floor(hm / 5) % 12 === 7 && (await env.SESSIONS.get("bc:memvid"))) { try { await sendPackVideo(env); } catch (e) { console.log("memvid", e); } }
+      try { await runGroupPost(env); } catch (e) { console.log("grouppost", e); }
       const man = await env.SESSIONS.get("thr:manual");
       if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
       for (const [slot, at] of [["am", 9 * 60], ["pm", 20 * 60]]) {
@@ -1942,6 +1981,13 @@ export default {
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
     // 介紹影片（LINE 影片訊息要 https＋正確的 content-type）
+    const fm = url.pathname.match(/^\/f\/([A-Za-z0-9_\-\u4e00-\u9fff\u00c0-\u024f]+\.(pdf|jpg|png|mp4))$/);
+    if (fm) {
+      const ct = { pdf: "application/pdf", jpg: "image/jpeg", png: "image/png", mp4: "video/mp4" }[fm[2]];
+      const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/post/" + encodeURIComponent(fm[1]), { cf: { cacheTtl: 3600, cacheEverything: true } });
+      if (!r.ok) return new Response("not found", { status: 404 });
+      return new Response(r.body, { status: 200, headers: { "content-type": ct, "cache-control": "public, max-age=3600", "content-disposition": "inline; filename*=UTF-8''" + encodeURIComponent(fm[1]) } });
+    }
     const mm = url.pathname.match(/^\/m\/(intro|pack)\.(mp4|jpg)$/);
     if (mm) {
       const mp4 = mm[2] === "mp4";
