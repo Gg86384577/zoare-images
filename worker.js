@@ -1273,8 +1273,27 @@ async function runGroupPost(env) {
     if (!res.ok) { console.log("grouppost", res.status, await res.text()); return; }
   }
   await env.SESSIONS.put("post:done", post.id);
+  let thr = "";
+  if (post.threads && (await env.SESSIONS.get("thr:tok"))) { try { thr = await postThreadsCarousel(env, post.threads, (post.images || []).slice(0, 10)); } catch (e) { thr = "❌ Threads：" + e.message; } }
   const owner = await env.SESSIONS.get("owner");
-  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 已貼到「定期上架」群：${post.title || post.id}` }] });
+  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 已貼到「定期上架」群：${post.title || post.id}${thr ? "\n" + thr : ""}` }] });
+}
+// Threads：1 張用單圖、2 張以上用輪播（最多 10 張）
+async function postThreadsCarousel(env, text, images) {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const pub = async (cid) => { let b = await thrPost(env, "me/threads_publish", { creation_id: cid }); if (!b.id) { await wait(6000); b = await thrPost(env, "me/threads_publish", { creation_id: cid }); } return b; };
+  text = String(text).slice(0, 490);
+  let a;
+  if (images.length >= 2) {
+    const kids = [];
+    for (const im of images) { const c = await thrPost(env, "me/threads", { media_type: "IMAGE", image_url: im, is_carousel_item: "true" }); if (c.id) kids.push(c.id); }
+    if (kids.length >= 2) { await wait(5000); a = await thrPost(env, "me/threads", { media_type: "CAROUSEL", children: kids.join(","), text }); }
+  }
+  if (!a || !a.id) a = await thrPost(env, "me/threads", images[0] ? { media_type: "IMAGE", image_url: images[0], text } : { media_type: "TEXT", text });
+  if (!a.id) return "❌ Threads 建立失敗：" + ((a.error && a.error.message) || "未知錯誤");
+  await wait(5000);
+  const b = await pub(a.id);
+  return b.id ? "✅ Threads 也發了（@zoare_2504）" : "❌ Threads 發佈失敗：" + ((b.error && b.error.message) || "未知錯誤");
 }
 async function memberVideoCmd(env, act) {
   if (act === "取消") { await env.SESSIONS.delete("bc:memvid"); return "好👌 已取消會員群發（已經傳出去的收不回）"; }
