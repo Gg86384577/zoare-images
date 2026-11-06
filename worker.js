@@ -1257,13 +1257,15 @@ async function sendPackVideo(env) {
 }
 // 定期上架：repo 的 post/latest.json 有新 id 就自動貼到綁定的群組（文案 → 圖片（每則最多 5 張）→ 型錄 PDF 連結）
 async function runGroupPost(env) {
-  const gid = await env.SESSIONS.get("postgrp");
+  const owner = await env.SESSIONS.get("owner");
+  const gid = (await env.SESSIONS.get("postgrp")) || owner; // 社群機器人進不去 → 整包傳給老闆，長按轉傳到社群
   if (!gid) return;
   const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/post/latest.json?t=" + Math.floor(Date.now() / 300000), { cf: { cacheTtl: 0 } });
   if (!r.ok) return;
   const post = await r.json();
   if (!post || !post.id || post.id === (await env.SESSIONS.get("post:done"))) return;
   const msgs = [];
+  if (gid === owner) msgs.push({ type: "text", text: `👇 新一篇「定期上架」素材（${post.title || post.id}）\n下面每一則長按 → 轉傳 → 選「ZOARÉ 批發 定期上架」社群就好` });
   if (post.text) msgs.push({ type: "text", text: post.text });
   for (const im of (post.images || []).slice(0, 10)) msgs.push({ type: "image", originalContentUrl: im, previewImageUrl: im });
   if (post.pdf) msgs.push({ type: "text", text: `📄 型錄 PDF：${SHOP_BASE_URL}/f/${encodeURIComponent(post.pdf)}` });
@@ -1275,8 +1277,7 @@ async function runGroupPost(env) {
   await env.SESSIONS.put("post:done", post.id);
   let thr = "";
   if (post.threads && (await env.SESSIONS.get("thr:tok"))) { try { thr = await postThreadsCarousel(env, post.threads, (post.images || []).slice(0, 10)); } catch (e) { thr = "❌ Threads：" + e.message; } }
-  const owner = await env.SESSIONS.get("owner");
-  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📣 已貼到「定期上架」群：${post.title || post.id}${thr ? "\n" + thr : ""}` }] });
+  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: (gid === owner ? `📣 素材已傳給你，記得轉傳到社群：${post.title || post.id}` : `📣 已貼到「定期上架」群：${post.title || post.id}`) + (thr ? "\n" + thr : "") }] });
 }
 // Threads：1 張用單圖、2 張以上用輪播（最多 10 張）
 async function postThreadsCarousel(env, text, images) {
