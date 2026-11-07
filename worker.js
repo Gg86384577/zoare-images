@@ -2053,7 +2053,7 @@ export default {
     if (url.pathname === "/xfer") {
       // 內部用：把 repo post/ 的檔案以 Blob 丟回 opener（瀏覽器端上傳用）
       const names = (url.searchParams.get("f") || "").split(",").filter((x) => /^[\w\-\u4e00-\u9fff]+\.(jpg|png|mp4|pdf)$/.test(x));
-      const html = `<!doctype html><meta charset=utf-8><body>xfer…<script>(async()=>{const out=[];for(const n of ${JSON.stringify(names)}){const r=await fetch('/f/'+encodeURIComponent(n));out.push({name:n,blob:await r.blob()});}if(window.opener){window.opener.postMessage({zoXfer:out},'*');document.body.textContent='done '+out.length;}})()</script>`;
+      const html = `<!doctype html><meta charset=utf-8><body>xfer…<script>(async()=>{const out=[];for(const n of ${JSON.stringify(names)}){const r=await fetch('/f/'+encodeURIComponent(n));out.push({name:n,blob:await r.blob()});}const tgt=window.opener||(window.parent!==window?window.parent:null);if(tgt){tgt.postMessage({zoXfer:out},'*');document.body.textContent='done '+out.length;}})()</script>`;
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }
     const fm = url.pathname.match(/^\/f\/([A-Za-z0-9_\-\u4e00-\u9fff\u00c0-\u024f]+\.(pdf|jpg|png|mp4))$/);
