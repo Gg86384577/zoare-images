@@ -2050,6 +2050,12 @@ export default {
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
     // 公開推廣連結：/go?q=小丸子 → 打開 LINE 官方帳號聊天室並帶入關鍵字，客人按送出就收到商品卡片（含個人下單按鈕）
     // 介紹影片（LINE 影片訊息要 https＋正確的 content-type）
+    if (url.pathname === "/xfer") {
+      // 內部用：把 repo post/ 的檔案以 Blob 丟回 opener（瀏覽器端上傳用）
+      const names = (url.searchParams.get("f") || "").split(",").filter((x) => /^[\w\-\u4e00-\u9fff]+\.(jpg|png|mp4|pdf)$/.test(x));
+      const html = `<!doctype html><meta charset=utf-8><body>xfer…<script>(async()=>{const out=[];for(const n of ${JSON.stringify(names)}){const r=await fetch('/f/'+encodeURIComponent(n));out.push({name:n,blob:await r.blob()});}if(window.opener){window.opener.postMessage({zoXfer:out},'*');document.body.textContent='done '+out.length;}})()</script>`;
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
     const fm = url.pathname.match(/^\/f\/([A-Za-z0-9_\-\u4e00-\u9fff\u00c0-\u024f]+\.(pdf|jpg|png|mp4))$/);
     if (fm) {
       const ct = { pdf: "application/pdf", jpg: "image/jpeg", png: "image/png", mp4: "video/mp4" }[fm[2]];
