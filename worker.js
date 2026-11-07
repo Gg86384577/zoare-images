@@ -1296,6 +1296,52 @@ async function postThreadsCarousel(env, text, images) {
   const b = await pub(a.id);
   return b.id ? "✅ Threads 也發了（@zoare_2504）" : "❌ Threads 發佈失敗：" + ((b.error && b.error.message) || "未知錯誤");
 }
+// 圖文群發：repo post/bc.json {id,text,image,tail} → 所有有效會員（VIP＋一般），額度不夠自動排隊補傳
+async function fetchBcPost() {
+  const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/post/bc.json?t=" + Math.floor(Date.now() / 60000), { cf: { cacheTtl: 0 } });
+  if (!r.ok) return null; const p = await r.json(); return p && p.id ? p : null;
+}
+function bcPostMsgs(post) {
+  const m = [];
+  if (post.image) m.push({ type: "image", originalContentUrl: post.image, previewImageUrl: post.preview || post.image });
+  if (post.text) m.push({ type: "text", text: post.text, quickReply: { items: [{ type: "action", action: { type: "message", label: "🛍 看全部新品", text: post.kw || "新品" } }] } });
+  if (post.tail) m.push({ type: "text", text: post.tail });
+  return m.slice(0, 5);
+}
+async function sendBcPost(env, post) {
+  const K = "bc:post:" + post.id;
+  const done = new Set(JSON.parse((await env.SESSIONS.get(K + ":done")) || "[]"));
+  const todo = (await activeMembers(env)).map((m) => m.uid).filter((u) => !done.has(u));
+  let ok = 0, err = "";
+  for (let i = 0; i < todo.length; i += 500) {
+    const part = todo.slice(i, i + 500);
+    const r = await lineApi(env, "/v2/bot/message/multicast", { to: part, messages: bcPostMsgs(post) });
+    if (r.ok) { ok += part.length; part.forEach((u) => done.add(u)); }
+    else { err = `${r.status}`; console.log("bcpost failed", r.status, await r.text()); break; }
+  }
+  await env.SESSIONS.put(K + ":done", JSON.stringify([...done]), { expirationTtl: 60 * 86400 });
+  if (!err) await env.SESSIONS.delete("bc:post");
+  return { ok, left: todo.length - ok, err };
+}
+async function bcPostCmd(env, act) {
+  if (act === "取消") { await env.SESSIONS.delete("bc:post"); return "好👌 已取消圖文群發（已經傳出去的收不回）"; }
+  const post = await fetchBcPost();
+  if (!post) return "目前沒有準備好的圖文群發內容";
+  const mem = await activeMembers(env);
+  const done = new Set(JSON.parse((await env.SESSIONS.get("bc:post:" + post.id + ":done")) || "[]"));
+  const left = mem.filter((m) => !done.has(m.uid));
+  if (act === "確認") {
+    if (!left.length) return `所有會員都已經收過這篇了（共 ${mem.length} 位）`;
+    await env.SESSIONS.put("bc:post", post.id, { expirationTtl: 14 * 86400 });
+    const r = await sendBcPost(env, post);
+    if (!r.err) return `📣 已傳「${post.title || post.id}」給 ${r.ok} 位會員`;
+    return `📣 已傳 ${r.ok} 位，還有 ${r.left} 位沒傳到（LINE 回應 ${r.err}，${r.err === "429" ? "推播額度用完了" : "傳送失敗"}）\n系統已排隊，額度恢復後會自動補傳，不會重複傳。要停止請回「圖文群發 取消」`;
+  }
+  const owner = await env.SESSIONS.get("owner");
+  if (owner) await lineApi(env, "/v2/bot/message/push", { to: owner, messages: bcPostMsgs(post) });
+  const vip = mem.filter((m) => m.tier === "vip").length;
+  return `📣 圖文群發預覽：${post.title || post.id}\n上面就是會員會收到的內容（${bcPostMsgs(post).length} 則）\n收件人：一般會員 ${mem.length - vip} 位＋VIP ${vip} 位${done.size ? `（已收過 ${mem.length - left.length} 位，這次只傳剩下 ${left.length} 位）` : ""}\n\n確定要發回「圖文群發 確認」`;
+}
 async function memberVideoCmd(env, act) {
   if (act === "取消") { await env.SESSIONS.delete("bc:memvid"); return "好👌 已取消會員群發（已經傳出去的收不回）"; }
   const mem = await activeMembers(env);
@@ -1316,6 +1362,8 @@ async function memberVideoCmd(env, act) {
 async function broadcastCommand(env, t) {
   const mv = t.match(/^#?會員群發(?:影片)?\s*(確認|取消)?$/);
   if (mv) return memberVideoCmd(env, mv[1]);
+  const bp = t.match(/^#?圖文群發\s*(確認|取消|預覽)?$/);
+  if (bp) return bcPostCmd(env, bp[1]);
   const nm = t.match(/^#?新品群發\s*(確認|關|關閉|開|開啟)?$/);
   if (nm) {
     if (nm[1] && /關/.test(nm[1])) { await env.SESSIONS.put("bc:auto", "off"); return "好👌 每晚 8 點的新品自動群發已關閉，要恢復傳「新品群發 開」"; }
@@ -1960,6 +2008,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
       try { await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); }
       if (Math.floor(hm / 5) % 12 === 7 && (await env.SESSIONS.get("bc:memvid"))) { try { await sendPackVideo(env); } catch (e) { console.log("memvid", e); } }
+      if (Math.floor(hm / 5) % 12 === 9 && (await env.SESSIONS.get("bc:post"))) { try { const p = await fetchBcPost(); if (p && p.id === (await env.SESSIONS.get("bc:post"))) await sendBcPost(env, p); } catch (e) { console.log("bcpost", e); } }
       try { await runGroupPost(env); } catch (e) { console.log("grouppost", e); }
       const man = await env.SESSIONS.get("thr:manual");
       if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
