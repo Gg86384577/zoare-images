@@ -17,8 +17,8 @@ const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
 const BUILD_TAG = "promo-3";
-const CATALOG_VERSION = "20261107-2335";
-const CATALOG_SHA = "c5c73d8680241927c9c3148d4c070045805e4d2b"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
+const CATALOG_VERSION = "20261109-0940";
+const CATALOG_SHA = "bd932f70cbd4c49da949696e05e0edd4b833cf8d"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
