@@ -409,6 +409,22 @@ async function claude(env, system, messages, maxTokens = 2500, model) {
   const data = await r.json();
   return (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
 }
+// ChatGPT（OpenAI API）寫文案；沒設 OPENAI_API_KEY 或失敗就退回 Claude
+async function gptText(env, system, user, maxTokens = 900) {
+  if (!env.OPENAI_API_KEY) throw new Error("no OPENAI_API_KEY");
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { authorization: "Bearer " + env.OPENAI_API_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ model: env.OPENAI_TEXT_MODEL || "gpt-4o", max_tokens: maxTokens, temperature: 0.9, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+  });
+  if (!r.ok) throw new Error("openai " + r.status + " " + (await r.text()).slice(0, 200));
+  const d = await r.json();
+  return ((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "").trim();
+}
+async function copyWriter(env, system, user, maxTokens = 900) {
+  try { const t = await gptText(env, system, user, maxTokens); if (t) return t; } catch (e) { console.log("gpt copy fallback", String(e).slice(0, 120)); }
+  return claude(env, system, [{ role: "user", content: user }], maxTokens);
+}
 function parseJson(text) {
   // 新格式：純文字 + 最後的 #SHOW / #HANDOFF 控制行
   let t = (text || "").trim();
@@ -1748,10 +1764,11 @@ async function promoCopy(env, ev) {
 「LINE 搜尋 ZOARÉ」下單
 空一行後放 3～5 個 #hashtag
 【THREADS】1～2 句、80 字內，像真人隨手發，可以提 1～2 款和價格
+寫法：第一行要有畫面或情境（例如「包包上掛這隻，走到哪被問到哪」），不要寫「逛起來超有感」「任你挑」「必收」這種空話；每款商品可以補 3～6 字的賣點（材質、尺寸、用途）；最後一句講給小賣家聽（好出、好搭、聖誕檔、交換禮物等）。
 規則：繁體中文；口語自然不要有 AI 感；表情符號最多 3 個；不提廠商名、品牌代理、進價、折數、人民幣；不要寫保證、最便宜；價格只能用我給的數字。
 這則的重點：${tone}${ev.dl ? `；結單時間 ${ev.dl}` : ""}。`;
   const user = `類型：${ev.title}${ev.series ? "（" + ev.series + "）" : ""}${ev.count ? `，這個系列共 ${ev.count} 款` : ""}\n商品：\n${ev.items.map((x) => `・${x.n}　NT$${x.g}`).join("\n")}`;
-  const out = (await claude(env, sys, [{ role: "user", content: user }], 900)).replace(/\\n/g, "\n");
+  const out = (await copyWriter(env, sys, user, 900)).replace(/\\n/g, "\n");
   const sec = (name) => { const m = out.match(new RegExp("【" + name + "】\\s*([\\s\\S]*?)(?=\\n?【(?:標題|FB|THREADS)】|$)")); return m ? m[1].trim() : ""; };
   let copy = sec("FB"), threads = sec("THREADS"), headline = sec("標題");
   if (!copy) copy = out.replace(/【[^】]+】/g, "").trim();
@@ -2026,7 +2043,7 @@ export default {
   },
   async fetch(request, env, ctx) {
     // 去掉金鑰前後不小心多貼的空白或換行
-    for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL", "THREADS_APP_SECRET", "OPENAI_API_KEY", "OPENAI_IMAGE_MODEL"])
+    for (const k of ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "ANTHROPIC_API_KEY", "CATALOG_URL", "MODEL", "THREADS_APP_SECRET", "OPENAI_API_KEY", "OPENAI_IMAGE_MODEL", "OPENAI_TEXT_MODEL"])
       if (typeof env[k] === "string") env[k] = env[k].trim();
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/check") {
