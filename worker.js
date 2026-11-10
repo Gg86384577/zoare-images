@@ -1804,7 +1804,8 @@ async function promoRun(env) {
     const be = bank[bk] || bank["series:" + (ev.series || "")];
     const bimg = be ? (typeof be === "string" ? be : be.img) : "";
     if (be && be.items && be.items.length) ev.items = be.items; // 文案用圖上的同一批商品和價格
-    const c = await promoCopy(env, ev);
+    // 圖庫裡若已放 ChatGPT 寫好的文案（copy / threads / headline），直接用，不再自己寫
+    const c = be && be.copy ? { headline: (be.headline || ev.title).slice(0, 14), copy: String(be.copy).slice(0, 1500), threads: String(be.threads || be.copy).slice(0, 450) } : await promoCopy(env, ev);
     const im = bimg ? { url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/" + bimg } : { err: "這則還沒有做好的圖" };
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     const rec = { id, type: ev.type, title: ev.title, series: ev.series || "", at: twNow().toISOString().slice(0, 16).replace("T", " "), headline: c.headline, copy: c.copy, threads: c.threads, img: im.url || "", fallbackImg: ev.items[0] && ev.items[0].img, imgErr: im.err || "" };
