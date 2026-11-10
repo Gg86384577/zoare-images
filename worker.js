@@ -1122,7 +1122,9 @@ async function audience(env) {
 // ---------- 新品自動群發：每天 20:00 把當天新上架的商品，依系列傳給問過該系列的客人 ----------
 async function newArrivalPlan(env) {
   const twToday = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
-  const last = (await env.SESSIONS.get("bc:lastAd")) || new Date(Date.now() + 8 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+  const minLast = new Date(Date.now() + 8 * 3600e3 - 3 * 86400e3).toISOString().slice(0, 10);
+  let last = (await env.SESSIONS.get("bc:lastAd")) || new Date(Date.now() + 8 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+  if (last < minLast) last = minLast; // 最多只往回看 3 天，避免舊日期卡住時把一整個月的新品又發一次
   const cat = await loadCatalog(env);
   const fresh = cat.filter((it) => it.ad && it.ad > last && it.ad <= twToday && it.img && it.g && !/缺貨|停售/.test(it.st || ""));
   const byCat = {};
@@ -1134,22 +1136,37 @@ async function newArrivalPlan(env) {
 }
 async function sendNewArrivals(env, plan) {
   let ok = 0;
-  for (const [uid, ks] of Object.entries(plan.perUser)) {
+  // 先記日期：就算排程中途被 Cloudflare 中斷，隔天也不會把同一批再從頭發一次
+  await env.SESSIONS.put("bc:lastAd", plan.today);
+  for (const [uid, ks0] of Object.entries(plan.perUser)) {
+    // 每位客人記下已經收過的新品（保留 60 天），同一款不重複推
+    let sent = {}; try { sent = JSON.parse((await env.SESSIONS.get("na:" + uid)) || "{}"); } catch (e) {}
+    const keyOf = (it) => it.k || it.jan || it.img;
+    const byCat = {};
+    for (const k of ks0) { const l = plan.byCat[k].filter((it) => !sent[keyOf(it)]); if (l.length) byCat[k] = l; }
+    const ks = Object.keys(byCat);
+    if (!ks.length) continue;
     let name = ""; try { name = await displayName(env, uid); if (name === "老闆") name = ""; } catch (e) {}
-    const top = ks.sort((a, b) => plan.byCat[b].length - plan.byCat[a].length).slice(0, 4);
+    const top = ks.sort((a, b) => byCat[b].length - byCat[a].length).slice(0, 4);
     const msgs = [{ type: "text", text: `${name ? name + " " : ""}您好～您之前問過的「${top.join("、")}」有新品上架囉🎉\n幫您把最新款式整理在下面👇 喜歡的直接點「我要訂購」，數量、起批、到貨時間有任何問題都可以問我～` }];
+    const shownNow = [];
     for (const k of top) {
       const seen = new Set(), list = [];
-      for (const it of plan.byCat[k]) { if (seen.has(it.img)) continue; seen.add(it.img); list.push(it); if (list.length >= 10) break; }
-      const card = await productCards(env, uid, list, `${k}新品（共 ${plan.byCat[k].length} 款）`);
-      if (card) msgs.push(card);
+      for (const it of byCat[k]) { if (seen.has(it.img)) continue; seen.add(it.img); list.push(it); if (list.length >= 10) break; }
+      const card = await productCards(env, uid, list, `${k}新品（共 ${byCat[k].length} 款）`);
+      if (card) { msgs.push(card); shownNow.push(...list); }
     }
     const more = top.map((k) => ({ type: "action", action: { type: "message", label: ("看全部" + k).slice(0, 20), text: k } }));
     msgs[msgs.length - 1].quickReply = { items: more.concat([{ type: "action", action: { type: "message", label: "會員方案", text: "會員方案" } }]).slice(0, 13) };
     const r = await lineApi(env, "/v2/bot/message/push", { to: uid, messages: msgs.slice(0, 5) });
-    if (r.ok) ok++; else console.log("new arrival push failed", r.status, await r.text());
+    if (r.ok) {
+      ok++;
+      const now = Date.now();
+      for (const [k, t] of Object.entries(sent)) if (now - t > 60 * 86400e3) delete sent[k];
+      for (const it of shownNow) sent[keyOf(it)] = now;
+      await env.SESSIONS.put("na:" + uid, JSON.stringify(sent), { expirationTtl: 60 * 86400 });
+    } else console.log("new arrival push failed", r.status, await r.text());
   }
-  await env.SESSIONS.put("bc:lastAd", plan.today);
   return ok;
 }
 async function runNewArrivals(env) {

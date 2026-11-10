@@ -1547,7 +1547,8 @@ function bubble(it, tier, link) {
   const mq = minQty({ box: packN(it), moq: moqOf(it) }, tier);
   const note = [packN(it) ? `整盒 ${packN(it)} 個・只能整盒訂` : tier !== "none" ? `會員 ${mq} 件起` : `${mq} 件起（會員 ${minQty({ box: packN(it), moq: moqOf(it) }, "vip")} 件起）`, /庫存較少|洽詢/.test(it.st || "") ? (it.st || "").replace(/^.*・/, "") : ""].filter(Boolean).join("｜");
   const body = [
-    { type: "text", text: (it.b || "").slice(0, 40), size: "xxs", color: "#888888" },
+    // 不顯示廠商名（宣傳不公開貨源），改顯示系列
+    { type: "text", text: catsOf(it).filter((k) => k !== "其他").slice(0, 2).join("・") || "日本角色商品", size: "xxs", color: "#888888" },
     { type: "text", text: it.n.slice(0, 80), size: "sm", weight: "bold", wrap: true, maxLines: 3 },
     { type: "text", text: price + (packN(it) ? " ／個" : ""), size: "lg", weight: "bold", color: "#9E1B1B", margin: "sm" },
     { type: "text", text: sub, size: "xxs", color: "#888888" },
