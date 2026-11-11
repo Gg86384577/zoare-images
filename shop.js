@@ -194,6 +194,32 @@ export function dlLabel(it) {
   if (d) return "結單日 " + d.split("（")[0];
   return "結單日 長期接單";
 }
+// ---------- 少量叫貨（第二貨源，可小量；每款單獨湊單） ----------
+// 客人在商品頁可選「整箱」（原貨源，同廠商一起湊）或「少量」（貴 5%、小單位、只算這一款）。
+// 少量在系統裡是一個虛擬商品：key＝原 key＋"|S"，廠商欄＝"少量・品名"（每款自己一個湊單池）。
+export const SG_RATE = 1.05; // 少量價＝整箱價 × 1.05（無條件進位）
+export const SG_SHOW = "約 NT$10,000"; // 對客人說的門檻
+export const SG_PRE = "少量・";
+const SG_MFR = /^(309 |Nakajima|Kamio|CRUX|T's Factory|J's Planning|NIC|森本|Hatakeyama|A Planning|OST|三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列))/;
+export const isSg = (m) => String(m || "").startsWith(SG_PRE);
+function sgUnit(it) {
+  if (!it || !it.g || it.mem || it.alt || it.hid || it.org || !it.pb || it.pb.c !== "JPY" || !SG_MFR.test(it.b || "")) return 0;
+  if (packN(it) || /盲盒/.test(it.pack || "") || /^現貨/.test(it.st || "")) return 0;
+  const m = String(it.pack || "").match(/[（(]\s*(\d+)\s*[)）]\s*$/);
+  return (m && +m[1]) || moqOf(it) || 0;
+}
+export function sgItem(x) { // x＝slim 後的商品
+  return { ...x, k: x.k + "|S", base: x.k, sg: 1, hid: 1, g: Math.ceil(x.g * SG_RATE), v: Math.ceil(x.v * SG_RATE), c0: x.g - 80, moq: x.su, box: 0, m: SG_PRE + String(x.n).slice(0, 24) };
+}
+let SLIMA = null, SLIMA_SRC = null;
+function slimAll(items, isExpired) { // 下單、購物車用：含少量的虛擬商品
+  const L = slim(items, isExpired);
+  if (SLIMA && SLIMA_SRC === L) return SLIMA;
+  SLIMA = L.concat(L.filter((x) => x.su).map(sgItem)); SLIMA_SRC = L;
+  return SLIMA;
+}
+// 少量的進價門檻：第二貨源每品牌折後 ¥30,000；系統進價是照 65 折記的，換算回來
+export const sgNeed = (jpy) => Math.ceil((30000 * 0.65 / 0.55) * (jpy || 0.21));
 function slim(items, isExpired) {
   if (SLIM && SLIM_SRC === items) return SLIM;
   const out = [];
@@ -201,7 +227,7 @@ function slim(items, isExpired) {
     if (!it.g || isExpired(it)) continue;
     if (it.st && /缺貨|停售/.test(it.st)) continue;
     out.push({ k: keyOf(it), n: it.n, b: it.b || "其他", s: it.s || "", g: it.g, v: it.v || it.g, img: it.img || "",
-      moq: moqOf(it), box: packN(it), pk: it.pack || "", st: it.st || "", o: it.org || (it.pb && it.pb.c === "CNY" ? "cn" : "jp"), sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it), m: mfrOf(it.b), ...(it.alt ? { alt: it.alt } : {}), ...(it.hid ? { hid: 1 } : {}) });
+      moq: moqOf(it), box: packN(it), ...(sgUnit(it) ? { su: sgUnit(it) } : {}), pk: it.pack || "", st: it.st || "", o: it.org || (it.pb && it.pb.c === "CNY" ? "cn" : "jp"), sh: shipLabel(it), dl: it.dlx || it.dl || "", jan: it.jan || it.code || "", ad: it.ad || "", c: catsOf(it), m: mfrOf(it.b), ...(it.alt ? { alt: it.alt } : {}), ...(it.hid ? { hid: 1 } : {}) });
   }
   out.push(...MEMBER_ITEMS);
   SLIM = out; SLIM_SRC = items;
@@ -287,7 +313,7 @@ export async function handleShop(request, env, ctx, deps) {
     // 商品清單很大：算好的結果存成文字（記憶體＋KV），同一版本／匯率／結單規則只算一次，避免每台伺服器都重算而逾時
     const hdr = { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" };
     let key = "";
-    try { if (deps.catStamp) key = "slimc:" + hashStr(await deps.catStamp(env)); } catch (e) {}
+    try { if (deps.catStamp) key = "slimc2:" + hashStr(await deps.catStamp(env)); } catch (e) {}
     if (key && SLIM_TXT && SLIM_TXT_KEY === key) return new Response(SLIM_TXT, { headers: hdr });
     let txt = null;
     if (key && env.SESSIONS) { try { txt = await env.SESSIONS.get(key); } catch (e) {} }
@@ -331,7 +357,7 @@ export async function handleShop(request, env, ctx, deps) {
     let body; try { body = await request.json(); } catch (e) { return Response.json({ ok: false }, { status: 400 }); }
     const uid = await verifyToken(env, body.t);
     if (!uid) return Response.json({ ok: false }, { status: 401 });
-    const map = new Map(slim(await deps.loadCatalog(env), deps.isExpired).map((x) => [x.k, x]));
+    const map = new Map(slimAll(await deps.loadCatalog(env), deps.isExpired).map((x) => [x.k, x]));
     const tier = await getTier(env, uid);
     const lines = [];
     for (const [k, q0] of Object.entries(body.cart || {}).slice(0, 300)) { const it = map.get(k), q = Math.floor(Number(q0)); if (it && q > 0 && q <= 100000) lines.push({ k, n: it.n, b: it.b, q, price: tier === "vip" ? it.v : it.g }); }
@@ -371,15 +397,15 @@ export async function handleShop(request, env, ctx, deps) {
     const its = body.items || [];
     const wantMem = its.some((r) => r.k === "MEMBER|VIP" && r.q > 0) ? "vip" : its.some((r) => r.k === "MEMBER|GEN" && r.q > 0) ? "member" : "";
     const tier = wantMem === "vip" || (wantMem === "member" && prevTier === "none") ? wantMem : prevTier;
-    const map = new Map(slim(await deps.loadCatalog(env), deps.isExpired).map((x) => [x.k, x]));
+    const map = new Map(slimAll(await deps.loadCatalog(env), deps.isExpired).map((x) => [x.k, x]));
     const lines = [];
     for (const r of (body.items || []).slice(0, 300)) {
       const it = map.get(r.k);
       const q = Math.floor(Number(r.q));
       if (!it || !(q > 0) || q > 100000) continue;
       const price = tier === "vip" ? it.v : it.g;
-      const rw = RAWK(await deps.loadCatalog(env)).get(it.k), rp = rw && rw.pb;
-      lines.push({ k: it.k, n: it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : it.g - 80, ...(rp && rp.cd && rp.d && !it.mem ? { rc: Math.round(((it.g - 80) * rp.cd) / rp.d) } : {}), sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
+      const rw = RAWK(await deps.loadCatalog(env)).get(it.base || it.k), rp = rw && rw.pb, c0 = it.sg ? it.c0 : it.g - 80;
+      lines.push({ k: it.k, n: it.sg ? it.n + "（少量）" : it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : c0, ...(it.sg ? { sg: 1 } : {}), ...(rp && rp.cd && rp.d && !it.mem ? { rc: Math.round((c0 * rp.cd) / rp.d) } : {}), sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
     if (tier === "member") { const pcs = lines.filter((l) => !l.mem).reduce((x, l) => x + l.q, 0); if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `一般會員整張訂單混批合計要 21 件以上（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上\n\n加入 VIP 會員就沒有總件數限制，可以真正少量叫貨` }, { status: 400 }); }
@@ -519,6 +545,7 @@ export async function runPoolReminders(env, deps, opt = {}) {
   const ms = [];
   for (const [m, p] of Object.entries(P.pools || {}).sort((a, b) => b[1].pct - a[1].pct)) {
     if (opt.only && m !== opt.only) continue;
+    if (isSg(m)) continue; // 少量是單款的池子，不發全體湊單邀請
     if (p.nt >= need || (!opt.force && p.pct < 20)) continue;
     if (!opt.force && Date.now() - Number((await env.SESSIONS.get("pr:m:" + m)) || 0) < 3 * 86400e3) continue;
     ms.push([m, p]);
@@ -558,11 +585,12 @@ const MFR = [[/^309 /, "三麗鷗 309"], [/^CRUX/, "CRUX"], [/^Nakajima/, "Nakaj
   [/^森本/, "森本產業"], [/^日本現貨/, "中央煽賣"], [/^RE-MENT/, "RE-MENT"], [/^三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列)|^幽遊白書/, "K-company"], [/^Marimo/, "Marimo Craft"],
   [/^San-X/, "San-X"], [/^Ensky/, "Ensky"], [/^GPS/, "GPS"], [/^PARADE/, "PARADE"], [/^NIC/, "NIC"], [/^Smiski/, "Dreams"], [/^Tomantoys/, "Tomantoys"], [/^景品 FuRyu/, "FuRyu 景品"], [/^景品 SEGA/, "SEGA 景品"], [/^景品 Eikoh/, "Eikoh 景品"]];
 export function mfrOf(b) { b = String(b || ""); for (const [r, n] of MFR) if (r.test(b)) return n; return b.split(" ")[0] || "其他"; }
+async function jpyRate(env) { try { const r = JSON.parse((await env.SESSIONS.get("rates")) || "null"); if (r && r.JPY) return r.JPY; } catch (e) {} return 0.21; }
 async function cnyRate(env) { try { const r = JSON.parse((await env.SESSIONS.get("rates")) || "null"); if (r && r.CNY) return r.CNY; } catch (e) {} return 4.9; }
 const lineCostNT = (o, l) => (l.mem ? 0 : (l.cost != null ? l.cost : l.price - (o.tier === "vip" ? 50 : 80))) * l.q;
 // 已付款、還沒叫貨的部分 → 依製造商加總（人民幣），湊滿就通知老闆
 export async function computePools(env, deps = {}) {
-  const rate = await cnyRate(env), need = poolNeed(rate), orders = await allOrders(env, 500);
+  const rate = await cnyRate(env), need = poolNeed(rate), needS = sgNeed(await jpyRate(env)), orders = await allOrders(env, 500);
   const pools = {};
   for (const o of orders) {
     if (o.status !== "已付款") continue;
@@ -577,16 +605,18 @@ export async function computePools(env, deps = {}) {
     }
   }
   const tAt = new Map(orders.map((o) => [o.id, o.paidAt || o.at]));
-  for (const m in pools) { pools[m].orders.sort((a, b) => String(tAt.get(a)).localeCompare(String(tAt.get(b)))); pools[m].nt = Math.round(pools[m].nt); pools[m].pct = Math.min(100, Math.floor((pools[m].nt / need) * 100)); }
+  for (const m in pools) { pools[m].orders.sort((a, b) => String(tAt.get(a)).localeCompare(String(tAt.get(b)))); pools[m].nt = Math.round(pools[m].nt); if (isSg(m)) pools[m].need = needS; pools[m].pct = Math.min(100, Math.floor((pools[m].nt / (pools[m].need || need)) * 100)); }
   const prev = JSON.parse((await env.SESSIONS.get("pools")) || "{}"), notified = prev.notified || {};
   const owner = await env.SESSIONS.get("owner");
   for (const m in pools) {
     const p = pools[m], sig = p.orders.slice().sort().join(",");
-    if (p.nt >= need && notified[m] !== sig && owner && deps.lineApi) {
-      await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `📦 ${m} 已湊滿叫貨金額！\n已付款待叫貨：NT$${p.nt.toLocaleString()}（門檻 NT$${need.toLocaleString()}）\n訂單 ${p.orders.length} 筆：${p.orders.join("、")}\n\n請到後台「叫貨」查看要叫的商品，叫完傳「叫貨 ${m} 完成」` }] }).catch(() => {});
+    const nd = p.need || need;
+    if (p.nt >= nd && notified[m] !== sig && owner && deps.lineApi) {
+      const who = isSg(m) ? "👉 這筆跟【北倉茂】叫（少量）。北倉茂週一、週四上午收單，要先付 20% 訂金。" : "👉 這筆跟【原本的貨源】叫（整箱）。";
+      await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: `${isSg(m) ? "✨" : "📦"} ${m} 已湊滿叫貨金額！\n${who}\n已付款待叫貨：NT$${p.nt.toLocaleString()}（門檻 NT$${nd.toLocaleString()}）\n訂單 ${p.orders.length} 筆：${p.orders.join("、")}\n\n請到後台「叫貨」查看要叫的商品，叫完傳「叫貨 ${m} 完成」` }] }).catch(() => {});
       notified[m] = sig;
     }
-    if (ASK_AT_POOL && p.nt >= need && deps.lineApi) {
+    if (ASK_AT_POOL && p.nt >= nd && deps.lineApi) {
       const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
       for (const id of p.orders) {
         const o = orders.find((x) => x.id === id);
@@ -983,7 +1013,7 @@ async function setIntlFee(env, deps, id, amt, mName) {
   return `好👌 ${id} 國際運費 NT$${amt}，這次出貨要跟客人收 NT$${f.dom + amt}${sent ? "\n已通知客人" : ""}`;
 }
 export async function shopOwnerCommand(env, text, deps = {}) {
-  if (/^(叫貨|叫貨進度|湊單)$/.test(text)) { const P = await computePools(env, deps); const L = Object.entries(P.pools).sort((a, b) => b[1].nt - a[1].nt); return L.length ? "📦 製造商湊單進度（已付款、還沒叫貨，門檻 NT$" + P.need.toLocaleString() + "）\n\n" + L.map(([m, p]) => `${p.nt >= P.need ? "✅" : "⏳"} ${m}：NT$${p.nt.toLocaleString()}（${p.pct}%）・${p.orders.length} 筆訂單${p.nt >= P.need ? "・可以叫貨" : ""}`).join("\n") + "\n\n叫完貨傳「叫貨 廠商名 完成」，例如：叫貨 森本產業 完成" : "目前沒有已付款、待叫貨的訂單"; }
+  if (/^(叫貨|叫貨進度|湊單)$/.test(text)) { const P = await computePools(env, deps); const L = Object.entries(P.pools).sort((a, b) => b[1].nt - a[1].nt); return L.length ? "📦 製造商湊單進度（已付款、還沒叫貨，門檻 NT$" + P.need.toLocaleString() + "）\n\n" + L.map(([m, p]) => `${p.nt >= (p.need || P.need) ? "✅" : "⏳"} ${m}：NT$${p.nt.toLocaleString()}（${p.pct}%）・${p.orders.length} 筆訂單・${isSg(m) ? "跟北倉茂叫" : "跟原貨源叫"}${p.nt >= (p.need || P.need) ? "・可以叫貨" : ""}`).join("\n") + "\n\n叫完貨傳「叫貨 廠商名 完成」，例如：叫貨 森本產業 完成" : "目前沒有已付款、待叫貨的訂單"; }
   const pm = text.match(/^叫貨\s+(.+?)\s*(完成|已叫)$/);
   if (pm) {
     const m = pm[1].trim(), now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
@@ -1219,9 +1249,57 @@ input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);border-radiu
 .done{text-align:center;padding:10px 4px}.done h3{font-size:20px;margin:8px 0}.done pre{white-space:pre-wrap;text-align:left;background:#fff;border-radius:12px;padding:12px;font-family:inherit;font-size:14px;line-height:1.7;margin-top:10px}
 .err{padding:40px 20px;text-align:center;color:var(--sub);line-height:1.8}
 .empty{padding:30px;text-align:center;color:var(--sub);grid-column:1/-1}
+
+/* ===== 主題（IP 粉彩）：換賣場只要改這一段變數 ===== */
+:root{--bg:#FFF9F4;--card:#fff;--ink:#3A3336;--sub:#8d8386;--line:#F1E7E1;--red:#FF7F6B;--acc:#FF7F6B;--acc2:#FF6A54;--accbg:#FFF5F1;--accsoft:#FFE9E2;--hd:linear-gradient(120deg,#FFD9CC,#FFE9B8 55%,#D9EEFF);--p1:#FFF1EC;--p2:#FFF6DA;--p3:#EAF6F1;--p4:#F0ECFB;--p5:#E8F3FF}
+header{background:var(--hd);color:var(--ink);padding:12px 14px 8px}
+.search{margin-top:0;align-items:center}.search input{background:#fff;color:var(--ink);border-radius:999px;padding:10px 16px;font-size:15px}.search input::placeholder{color:#A69C9F}
+.hcart{flex:none;position:relative;width:40px;height:40px;border-radius:50%;border:0;background:#fff;font-size:18px}.hcart b{position:absolute;right:-3px;top:-3px;background:var(--acc);color:#fff;font-size:10px;border-radius:999px;min-width:17px;height:17px;line-height:17px;padding:0 4px}
+.brand{margin-top:8px}.logo{font-size:15px;letter-spacing:4px;color:var(--ink)}.who{font-size:11px;color:#6f6568}.who b{color:var(--ink)}.who br{display:none}.who{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72%}.who small{color:#6f6568!important}
+.tier{background:#fff;color:var(--ink)}.tier.vip{background:var(--acc);color:#fff}
+.cats{display:flex;gap:4px;overflow-x:auto;padding:12px 8px 4px;scrollbar-width:none;background:var(--bg)}.cats::-webkit-scrollbar{display:none}
+.cat{flex:none;width:66px;border:0;background:none;text-align:center;font:inherit;color:#5a5154;font-size:11px;padding:0}
+.ci{display:block;width:50px;height:50px;border-radius:50%;margin:0 auto 5px;overflow:hidden;background:var(--p1);border:2px solid #fff;box-shadow:0 1px 4px rgba(120,80,60,.12)}.ci img{width:100%;height:100%;object-fit:cover}
+.cat:nth-child(5n+2) .ci{background:var(--p5)}.cat:nth-child(5n+3) .ci{background:var(--p2)}.cat:nth-child(5n+4) .ci{background:var(--p3)}.cat:nth-child(5n+5) .ci{background:var(--p4)}
+.cn{display:block;line-height:1.25;height:2.5em;overflow:hidden}.cat.on .ci{border-color:var(--acc)}.cat.on .cn{color:var(--acc2);font-weight:700}
+.chips{background:var(--bg);border-bottom:0;padding:6px 12px 4px}
+.chip{border-color:var(--line);color:#5a5154}.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}.chip.news{background:#fff;color:var(--acc2);border-color:#FFD2C8}.chip.news.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.pl{display:flex;align-items:center;gap:8px;margin:8px 10px 0;background:#fff;border-radius:12px;padding:7px 10px;box-shadow:0 1px 4px rgba(120,80,60,.07)}.pl>b{font-size:12px;color:var(--acc2);white-space:nowrap}
+.ps{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}.ps::-webkit-scrollbar{display:none}.ps span{flex:none;display:flex;align-items:center;gap:5px;font-size:11.5px;white-space:nowrap;background:var(--accbg);border-radius:999px;padding:3px 9px 3px 3px;cursor:pointer}.ps img{width:22px;height:22px;border-radius:50%;object-fit:cover;background:#fff}.ps em{font-style:normal;color:var(--acc2);font-weight:700}
+.info{padding:8px 14px 0}.info a{color:var(--acc2)!important}
+.grid{gap:8px;padding:8px 10px}
+.card{border-radius:12px;box-shadow:0 1px 4px rgba(120,80,60,.07)}
+.nc{cursor:pointer}.nc .ph{background:var(--p1);padding:10%}.nc .ph img{border-radius:10px;mix-blend-mode:multiply}
+.grid>.nc:nth-of-type(4n+2) .ph{background:var(--p2)}.grid>.nc:nth-of-type(4n+3) .ph{background:var(--p3)}.grid>.nc:nth-of-type(4n+4) .ph{background:var(--p4)}
+.selb{position:absolute;right:6px;bottom:6px;background:var(--acc);color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px}
+.nc .bd{padding:8px 10px 10px;gap:5px}.nc .nm{font-weight:500;-webkit-line-clamp:2;min-height:2.7em}
+.tgs{display:flex;gap:4px;flex-wrap:wrap}.tgs span{font-size:10px;color:var(--acc);border:1px solid #FFB8AA;border-radius:4px;padding:0 4px;line-height:1.6}
+.nc .pr{padding-top:0}.nc .pr b{font-size:18px;font-weight:800;color:var(--acc)}.nc .pr b small{font-size:11px}.qi{font-size:11px;color:var(--acc);font-weight:700}
+.pz{font-size:10px;padding:2px 7px;box-shadow:none}.pz.pre{background:#A996E6}.pz.now{background:#5DBB95}
+.add,.go,.ng button{background:var(--acc)}.add.sel{background:var(--acc2)}
+.more{border-color:var(--line);color:var(--ink)}
+.bar{background:#fff;color:var(--ink);border-top:1px solid var(--line)}.bar .sum{color:var(--sub)}.bar .sum b{color:var(--acc)}.bar button{background:var(--acc);color:#fff;border-radius:999px}.bar .ghost{background:var(--accsoft);color:var(--acc2)}
+.vhero{background:var(--p1);border-radius:18px 18px 0 0;height:min(36vh,300px)}.vhero img{border-radius:16px;mix-blend-mode:multiply}
+.vinfo{padding:14px 16px 2px}.vpr{font-size:26px;font-weight:800;color:var(--acc)}.vpr small{font-size:14px}.vpr span{font-size:12px;color:var(--sub);font-weight:500;margin-left:8px}.vtt{font-size:16px;font-weight:600;margin:4px 0 2px}.vb{font-size:11px}
+.vh2{font-size:13px;font-weight:500;color:var(--sub)}.vt{border-color:var(--line)}.vt.on{border-color:var(--acc);box-shadow:none;background:var(--accbg)}.vt.on .vtn{color:var(--acc2)}.vti{background:#fff}.vti b{background:var(--acc)}
+.vdet{background:#fff;margin:14px 16px 0;padding:0}.vdn{font-size:15px}.vh3{font-size:13px;color:var(--sub);margin:10px 0 8px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.oc{border:1.5px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;background:#fff}.oc.on{border-color:var(--acc);background:var(--accbg)}
+.o1{font-size:13px;font-weight:700}.o2{font-size:19px;font-weight:800;margin-top:4px}.oc.on .o2{color:var(--acc)}.o3{font-size:12px;color:var(--sub);margin-bottom:10px}
+.pb2{height:4px;background:#FCEDE6;border-radius:9px;overflow:hidden}.pb2 i{display:block;height:100%;background:linear-gradient(90deg,#FFC2A8,var(--acc))}.o4{font-size:11.5px;color:var(--sub);margin-top:6px}
+.oq1{display:block;border:0;padding:0;margin-top:12px}.oq1 .add{height:44px;border-radius:999px;width:100%;font-weight:700}.oq1 .qty{height:44px;border-radius:999px}.oq1 .qty button,.oq1 .qty input{height:44px}.oq1 .qty button{width:56px;background:var(--accsoft);color:var(--acc2)}
+.vdet .op{border:1px solid var(--line)}.vdet .oq1{border:0}
+.vbar .go{border-radius:999px}.pb i{background:linear-gradient(90deg,#FFC2A8,var(--acc))}.mg,.oh,.tag,.cd{color:var(--acc2)}.mf b{color:var(--ink)}
+.pay input:checked+span{border-color:var(--acc);background:var(--acc)}.qty button{background:var(--accsoft);color:var(--acc2)}
+.vz{background:rgba(58,51,54,.55)}
+.nc.hasai .ph{padding:0}.nc.hasai .ph img{border-radius:0;mix-blend-mode:normal;object-fit:cover}
+.vhero.hasai img{max-width:100%;max-height:100%;height:100%;width:100%;object-fit:contain;border-radius:18px 18px 0 0;mix-blend-mode:normal}
+.vps{position:absolute;left:12px;bottom:10px;display:flex;gap:6px}.vps button{position:relative;width:44px;height:44px;border-radius:10px;border:2px solid #fff;padding:0;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.18)}.vps button.on{border-color:var(--acc)}.vps img{width:100%;height:100%;object-fit:cover;max-width:none;max-height:none;border-radius:0;mix-blend-mode:normal}.vps i{position:absolute;left:0;right:0;bottom:0;font-style:normal;font-size:9px;color:#fff;background:rgba(0,0,0,.5);line-height:1.5}
+.cat.hasai .ci img{object-fit:cover}
 </style></head><body>
-<header><div class="brand"><div class="logo">ZOARÉ</div><div class="who" id="who">載入中…</div></div>
-<div class="search"><input id="q" type="search" placeholder="搜尋商品名稱、角色、JAN 碼" enterkeyhint="search"></div></header>
+<header><div class="search"><input id="q" type="search" placeholder="🔍 搜尋商品、角色、JAN 碼" enterkeyhint="search"><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div>
+<div class="brand"><div class="logo">ZOARÉ</div><div class="who" id="who">載入中…</div></div></header>
+<div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
 <div class="grid" id="grid"></div>
@@ -1255,6 +1333,8 @@ async function init(){
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
   }
+  ALL.filter(x=>x.su&&!x.hid&&!x.mem).forEach(x=>{ALL.push(Object.assign({},x,{k:x.k+"|S",base:x.k,sg:1,hid:1,g:Math.ceil(x.g*1.05),v:Math.ceil(x.v*1.05),moq:x.su,box:0,n:x.n+"（少量）",m:"少量・"+String(x.n).slice(0,24)}))});
+  BYK=new Map(ALL.map(x=>[x.k,x]));
   {const KM=new Map(ALL.map(x=>[x.k,x]));ALL.forEach(x=>{if(x.alt&&!x.hid){const p=KM.get(x.alt);if(p)x._xt=p.n+" "+p.jan+" 現貨"}})}
   if(ME.guest)$("#who").innerHTML='<b>歡迎逛逛 ZOARÉ</b><span class="tier">訪客</span><br>顯示一般價（VIP 會員每件再便宜 NT$30）・選好後用 LINE 一鍵下單';
   else $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
@@ -1263,10 +1343,15 @@ async function init(){
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
   $("#chips").innerHTML='<button class="chip news on" data-b="新品上架">✨ 新品上架</button><button class="chip news" data-b="熱賣推薦">🔥 熱賣推薦</button><button class="chip news" id="newsBtn">📢 最新動態</button>'+(ME.guest?'':'<button class="chip news" id="cpBtn">🎟 我的優惠券</button>')+brands.map(b=>'<button class="chip'+'" data-b="'+esc(b)+'">'+esc(b)+'</button>').join("");
   $("#newsBtn").onclick=openNews;if(!ME.guest)$("#cpBtn").onclick=openCoupons;
-  $("#chips").onclick=async e=>{const b=e.target.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
-  for(const k in cart) if(!ALL.find(x=>x.k===k)) delete cart[k];
+  {const cs=brands.filter(b=>b!=="全部"&&b!=="會員方案"&&b!=="其他");
+   $("#cats").innerHTML=cs.map(b=>{const it=ALL.find(x=>!x.hid&&!x.mem&&x.img&&(x.c||[]).includes(b));return '<button class="cat" data-b="'+esc(b)+'"><span class="ci">'+(it?'<img loading="lazy" src="'+esc(it.img)+'" alt="">':'')+'</span><span class="cn">'+esc(b)+'</span></button>'}).join("")}
+  $("#cats").onclick=$("#chips").onclick=async e=>{const t=e.target.closest("[data-b]"),b=t&&t.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip,.cat").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
+  for(const k in cart) if(!byK(k)) delete cart[k];
   if(T&&Object.keys(cart).length)save(); // 打開商城時就把手機裡原本的購物車同步上來
   buildFam();
+  fetch(AIB+"index.json?h="+Math.floor(Date.now()/3e5)).then(r=>r.json()).then(r=>{AIX=r||{};const it=AIX.items||{};let n=0;for(const k in it){const x=byK(k);if(x){x.ai=AIB+it[k];n++;const v=byK(k+"|S");if(v)v.ai=x.ai}}
+    const cs=AIX.cats||{};document.querySelectorAll("#cats .cat").forEach(el=>{const u=cs[el.dataset.b];if(u){el.querySelector(".ci").innerHTML='<img src="'+esc(AIB+u)+'" alt="">';el.classList.add("hasai")}});
+    if(n)filter()}).catch(()=>{});
   fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;filter()}}).catch(()=>{});
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
    Object.keys(byD).sort().reverse().forEach(d=>{const g={},ord=[];byD[d].forEach(x=>{if(!g[x.b]){g[x.b]=[];ord.push(x.b)}g[x.b].push(x)});let more=true;for(let i=0;more;i++){more=false;ord.forEach(b=>{if(g[b][i]){NEWV.push(g[b][i]);more=true}})}})}
@@ -1311,7 +1396,11 @@ function buildFam(){FAM={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const[
   const SR={SS:1,S:2,M:3,L:4,LL:5,XL:6,"3L":7};const sk=x=>{const t=(x._v||"").split(" ");let r=0;const rest=t.filter(w=>{const u=w.toUpperCase();if(SR[u]){r=SR[u];return false}return true}).join(" ");return [rest,r]};
   for(const k in FAM){if(FAM[k].length<2){FAM[k].forEach(x=>{delete x._f});delete FAM[k];continue}FAM[k].sort((a,b)=>{const A=sk(a),B=sk(b);return A[0]<B[0]?-1:A[0]>B[0]?1:A[1]-B[1]})}}
 function grp(list){const seen=new Set(),out=[];for(const x of list){if(x._f){if(seen.has(x._f))continue;seen.add(x._f)}out.push(x)}return out}
-function gsel(k){let n=0;FAM[k].forEach(y=>{n+=cart[y.k]||0;if(y.alt)n+=cart[y.alt]||0});return n}
+function gsel(k){let n=0;(FAM[k]||[]).forEach(y=>{n+=cart[y.k]||0;if(y.alt)n+=cart[y.alt]||0;if(y.su)n+=cart[y.k+"|S"]||0});return n}
+function sgOf(y){return y&&y.su?byK(y.k+"|S"):null}
+function minStep(y){const v=sgOf(y);return Math.min(step(y),v?step(v):1e9)}
+function ncard(x){const L=x._f&&FAM[x._f]?FAM[x._f]:[x],ps=L.map(price),mn=Math.min(...ps),ms=Math.min(...L.map(minStep)),many=L.length>1,ax=L.find(y=>y.ai),ai=x.ai||(ax&&ax.ai),cv=ai||x.img,sel=many?gsel(x._f):(cart[x.k]||0)+(x.alt?cart[x.alt]||0:0)+(x.su?cart[x.k+"|S"]||0:0);
+  return '<div class="card nc'+(ai?' hasai':'')+'" data-open="'+esc(x.k)+'" data-g="'+esc(many?x._f:"1:"+x.k)+'" data-r="'+esc(x.k)+'"><div class="ph">'+(many?pzF(L):pz(x))+(cv?'<img loading="lazy" src="'+esc(cv)+'" alt=""'+(ai?' class="aic"':'')+'>':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+(sel?'<span class="selb">已選 '+sel+'</span>':'')+'</div><div class="bd"><div class="nm">'+esc(many?x._fb:x.n)+'</div><div class="tgs">'+(many?'<span>'+L.length+' 款可選</span>':'')+'<span>'+(x.box&&!many?'整盒 '+x.box+' 個':ms+' 個起')+'</span></div><div class="pr"><b><small>NT$</small>'+mn.toLocaleString()+'</b>'+(many||L.some(y=>y.su)||Math.max(...ps)>mn?'<small class="qi">起</small>':'')+'</div></div></div>'}
 function gcard(x){const L=FAM[x._f],ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps),sel=gsel(x._f),hasA=L.some(y=>y.alt);
   return '<div class="card" data-g="'+esc(x._f)+'" data-r="'+esc(x.k)+'"><div class="ph">'+pzF(L)+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x._fb)+'</div><div class="tag">共 '+L.length+' 種規格／款式'+(hasA?'・部分有現貨':'')+'</div><div class="pr"><b>'+fmt(mn)+(mx>mn?'～'+fmt(mx):'')+'</b></div><button class="add'+(sel?' sel':'')+'">'+(sel?'已選 '+sel+' 件・修改':'選擇規格')+'</button></div></div>'}
 function vrow(y){const A=y.alt?byK(y.alt):null,im=y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'">':'';
@@ -1328,27 +1417,39 @@ async function saveLB(){const x=LB.L[LB.i],nm=((x._v&&x._f?x._fb+"_"+x._v:x.n)||
 $("#lbc").onclick=()=>$("#lb").classList.remove("on");$("#lb").onclick=e=>{if(e.target.id==="lb")$("#lb").classList.remove("on")};
 $("#lbp").onclick=()=>{LB.i=(LB.i-1+LB.L.length)%LB.L.length;showLB()};$("#lbn").onclick=()=>{LB.i=(LB.i+1)%LB.L.length;showLB()};$("#lbs").onclick=saveLB;
 document.addEventListener("click",e=>{const z=e.target.closest&&e.target.closest("img.zm");if(z){e.stopPropagation();const y=byK(z.dataset.z);if(!y)return;if(z.closest("#grid")&&!y._f&&!y.mem&&inPool(y.m)){openOne(y);return}const L=y._f&&FAM[y._f]?FAM[y._f]:[y];openLB(L,Math.max(0,L.indexOf(y)))}},true);
-let VK=null,VI=0;
+let VK=null,VI=0,VM="",VP=0,AIX={};const AIB="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/ai/";
+function cov(x){return x.ai||x.img}
+function leftAmt(m,show){const p=POOL.pct[m]||0;return Math.max(0,Math.round(show*(100-p)/100/100)*100)}
+function modeCard(md,on,ttl,y,m,show){const p=POOL.pct[m]||0;return '<div class="oc'+(on?' on':'')+'" data-vm="'+md+'"><div class="o1">'+ttl+'</div><div class="o2">'+fmt(price(y))+'</div><div class="o3">'+step(y)+' 個起</div><div class="pb2"><i style="width:'+p+'%"></i></div><div class="o4">'+(p>=100?'已湊滿，準備叫貨':'還差 '+fmt(leftAmt(m,show)))+'</div></div>'}
 function vRefresh(k){document.querySelectorAll('#grid .card[data-g="'+CSS.escape(k)+'"]').forEach(el=>{const x=byK(el.dataset.r);if(x)el.outerHTML=card(x)})}
 function vClose(){const k=VK;VK=null;$("#panel").classList.remove("vmode");$("#sheet").classList.remove("on");if(k)vRefresh(k)}
 function openVar(k,i){const L=FAM[k];if(!L)return;VK=k;VI=i!=null?i:Math.max(0,L.findIndex(y=>cart[y.k]||(y.alt&&cart[y.alt])));
   const ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps);
   $("#panel").classList.add("vmode");
-  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vb">'+esc(L[0].b)+'</div>'+mfB(L[0])+'<div class="vtt">'+esc(L[0]._fb)+'</div><div class="vpr">'+fmt(mn)+(mx>mn?' ～ '+fmt(mx):'')+'</div></div><div class="vsec"><div class="vh2">選擇款式・規格<span>共 '+L.length+' 種</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div>'+mfStrip(L[0])+'<div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
+  $("#panel").innerHTML='<div class="vtop"><button class="vx" id="vx">×</button></div><div class="vhero" id="vhero"></div><div class="vinfo"><div class="vpr" id="vpr"></div><div class="vtt">'+esc(L[0]._fb)+'</div><div class="vb">'+esc(L[0].b)+'</div></div><div class="vsec"><div class="vh2">款式<span>共 '+L.length+' 款</span></div><div class="vgrid" id="vgrid"></div></div><div class="vdet" id="vdet"></div>'+mfStrip(L[0])+'<div class="vbar"><div id="vsum"></div><button class="go" id="vok">選好了</button></div>';
   $("#sheet").classList.add("on");$("#panel").scrollTop=0;$("#vx").onclick=vClose;$("#vok").onclick=vClose;
-  $("#vgrid").onclick=e=>{const t=e.target.closest("[data-vi]");if(!t)return;VI=+t.dataset.vi;renderVar();const d=$("#vdet");if(d)d.scrollIntoView({behavior:"smooth",block:"nearest"})};
+  VM="";VP=0;$("#vhero").onclick=e=>{const t=e.target.closest("[data-vp]");if(!t)return;e.stopPropagation();VP=+t.dataset.vp;renderVar()};$("#vdet").onclick=e=>{const t=e.target.closest("[data-vm]");if(!t)return;VM=t.dataset.vm;renderVar()};
+  $("#vgrid").onclick=e=>{const t=e.target.closest("[data-vi]");if(!t)return;VI=+t.dataset.vi;VM="";VP=0;renderVar();const d=$("#vdet");if(d)d.scrollIntoView({behavior:"smooth",block:"nearest"})};
   if(L.length===1)$("#vgrid").parentNode.style.display="none";
   renderVar()}
 function renderVar(){const L=FAM[VK];if(!L)return;const y=L[VI]||L[0],A=y.alt?byK(y.alt):null;
-  $("#vhero").innerHTML=(y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'" alt="">':'')+'<span class="vz">🔍 點圖放大・儲存照片</span>';
-  $("#vgrid").innerHTML=L.map((z,i)=>{const n=(cart[z.k]||0)+(z.alt?cart[z.alt]||0:0);return '<div class="vt'+(i===VI?' on':'')+'" data-vi="'+i+'"><div class="vti">'+(z.img?'<img loading="lazy" src="'+esc(z.img)+'" alt="">':'')+(n?'<b>'+n+'</b>':'')+(z.alt?'<i>日本現貨</i>':'')+'</div><div class="vtn">'+esc(z._v)+'</div><div class="vtp">'+fmt(price(z))+'</div></div>'}).join("");
+  if(!y.ai)VP=0;
+  $("#vhero").className="vhero"+(y.ai&&!VP?" hasai":"");
+  $("#vhero").innerHTML=(y.ai&&!VP?'<img src="'+esc(y.ai)+'" alt="">':(y.img?'<img class="zm" data-z="'+esc(y.k)+'" src="'+esc(y.img)+'" alt="">':''))+(y.ai?'<div class="vps"><button data-vp="0" class="'+(VP?'':'on')+'"><img src="'+esc(y.ai)+'" alt=""></button><button data-vp="1" class="'+(VP?'on':'')+'"><img src="'+esc(y.img)+'" alt=""><i>實拍</i></button></div>':'<span class="vz">🔍 點圖放大・儲存照片</span>');
+  $("#vgrid").innerHTML=L.map((z,i)=>{const n=(cart[z.k]||0)+(z.alt?cart[z.alt]||0:0)+(z.su?cart[z.k+"|S"]||0:0);return '<div class="vt'+(i===VI?' on':'')+'" data-vi="'+i+'"><div class="vti">'+(z.img?'<img loading="lazy" src="'+esc(z.img)+'" alt="">':'')+(n?'<b>'+n+'</b>':'')+(z.alt?'<i>日本現貨</i>':'')+'</div><div class="vtn">'+esc(z._v)+'</div><div class="vtp">'+fmt(price(z))+'</div></div>'}).join("");
   const sub=y.box?"整盒 "+y.box+" 個・只能整盒訂":step(y)+" 件起";
-  $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div>'+pzLine(y)+'<div class="vdm">'+esc(sub)+'</div>'+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
-  let n=0,amt=0;L.forEach(z=>[z.k,z.alt].forEach(k=>{if(k&&cart[k]){const w=byK(k);if(w){n+=cart[k];amt+=price(w)*cart[k]}}}));
-  $("#vsum").innerHTML=n?'這款已選 <b>'+n+'</b> 件<br><small>'+fmt(amt)+'</small>':'<small>點上面的款式，再按「加入」</small>'}
+  const S=sgOf(y);
+  if(S&&!VM)VM=cart[y.k]&&!cart[S.k]?"box":"sg";
+  const cur=S&&VM==="sg"?S:y;
+  $("#vpr").innerHTML='<small>NT$</small>'+price(cur).toLocaleString()+(TIER()!=="vip"&&cur.v<cur.g?'<span>VIP '+fmt(cur.v)+'</span>':'');
+  if(S){$("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div>'+pzLine(y)+'<div class="vh3">叫貨方式</div><div class="two">'+modeCard("box",VM==="box","整箱",y,y.m,30000)+modeCard("sg",VM==="sg","少量",S,S.m,10000)+'</div><div class="op oq1" data-k="'+esc(cur.k)+'">'+qtyBox(cur,cart[cur.k]||0)+'</div>'}
+  else $("#vdet").innerHTML='<div class="vdn">'+esc(y._v)+'</div>'+pzLine(y)+'<div class="vdm">'+esc(sub)+'</div>'+(y.mem?'':mfB(y))+(A?opt(y,"⏳ 要等・較便宜","向日本訂貨・"+step(y)+" 件起")+opt(A,"⚡ 現貨・馬上出",(A.st&&A.st.indexOf("較少")>=0?"庫存較少・":"")+step(A)+" 件起"):'<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+esc(TN[TIER()])+'價</b><small>'+(TIER()!=="vip"&&y.v<y.g?"VIP 會員 "+fmt(y.v):"&nbsp;")+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>');
+  let n=0,amt=0;L.forEach(z=>[z.k,z.alt,z.su?z.k+"|S":null].forEach(k=>{if(k&&cart[k]){const w=byK(k);if(w){n+=cart[k];amt+=price(w)*cart[k]}}}));
+  $("#vsum").innerHTML=n?'這款已選 <b>'+n+'</b> 件<br><small>'+fmt(amt)+'</small>':'<small>選好款式，按「加入」</small>'}
 document.addEventListener("click",e=>{if(e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");if(g)openVar(g.dataset.g)});
 function opt(y,lab,sub){return '<div class="op" data-k="'+esc(y.k)+'"><div class="ol"><b>'+lab+'</b><small>'+esc(sub)+'</small></div><div class="opr">'+fmt(price(y))+'</div>'+qtyBox(y,cart[y.k]||0)+'</div>'}
 function card(x){
+  if(!x.mem)return ncard(x);
   if(x._f&&FAM[x._f])return gcard(x);
   const A=x.alt&&!x.hid?byK(x.alt):null;
   if(A){const tg=[dlTxt(x.dl)].filter(Boolean).join("｜");
@@ -1371,10 +1472,10 @@ function PZ_PRE_T(C){return C+"預購：現在就能先下單叫貨，但要到�
 function pzLine(x){const r=pre(x);return r?'<div class="pzd" style="background:'+(r.p?'#7b5cd6':'#1f9d63')+'">'+(r.p?r.t+'｜'+esc(r.d):pzNow(r.c))+'</div><div style="font-size:11.5px;color:#6b6f75;margin:0 0 4px">'+(r.p?PZ_PRE_T(r.c):PZ_NOW_T(r.c))+'</div>':''}
 function inPool(m){const p=POOL.pct[m]||0;return !!m&&p>0&&p<100}
 function pinSort(L){if(!Object.keys(POOL.pct||{}).length)return L;const a=[],b=[];L.forEach(x=>(!x.mem&&inPool(x.m)?a:b).push(x));a.sort((x,y)=>(POOL.pct[y.m]||0)-(POOL.pct[x.m]||0));return a.concat(b)}
-function poolBar(){let el=document.getElementById("poolbar");if(!el){el=document.createElement("div");el.id="poolbar";$("#grid").parentNode.insertBefore(el,$("#grid"))}
+function poolBar(){let el=document.getElementById("poolbar");if(!el){el=document.createElement("div");el.id="poolbar";$("#grid").parentNode.insertBefore(el,$("#info"))}
   const show=(brand==="新品上架"||brand==="全部")&&!$("#q").value.trim();const ms=Object.keys(POOL.pct||{}).filter(inPool).sort((a,b)=>POOL.pct[b]-POOL.pct[a]);
   if(!show||!ms.length){el.innerHTML="";el.style.display="none";return}
-  el.style.display="block";el.innerHTML='<div style="margin:4px 0 10px;padding:10px 12px;border-radius:14px;background:linear-gradient(90deg,#fff3d6,#e3f0ff);border:1px solid #f0e2bf"><div style="font-weight:800;font-size:14px;margin-bottom:6px">🔥 正在湊單・一起湊更快叫貨</div><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">'+ms.map(m=>{const p=POOL.pct[m],n=grp(ALL.filter(x=>!x.hid&&x.m===m)).length;return '<button data-mf="'+esc(m)+'" style="flex:0 0 auto;border:0;border-radius:12px;background:#fff;padding:8px 12px;text-align:left;box-shadow:0 2px 6px rgba(0,0,0,.08);font:inherit"><b style="font-size:13px">'+esc(m)+'</b><div style="height:5px;width:110px;background:#eee;border-radius:3px;margin:5px 0 3px;overflow:hidden"><i style="display:block;height:100%;width:'+p+'%;background:#e0a33a"></i></div><small style="color:#9e1b1b">'+p+'%・還差 '+(100-p)+'%</small><small style="color:#888">・'+n+' 款</small></button>'}).join("")+'</div></div>'}
+  el.style.display="block";el.innerHTML='<div class="pl"><b>🔥 快湊滿</b><div class="ps">'+ms.map(m=>{const sg=m.indexOf("少量・")===0,v=sg?ALL.find(x=>x.sg&&x.m===m):null,it=sg?(v&&byK(v.base)):ALL.find(x=>!x.hid&&!x.mem&&x.img&&x.m===m);if(sg&&!it)return"";return '<span '+(sg?'data-open="'+esc(it.k)+'"':'data-mf="'+esc(m)+'"')+'>'+(it&&it.img?'<img loading="lazy" src="'+esc(it.img)+'" alt="">':'')+esc(sg?String(it.n).slice(0,12):m)+'<em>差 $'+leftAmt(m,sg?10000:30000).toLocaleString()+'</em></span>'}).join("")+'</div></div>'}
 function mfStrip(x){if(!x||x.mem||!inPool(x.m))return"";const p=POOL.pct[x.m],tot=grp(ALL.filter(y=>!y.hid&&y.m===x.m)).length;const L=grp(ALL.filter(y=>!y.hid&&y.m===x.m&&y.img&&!(x._f&&y._f===x._f)&&y.k!==x.k));if(!L.length)return"";
   return '<div class="vsec"><div class="vh2">🏭 同廠商一起湊・還差 '+(100-p)+'%<span>'+esc(x.m)+'</span></div><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px">'+L.slice(0,20).map(y=>'<div data-open="'+esc(y.k)+'" style="flex:0 0 96px;cursor:pointer"><div style="height:96px;border-radius:10px;background:#f6f6f6;display:flex;align-items:center;justify-content:center;overflow:hidden"><img loading="lazy" src="'+esc(y.img)+'" style="max-width:100%;max-height:100%" alt=""></div><div style="font-size:11px;line-height:1.3;height:2.6em;overflow:hidden;margin-top:4px">'+esc(y._f&&FAM[y._f]?y._fb:y.n)+'</div><div style="font-size:12px;font-weight:700">'+fmt(price(y))+(y._f&&FAM[y._f]&&FAM[y._f].length>1?' 起':'')+'</div></div>').join("")+'</div><button class="go" data-mf="'+esc(x.m)+'" style="width:100%;margin-top:6px">看這家全部 '+tot+' 款，一起湊 →</button></div>'}
 function openOne(y){const k="1:"+y.k;FAM[k]=[y];if(!y._v)y._v=y.n;y._fb=y.n;openVar(k,0)}
@@ -1382,7 +1483,7 @@ function openItem(y){if(!y)return;if(y._f&&FAM[y._f])openVar(y._f);else openOne(
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-open]");if(t){e.stopPropagation();e.preventDefault();openItem(byK(t.dataset.open));return}
   const n=e.target.closest&&e.target.closest("#grid .card[data-k] .nm");if(n){const y=byK(n.closest(".card").dataset.k);if(y&&!y.mem&&inPool(y.m))openOne(y)}},true);
 function mfB(x){if(!x.m||x.mem)return"";const p=POOL.pct[x.m]||0;return '<div class="mf" data-mf="'+esc(x.m)+'"><span>廠商：<b>'+esc(x.m)+'</b></span><span class="pb"><i style="width:'+p+'%"></i></span><span class="pp">'+p+'%</span></div><div class="mg"><span class="ml">湊滿約 NT$30,000 叫貨・</span>還差 '+Math.max(0,100-p)+'%</div>'}
-function goMf(m){if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+m;$("#q").value="";document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)}
+function goMf(m){if(VK)vClose();$("#sheet").classList.remove("on");brand="廠商:"+m;$("#q").value="";document.querySelectorAll(".chip,.cat").forEach(c=>c.classList.remove("on"));filter();scrollTo(0,0)}
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-mf]");if(!t)return;e.stopPropagation();e.preventDefault();goMf(t.dataset.mf)},true);
 function unit(x){return x.mem?1:Number(x.box)||Number(x.moq)||3}
 function fixQ(x,q){q=Math.floor(Number(q)||0);if(q<=0)return 0;const u=unit(x),m=step(x);return Math.max(m,Math.ceil(q/u)*u)}
@@ -1397,7 +1498,7 @@ function page(){
 }
 $("#more").onclick=page;
 window.addEventListener("scroll",()=>{if(!$("#more").hidden&&innerHeight+scrollY>document.body.offsetHeight-600)page()});
-const byK=k=>ALL.find(x=>x.k===k);
+let BYK=null;const byK=k=>BYK?BYK.get(k):ALL.find(x=>x.k===k);
 function setQ(k,q){const t0=TIER();q=Math.max(0,Math.floor(q)||0);if(q)cart[k]=q;else delete cart[k];save();bar();if(VK)setTimeout(renderVar,0);
   if(TIER()!==t0){let ch=0;for(const kk in cart){const y=byK(kk);if(y&&!y.mem){const f=fixQ(y,cart[kk]);if(f!==cart[kk]){cart[kk]=f;ch++}}}if(ch){save();bar();toast("身分改變，已自動調整 "+ch+" 款的數量為起批數的倍數")}document.querySelectorAll('#grid .card').forEach(el=>{const x=byK(el.dataset.k||el.dataset.r);if(x)el.outerHTML=card(x)});document.querySelectorAll('#panel .vrow[data-k],#panel .op[data-k]').forEach(el=>{const y=byK(el.dataset.k),b=el.querySelector(".qty,.add");if(y&&b)b.outerHTML=qtyBox(y,cart[y.k]||0)});return}
   document.querySelectorAll('#grid [data-k="'+CSS.escape(k)+'"],#panel .vrow[data-k="'+CSS.escape(k)+'"],#panel .op[data-k="'+CSS.escape(k)+'"]').forEach(el=>{if(el.classList.contains("card")&&el.querySelector(".op"))return;const b=el.querySelector(".qty,.add");if(b)b.outerHTML=qtyBox(byK(k),q)})}
@@ -1409,12 +1510,12 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{if(e.target.matches(".qty input")){const c=e.target.closest("[data-k]"),x=byK(c.dataset.k),raw=Math.floor(Number(e.target.value)||0),f=fixQ(x,raw);if(f!==raw&&raw>0)toast("這款要 "+step(x)+" 件起、以 "+unit(x)+" 件為單位，已調整為 "+f+" 件");setQ(c.dataset.k,f);e.target.value=f||"";if(c.classList.contains("row")&&!c.classList.contains("vrow"))renderCart()}});
 function lines(){return Object.keys(cart).map(k=>{const x=byK(k);return x&&{x,q:cart[k],sub:price(x)*cart[k]}}).filter(Boolean)}
 function bar(){const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
-  $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的"}
+  $("#sum").innerHTML=n?L.length+" 款 "+n+" 件　<b>"+fmt(t)+"</b>":"購物車是空的";const hc=$("#hcn");hc.hidden=!L.length;hc.textContent=L.length}
 function notes(L){const t=TIER(),out=[],total=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);
   L.forEach(({x,q})=>{if(x.mem)return;const mq=step(x);if(x.box&&q%x.box)out.push(x.n+"：整盒商品請以 "+x.box+" 的倍數訂購");else if(q<mq)out.push(x.n+"："+(t==="vip"?"VIP 會員":t==="none"?"非會員":"一般會員")+"這款 "+mq+" 件起")});
   if(t==="member"&&total>0&&total<21)out.push("一般會員整張訂單混批合計需 21 件（目前 "+total+" 件，還差 "+(21-total)+" 件）");
-  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];out.push("依廠商湊單：同一廠商的已付款訂單湊滿約 NT$30,000 就向日本叫貨，先付款先寄（"+ms.map(m=>m+" 目前 "+(POOL.pct[m]||0)+"%").join("、")+"，付款後會加進進度）")}return out}
-$("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
+  if(total>0){const ms=[...new Set(L.filter(l=>!l.x.mem&&l.x.m).map(l=>l.x.m))];const m1=ms.filter(m=>m.indexOf("少量・")!==0),m2=ms.filter(m=>m.indexOf("少量・")===0);if(m1.length)out.push("整箱：同一廠商的已付款訂單湊滿約 NT$30,000 就向日本叫貨，先付款先寄（"+m1.map(m=>m+" 目前 "+(POOL.pct[m]||0)+"%").join("、")+"，付款後會加進進度）");if(m2.length)out.push("少量：每一款自己湊，這款的已付款訂單滿約 NT$10,000 就叫貨（"+m2.map(m=>m.slice(3)+" 目前 "+(POOL.pct[m]||0)+"%").join("、")+"）")}return out}
+$("#hcart").onclick=$("#openCart").onclick=()=>{renderCart();$("#sheet").classList.add("on")};
 $("#openOrders").onclick=openOrders;
 function left(dl){const m=dl.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:\\s+(\\d{1,2}):(\\d{2}))?/);if(!m)return"";const t=Date.UTC(+m[1],+m[2]-1,+m[3],(m[4]?+m[4]:23)-8,m[5]?+m[5]:59)-Date.now();if(t<0)return"已結單";const d=Math.floor(t/864e5),h=Math.floor(t%864e5/36e5);return d?"剩 "+d+" 天 "+h+" 小時":"剩 "+h+" 小時"}
 async function openNews(){$("#panel").classList.remove("vmode");VK=null;
