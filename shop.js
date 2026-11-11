@@ -1351,6 +1351,7 @@ async function init(){
   buildFam();
   fetch(AIB+"index.json?h="+Math.floor(Date.now()/3e5)).then(r=>r.json()).then(r=>{AIX=r||{};const it=AIX.items||{};let n=0;for(const k in it){const x=byK(k);if(x){x.ai=AIB+it[k];n++;const v=byK(k+"|S");if(v)v.ai=x.ai}}
     const cs=AIX.cats||{};document.querySelectorAll("#cats .cat").forEach(el=>{const u=cs[el.dataset.b];if(u){el.querySelector(".ci").innerHTML='<img src="'+esc(AIB+u)+'" alt="">';el.classList.add("hasai")}});
+    const fm=AIX.fams||{};for(const f in fm){(FAM[f]||[]).forEach(x=>{x.fai=AIB+fm[f];if(!x.ai){x.ai=x.fai;const v=byK(x.k+"|S");if(v)v.ai=x.ai}n++})}
     if(n)filter()}).catch(()=>{});
   fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;filter()}}).catch(()=>{});
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
@@ -1399,7 +1400,7 @@ function grp(list){const seen=new Set(),out=[];for(const x of list){if(x._f){if(
 function gsel(k){let n=0;(FAM[k]||[]).forEach(y=>{n+=cart[y.k]||0;if(y.alt)n+=cart[y.alt]||0;if(y.su)n+=cart[y.k+"|S"]||0});return n}
 function sgOf(y){return y&&y.su?byK(y.k+"|S"):null}
 function minStep(y){const v=sgOf(y);return Math.min(step(y),v?step(v):1e9)}
-function ncard(x){const L=x._f&&FAM[x._f]?FAM[x._f]:[x],ps=L.map(price),mn=Math.min(...ps),ms=Math.min(...L.map(minStep)),many=L.length>1,ax=L.find(y=>y.ai),ai=x.ai||(ax&&ax.ai),cv=ai||x.img,sel=many?gsel(x._f):(cart[x.k]||0)+(x.alt?cart[x.alt]||0:0)+(x.su?cart[x.k+"|S"]||0:0);
+function ncard(x){const L=x._f&&FAM[x._f]?FAM[x._f]:[x],ps=L.map(price),mn=Math.min(...ps),ms=Math.min(...L.map(minStep)),many=L.length>1,ax=L.find(y=>y.ai),ai=x.fai||x.ai||(ax&&ax.ai),cv=ai||x.img,sel=many?gsel(x._f):(cart[x.k]||0)+(x.alt?cart[x.alt]||0:0)+(x.su?cart[x.k+"|S"]||0:0);
   return '<div class="card nc'+(ai?' hasai':'')+'" data-open="'+esc(x.k)+'" data-g="'+esc(many?x._f:"1:"+x.k)+'" data-r="'+esc(x.k)+'"><div class="ph">'+(many?pzF(L):pz(x))+(cv?'<img loading="lazy" src="'+esc(cv)+'" alt=""'+(ai?' class="aic"':'')+'>':'<span style="color:#aaa;font-size:12px">圖片準備中</span>')+(sel?'<span class="selb">已選 '+sel+'</span>':'')+'</div><div class="bd"><div class="nm">'+esc(many?x._fb:x.n)+'</div><div class="tgs">'+(many?'<span>'+L.length+' 款可選</span>':'')+'<span>'+(x.box&&!many?'整盒 '+x.box+' 個':ms+' 個起')+'</span></div><div class="pr"><b><small>NT$</small>'+mn.toLocaleString()+'</b>'+(many||L.some(y=>y.su)||Math.max(...ps)>mn?'<small class="qi">起</small>':'')+'</div></div></div>'}
 function gcard(x){const L=FAM[x._f],ps=L.map(price),mn=Math.min(...ps),mx=Math.max(...ps),sel=gsel(x._f),hasA=L.some(y=>y.alt);
   return '<div class="card" data-g="'+esc(x._f)+'" data-r="'+esc(x.k)+'"><div class="ph">'+pzF(L)+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="">':'')+'</div><div class="bd"><div class="bn">'+esc(x.b)+'</div>'+mfB(x)+'<div class="nm">'+esc(x._fb)+'</div><div class="tag">共 '+L.length+' 種規格／款式'+(hasA?'・部分有現貨':'')+'</div><div class="pr"><b>'+fmt(mn)+(mx>mn?'～'+fmt(mx):'')+'</b></div><button class="add'+(sel?' sel':'')+'">'+(sel?'已選 '+sel+' 件・修改':'選擇規格')+'</button></div></div>'}
