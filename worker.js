@@ -1336,7 +1336,7 @@ async function fetchBcPost() {
 }
 function bcPostMsgs(post) {
   const m = [];
-  if (post.image) m.push({ type: "image", originalContentUrl: post.image, previewImageUrl: post.preview || post.image });
+  for (const u of (post.images || (post.image ? [post.image] : [])).slice(0, 3)) m.push({ type: "image", originalContentUrl: u, previewImageUrl: (u === post.image && post.preview) || u });
   if (post.text) m.push({ type: "text", text: post.text, quickReply: { items: [{ type: "action", action: { type: "message", label: "🛍 看全部新品", text: post.kw || "新品" } }] } });
   if (post.tail) m.push({ type: "text", text: post.tail });
   return m.slice(0, 5);
