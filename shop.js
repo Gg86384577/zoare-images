@@ -1296,6 +1296,7 @@ header{background:var(--hd);color:var(--ink);padding:12px 14px 8px}
 .vhero.hasai img{max-width:100%;max-height:100%;height:100%;width:100%;object-fit:contain;border-radius:18px 18px 0 0;mix-blend-mode:normal}
 .vps{position:absolute;left:12px;bottom:10px;display:flex;gap:6px}.vps button{position:relative;width:44px;height:44px;border-radius:10px;border:2px solid #fff;padding:0;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.18)}.vps button.on{border-color:var(--acc)}.vps img{width:100%;height:100%;object-fit:cover;max-width:none;max-height:none;border-radius:0;mix-blend-mode:normal}.vps i{position:absolute;left:0;right:0;bottom:0;font-style:normal;font-size:9px;color:#fff;background:rgba(0,0,0,.5);line-height:1.5}
 .cat.hasai .ci img{object-fit:cover}
+details.leg{display:inline}details.leg summary{display:inline;cursor:pointer;color:var(--acc);font-size:12px;margin-left:6px;list-style:none}details.leg summary::-webkit-details-marker{display:none}details.leg[open]{display:block}details.leg[open] summary{margin-left:0}
 </style></head><body>
 <header><div class="search"><input id="q" type="search" placeholder="🔍 搜尋商品、角色、JAN 碼" enterkeyhint="search"><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div>
 <div class="brand"><div class="logo">ZOARÉ</div><div class="who" id="who">載入中…</div></div></header>
@@ -1373,7 +1374,7 @@ let HOT=null;
 function filter(){
   poolBar();
   if(brand==="熱賣推薦"&&HOT){const m=new Map(ALL.map(x=>[x.k,x]));VIEW=grp(HOT.map(k=>m.get(k)).filter(Boolean));shown=0;$("#grid").innerHTML="";page();$("#info").innerHTML="🔥 熱賣推薦｜大家最近都在買的 "+VIEW.length+" 款";return}
-  if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的排最前面（往下滑看更早的商品）"+PZ_LEG;return}
+  if(brand==="新品上架"&&!$("#q").value.trim()){VIEW=NEWV;shown=0;lastAd=null;$("#grid").innerHTML="";page();const lim=new Date(Date.now()-14*864e5+288e5).toISOString().slice(0,10),nn=NEWV.filter(x=>(x.ad||"")>=lim).length;$("#info").innerHTML="✨ 新品上架｜最近 14 天上架 "+nn+" 款，最新的在前面 <details class='leg'><summary>標籤說明</summary>"+PZ_LEG+"</details>";return}
   if(brand.indexOf("廠商:")===0&&!$("#q").value.trim()){const m=brand.slice(3);VIEW=grp(ALL.filter(x=>!x.hid&&x.m===m));shown=0;lastAd=null;$("#grid").innerHTML="";page();const p=POOL.pct[m]||0;$("#info").innerHTML="🏭 廠商："+esc(m)+"｜共 "+VIEW.length+" 款｜湊單進度 "+p+"%・還差 "+Math.max(0,100-p)+"%（湊滿約 NT$30,000 就叫貨，同廠商商品都能一起湊）";return}
   const q=norm($("#q").value);const words=$("#q").value.trim().toLowerCase().split(/\\s+/).filter(Boolean).map(norm);
   VIEW=grp(pinSort(ALL.filter(x=>!x.hid&&(brand==="全部"||brand==="新品上架"||(x.c||[]).includes(brand)||x.b===brand)&&(!q||words.every(w=>hit(x._t||(x._t=norm(x.n+x.b+x.s+x.jan+x.st+x.sh+(x.m||"")+(x.c||[]).join(" ")+(x.box?"盲盒box整盒":"")+(x._xt||""))),w))))));
