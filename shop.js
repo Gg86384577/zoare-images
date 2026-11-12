@@ -1292,6 +1292,7 @@ header{background:var(--hd);color:var(--ink);padding:12px 14px 8px}
 .vbar .go{border-radius:999px}.pb i{background:linear-gradient(90deg,#FFC2A8,var(--acc))}.mg,.oh,.tag,.cd{color:var(--acc2)}.mf b{color:var(--ink)}
 .pay input:checked+span{border-color:var(--acc);background:var(--acc)}.qty button{background:var(--accsoft);color:var(--acc2)}
 .vz{background:rgba(58,51,54,.55)}
+.grid>.nc .ph,.nc .ph{background:#fff!important;padding:0}.nc .ph img{border-radius:0;mix-blend-mode:normal;object-fit:contain}
 .nc.hasai .ph{padding:0}.nc.hasai .ph img{border-radius:0;mix-blend-mode:normal;object-fit:cover}
 .vhero.hasai img{max-width:100%;max-height:100%;height:100%;width:100%;object-fit:contain;border-radius:18px 18px 0 0;mix-blend-mode:normal}
 .vps{position:absolute;left:12px;bottom:10px;display:flex;gap:6px}.vps button{position:relative;width:44px;height:44px;border-radius:10px;border:2px solid #fff;padding:0;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.18)}.vps button.on{border-color:var(--acc)}.vps img{width:100%;height:100%;object-fit:cover;max-width:none;max-height:none;border-radius:0;mix-blend-mode:normal}.vps i{position:absolute;left:0;right:0;bottom:0;font-style:normal;font-size:9px;color:#fff;background:rgba(0,0,0,.5);line-height:1.5}
