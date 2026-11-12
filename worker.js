@@ -2081,6 +2081,7 @@ export default {
       if (Math.floor(hm / 5) % 12 === 6) { try { await runPoolReminders(env, { lineApi, loadCatalog }); } catch (e) { console.log("poolremind", e); } }
       try { await promoScan(env, await loadCatalog(env)); await promoRun(env); } catch (e) { console.log("promo", e); }
       if (Math.floor(hm / 5) % 12 === 7 && (await env.SESSIONS.get("bc:memvid"))) { try { await sendPackVideo(env); } catch (e) { console.log("memvid", e); } }
+      { try { const p = await fetchBcPost(); if (p && p.to === "all" && p.go === p.id && !(await env.SESSIONS.get("bc:post:" + p.id + ":all"))) { await env.SESSIONS.put("bc:post", p.id, { expirationTtl: 14 * 86400 }); const r = await sendBcPost(env, p); const ow = await env.SESSIONS.get("owner"); if (ow) await lineApi(env, "/v2/bot/message/push", { to: ow, messages: [{ type: "text", text: r.err ? `📣 全部好友群發「${p.title}」沒有成功（LINE 回應 ${r.err}${r.err === "429" ? "，本月推播額度不夠" : ""}），額度恢復後會自動補發` : `📣 已把「${p.title}」群發給全部好友${r.ok ? `（約 ${r.ok} 位）` : ""}` }] }); } } catch (e) { console.log("bc go", e); } }
       if (Math.floor(hm / 5) % 12 === 9 && (await env.SESSIONS.get("bc:post"))) { try { const p = await fetchBcPost(); if (p && p.id === (await env.SESSIONS.get("bc:post"))) await sendBcPost(env, p); } catch (e) { console.log("bcpost", e); } }
       try { await runGroupPost(env); } catch (e) { console.log("grouppost", e); }
       const man = await env.SESSIONS.get("thr:manual");
