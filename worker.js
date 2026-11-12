@@ -1341,8 +1341,32 @@ function bcPostMsgs(post) {
   if (post.tail) m.push({ type: "text", text: post.tail });
   return m.slice(0, 5);
 }
+async function lineFollowers(env) {
+  try {
+    const d = new Date(Date.now() + 8 * 3600e3 - 86400e3).toISOString().slice(0, 10).replace(/-/g, "");
+    const j = await (await lineApi(env, "/v2/bot/insight/followers?date=" + d)).json();
+    return j.status === "ready" ? (j.targetedReaches || j.followers || 0) : 0;
+  } catch (e) { return 0; }
+}
+async function lineQuotaLeft(env) {
+  try {
+    const q = await (await lineApi(env, "/v2/bot/message/quota")).json();
+    if (q.type !== "limited") return Infinity;
+    const u = await (await lineApi(env, "/v2/bot/message/quota/consumption")).json();
+    return q.value - (u.totalUsage || 0);
+  } catch (e) { return -1; }
+}
 async function sendBcPost(env, post) {
   const K = "bc:post:" + post.id;
+  if (post.to === "all") {
+    // 全部好友：用 LINE 官方 broadcast（不限會員），同一篇只傳一次
+    if (await env.SESSIONS.get(K + ":all")) { await env.SESSIONS.delete("bc:post"); return { ok: 0, left: 0, err: "", all: 1, dup: 1 }; }
+    const r = await lineApi(env, "/v2/bot/message/broadcast", { messages: bcPostMsgs(post) });
+    if (!r.ok) { const t = await r.text(); console.log("bcpost all failed", r.status, t); return { ok: 0, left: 1, err: `${r.status}`, all: 1 }; }
+    await env.SESSIONS.put(K + ":all", String(Date.now()), { expirationTtl: 60 * 86400 });
+    await env.SESSIONS.delete("bc:post");
+    return { ok: await lineFollowers(env), left: 0, err: "", all: 1 };
+  }
   const done = new Set(JSON.parse((await env.SESSIONS.get(K + ":done")) || "[]"));
   const todo = (await activeMembers(env)).map((m) => m.uid).filter((u) => !done.has(u));
   let ok = 0, err = "";
@@ -1360,6 +1384,20 @@ async function bcPostCmd(env, act) {
   if (act === "取消") { await env.SESSIONS.delete("bc:post"); return "好👌 已取消圖文群發（已經傳出去的收不回）"; }
   const post = await fetchBcPost();
   if (!post) return "目前沒有準備好的圖文群發內容";
+  if (post.to === "all") {
+    const sent = await env.SESSIONS.get("bc:post:" + post.id + ":all");
+    const fol = await lineFollowers(env), quota = await lineQuotaLeft(env);
+    if (act === "確認") {
+      if (sent) return "這篇已經發給全部好友了，不會重複發";
+      await env.SESSIONS.put("bc:post", post.id, { expirationTtl: 14 * 86400 });
+      const r = await sendBcPost(env, post);
+      if (!r.err) return `📣 已把「${post.title || post.id}」發給全部好友${r.ok ? `（約 ${r.ok} 位）` : ""}`;
+      return `📣 全部好友群發沒有成功（LINE 回應 ${r.err}，${r.err === "429" ? "本月推播額度不夠" : "傳送失敗"}）\n系統已排隊，額度恢復後會自動補發一次。要停止請回「圖文群發 取消」`;
+    }
+    const owner0 = await env.SESSIONS.get("owner");
+    if (owner0) await lineApi(env, "/v2/bot/message/push", { to: owner0, messages: bcPostMsgs(post) });
+    return `📣 圖文群發預覽：${post.title || post.id}\n上面就是大家會收到的內容（${bcPostMsgs(post).length} 則）\n收件人：全部好友${fol ? ` 約 ${fol} 位` : ""}（不只會員）${quota === Infinity ? "" : quota >= 0 ? `\n本月推播額度剩 ${quota} 則` : ""}${sent ? "\n⚠️ 這篇已經發過了" : ""}\n\n確定要發回「圖文群發 確認」`;
+  }
   const mem = await activeMembers(env);
   const done = new Set(JSON.parse((await env.SESSIONS.get("bc:post:" + post.id + ":done")) || "[]"));
   const left = mem.filter((m) => !done.has(m.uid));
