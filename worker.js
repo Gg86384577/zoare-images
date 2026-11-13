@@ -17,8 +17,8 @@ const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
 const BUILD_TAG = "promo-3";
-const CATALOG_VERSION = "20261113-0941";
-const CATALOG_SHA = "fb0150b02f69f31bcd8aae03e4aa8e94578704ed"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
+const CATALOG_VERSION = "20261113-1524";
+const CATALOG_SHA = "8247d8dbd0e34552659a42e681eee7e5e7d688fd"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -319,8 +319,16 @@ function search(items, query, limit = 8) {
 
 // 截止判斷：dl 格式「2026-10-12 23:59（…）」，以台灣時間計算
 function isExpired(it) {
-  const m = (it.dl || "").match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
-  if (!m) return false;
+  let m = (it.dl || "").match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!m) {
+    // 沒有 dl：出貨說明寫「11/24 截單」「2026年11月24日截單」也自動截止（當天 23:59）
+    const s = String(it.ship || "").match(/(?:(\d{4})[-/年])?(\d{1,2})[/月](\d{1,2})日?\s*截單/);
+    if (!s) return false;
+    const now = new Date(Date.now() + 8 * 3600e3);
+    let y = s[1] ? +s[1] : now.getUTCFullYear();
+    if (!s[1] && +s[2] < now.getUTCMonth() + 1 - 6) y += 1;
+    m = [null, y, s[2], s[3]];
+  }
   const end = Date.UTC(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 23, m[5] ? +m[5] : 59) - 8 * 3600 * 1000;
   return Date.now() > end;
 }
