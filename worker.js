@@ -10,14 +10,14 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, packReply, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
 const BUILD_TAG = "promo-3";
-const CATALOG_VERSION = "20261119-1200";
+const CATALOG_VERSION = "20261119-1240";
 const CATALOG_SHA = "2f1c24cfb989f14b3f3dcc3fe44b22653314659b"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
@@ -906,6 +906,10 @@ async function handleEvent(env, ev) {
   // 商品動態
   if (uid && /^(商品動態|最新動態|動態|新品)$/.test(text)) {
     return reply(env, ev.replyToken, [{ type: "text", text: await newsReply(env, { loadCatalog, isExpired }, await shopLink(env, uid)) }]);
+  }
+  // 開團素材包
+  if (uid && env.SESSIONS && /^(素材包|開團素材包|領素材包|素材)$/.test(text.replace(/\s/g, ""))) {
+    return reply(env, ev.replyToken, [{ type: "text", text: await packReply(env, uid) }]);
   }
   // 查自己的會員期限
   if (uid && env.SESSIONS && /^(會員期限|我的會員|會員到期|到期日|會員資格|會員狀態|我是會員嗎)$/.test(text.replace(/\s/g, ""))) {
