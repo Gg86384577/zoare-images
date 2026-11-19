@@ -447,7 +447,7 @@ export async function handleShop(request, env, ctx, deps) {
       cps.unshift({ id: cid, amt: earn.amt, min: earn.amt * camp.minX, name: camp.name, src: id, at: today, exp: addDays(today, camp.days), used: "" });
       order.earned = { id: cid, amt: earn.amt, base: earn.base, camp: camp.name };
     }
-    // VIP 購物金（老闆 2026-11-19）：每買 1 個月 VIP 送 5 張 NT$200 券，每筆限用 1 張、訂單滿 NT$2,000 才能用，30 天內有效；付款後生效、訂單取消就失效
+    // VIP 購物金（老闆 2026-11-19）：每買 1 個月 VIP 送 5 張 NT$200 券，每筆限用 1 張、訂單滿 NT$3,000 才能用，30 天內有效；付款後生效、訂單取消就失效
     if (wantMem === "vip") {
       cps = cps || (await getCoupons(env, uid));
       const months = Math.min(12, Math.max(1, ...its.filter((r) => r.k === "MEMBER|VIP").map((r) => Math.floor(Number(r.q)) || 1))), today = twDay();
@@ -492,7 +492,7 @@ export function campaignEarn(lines, camp) {
   const t = camp.tiers.find(([min]) => base >= min);
   return { amt: t ? t[1] : 0, base, next: camp.tiers.slice().reverse().find(([min]) => base < min) || null };
 }
-export const VIP_CREDIT = { n: 5, amt: 200, min: 2000 };
+export const VIP_CREDIT = { n: 5, amt: 200, min: 3000 };
 async function getCoupons(env, uid) { try { return JSON.parse((await env.SESSIONS.get("cp:" + uid)) || "[]"); } catch (e) { return []; } }
 async function saveCoupons(env, uid, list) { await env.SESSIONS.put("cp:" + uid, JSON.stringify(list.slice(0, 60))); }
 // 每張券的狀態：付款後生效／可使用／已使用／已過期／已失效（來源訂單取消）
@@ -2064,7 +2064,7 @@ export async function membershipCards(env, uid) {
   const link = (await shopLink(env, uid)) + "&q=" + encodeURIComponent("會員方案");
   const tier = await getTier(env, uid);
   const bubbles = [
-    memBubble("👑 VIP 會員", "NT$1,000／月", ["每月 10 張國內＋10 張國際運費券", "每月送 NT$1,000 購物金（5 張 $200，每筆滿 $2,000 用 1 張）", "全館 VIP 價，每件比一般價便宜最多 NT$30", "真正少量叫貨：每款照商品起批數（很多款 2～3 件），沒有總件數限制（依廠商湊單、需等待）", "新品優先通知"], RAW_IMG + "member_vip.jpg?v=2", "加入 VIP 會員", link, true),
+    memBubble("👑 VIP 會員", "NT$1,000／月", ["每月 10 張國內＋10 張國際運費券", "每月送 NT$1,000 購物金（5 張 $200，每筆滿 $3,000 用 1 張）", "全館 VIP 價，每件比一般價便宜最多 NT$30", "真正少量叫貨：每款照商品起批數（很多款 2～3 件），沒有總件數限制（依廠商湊單、需等待）", "新品優先通知"], RAW_IMG + "member_vip.jpg?v=2", "加入 VIP 會員", link, true),
     memBubble("一般會員", "NT$100／月", ["每月 5 張國內運費券", "每款照商品起批數（很多款 2～3 件），不同款混批 21 件", "商品用一般價"], RAW_IMG + "member_gen.jpg?v=2", "加入一般會員", link, false),
   ];
   const mi = await memberInfo(env, uid);
@@ -2117,7 +2117,7 @@ ${link}
 ━━ 會員方案 ━━
 👑 VIP 會員 NT$1,000／月（推薦）
 ・每月 10 張國內＋10 張國際運費券
-・每月送 NT$1,000 購物金（5 張 $200 券，每筆訂單滿 $2,000 用 1 張，30 天內有效）
+・每月送 NT$1,000 購物金（5 張 $200 券，每筆訂單滿 $3,000 用 1 張，30 天內有效）
 ・全館 VIP 價，每件最多再便宜 NT$30
 ・真正少量叫貨，沒有總件數限制
 ・新品優先通知
