@@ -1,0 +1,440 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="客人在 LINE 自己選服務、設計師、時段，前一天自動提醒確認出席。手機點開就能試用（店名虛構示意）。">
+<meta property="og:type" content="website"><meta property="og:url" content="https://gg86384577.github.io/zoare-images/booking/">
+<meta property="og:title" content="LINE 預約系統測試版｜客人自己約，前一天自動提醒">
+<meta property="og:description" content="選服務、選時段、確認出席、店家後台，手機點開就能玩（店名虛構示意）。">
+<meta property="og:image" content="https://gg86384577.github.io/zoare-images/booking/cover.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://gg86384577.github.io/zoare-images/booking/cover.png">
+<style>html{-webkit-text-size-adjust:100%}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>LINE 預約系統測試版</title>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+<style>
+/* Layout: intro column + one phone screen with three tabs (客人預約 / 前一天提醒 / 店家後台) */
+:root{
+  --bg:#f3f1f4; --paper:#ffffff; --ink:#2b2630; --muted:#7b7282; --line:#e4dee8;
+  --accent:#8a5a83; --accent-soft:#f1e6ef; --chat:#c9d3df; --green:#06c755; --bubble-me:#a6e38b;
+  --ok:#2f8a57; --ok-bg:#e3f3e9; --warn:#a86a12; --warn-bg:#fbefd9; --new:#8a5a83; --new-bg:#f1e6ef;
+  --display:"Noto Serif TC",Georgia,serif; --body:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1c1a1f; --paper:#28252c; --ink:#efeaf2; --muted:#a9a0b0; --line:#3a3540;
+  --accent:#d59fcb; --accent-soft:#3b2d39; --chat:#3a4250; --bubble-me:#4f8a3a;
+  --ok:#7fd3a0; --ok-bg:#1f3a2a; --warn:#f0c071; --warn-bg:#3d3020; --new:#d59fcb; --new-bg:#3b2d39; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1c1a1f; --paper:#28252c; --ink:#efeaf2; --muted:#a9a0b0; --line:#3a3540;
+  --accent:#d59fcb; --accent-soft:#3b2d39; --chat:#3a4250; --bubble-me:#4f8a3a;
+  --ok:#7fd3a0; --ok-bg:#1f3a2a; --warn:#f0c071; --warn-bg:#3d3020; --new:#d59fcb; --new-bg:#3b2d39; color-scheme:dark}
+*{box-sizing:border-box} [hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 40px}
+.wrap{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:40px;align-items:start}
+@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);gap:20px}.intro{order:2}}
+.tag{display:inline-block;font-size:12px;letter-spacing:.12em;color:var(--accent);font-weight:700}
+h1{font-family:var(--display);font-size:clamp(26px,4vw,36px);line-height:1.3;margin:6px 0 12px;text-wrap:balance}
+.intro p{color:var(--muted);margin:0 0 16px;max-width:34em}
+.points{display:grid;gap:12px;margin:20px 0}
+.point{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.point b{display:block;margin-bottom:2px}
+.point span{color:var(--muted);font-size:14px}
+.how{font-size:14px;color:var(--muted)}
+.how ol{padding-left:20px;margin:6px 0}
+.foot{font-size:12px;color:var(--muted);margin-top:20px}
+
+/* phone */
+.phone{background:var(--paper);border:1px solid var(--line);border-radius:28px;overflow:hidden;box-shadow:0 18px 40px rgba(60,30,60,.12);display:flex;flex-direction:column;height:760px;max-height:calc(100vh - 40px);min-height:600px}
+@media (max-width:860px){.phone{height:auto;max-height:none;min-height:0;border-radius:20px}}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line);background:var(--paper)}
+.tabs button{all:unset;cursor:pointer;text-align:center;padding:12px 4px;font-size:14px;color:var(--muted);border-bottom:3px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--accent);font-weight:700;border-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+.view{flex:1;display:flex;flex-direction:column;min-height:0}
+@media (max-width:860px){.view{min-height:560px}}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--paper)}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-family:var(--display);font-weight:700;flex:none}
+.bar .name{font-weight:700;font-size:15px;line-height:1.2}
+.bar .sub{font-size:11px;color:var(--muted)}
+.chat{flex:1;overflow-y:auto;background:var(--chat);padding:14px 12px;display:flex;flex-direction:column;gap:10px;min-height:260px}
+.msg{max-width:82%;padding:9px 12px;border-radius:16px;background:var(--paper);font-size:14px;align-self:flex-start;white-space:pre-line;animation:pop .25s ease}
+.msg.me{align-self:flex-end;background:var(--bubble-me);color:#1d2a17}
+:root[data-theme="dark"] .msg.me{color:#f2fbe9}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .msg.me{color:#f2fbe9}}
+.who{font-size:11px;color:var(--ink);opacity:.7;margin:0 0 -6px 4px}
+.card{background:var(--paper);border-radius:14px;overflow:hidden;max-width:86%;align-self:flex-start;font-size:14px;animation:pop .25s ease}
+.card .head{background:var(--accent);color:#fff;padding:9px 12px;font-weight:700}
+.card dl{margin:0;padding:10px 12px;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}
+.card dt{color:var(--muted)} .card dd{margin:0}
+.card .acts{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.card .acts button{all:unset;cursor:pointer;text-align:center;padding:10px;color:var(--accent);font-weight:700}
+.card .acts button+button{border-left:1px solid var(--line)}
+.card .acts button:disabled{color:var(--muted);cursor:default}
+.card .note{padding:0 12px 10px;color:var(--muted);font-size:12px}
+@keyframes pop{from{transform:translateY(6px);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.msg,.card{animation:none}}
+.menu{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);background:var(--paper)}
+.menu button{all:unset;cursor:pointer;text-align:center;padding:12px 4px;font-size:13px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.menu button:nth-child(3n){border-right:0}
+.menu button.main{background:var(--accent);color:#fff;font-weight:700}
+.menu .ic{display:block;font-size:18px;line-height:1.3}
+
+/* booking sheet */
+.sheet{flex:1;overflow-y:auto;background:var(--bg);padding:14px}
+.sheet h3{font-size:13px;color:var(--muted);margin:14px 0 8px;font-weight:500}
+.sheet h3:first-child{margin-top:0}
+.opts{display:grid;gap:8px}
+.opt{all:unset;cursor:pointer;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.opt small{display:block;color:var(--muted);font-size:12px}
+.opt .price{font-weight:700;color:var(--accent);white-space:nowrap}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt:focus-visible,.chip:focus-visible,.slot:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.chip{all:unset;cursor:pointer;flex:none;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:6px 0;width:52px;text-align:center;font-size:12px;color:var(--muted)}
+.chip b{display:block;font-size:17px;color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip[aria-pressed="true"] b{color:#fff}
+.chip:disabled{opacity:.4;cursor:default}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.slot{all:unset;cursor:pointer;text-align:center;background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:7px 0;font-size:14px;font-variant-numeric:tabular-nums}
+.slot:disabled{text-decoration:line-through;color:var(--muted);opacity:.5;cursor:default}
+.slot[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:700}
+.field{display:grid;gap:4px;margin-top:8px}
+.field label{font-size:12px;color:var(--muted)}
+.field input,.field textarea{font:inherit;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
+.field textarea{resize:vertical;min-height:56px}
+.cta{all:unset;cursor:pointer;display:block;width:100%;box-sizing:border-box;text-align:center;background:var(--accent);color:#fff;border-radius:999px;padding:12px;font-weight:700;margin-top:16px}
+.cta[aria-disabled="true"]{opacity:.45;cursor:default}
+.ghost{all:unset;cursor:pointer;color:var(--muted);font-size:13px}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+
+/* admin */
+.admin{flex:1;overflow-y:auto;background:var(--bg);padding:14px;display:grid;gap:12px;align-content:start}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--paper);border-radius:12px;padding:10px;border:1px solid var(--line)}
+.stat small{color:var(--muted);font-size:11px;display:block}
+.stat b{font-size:20px;font-variant-numeric:tabular-nums}
+.daytabs{display:flex;gap:6px}
+.daytabs button{all:unset;cursor:pointer;padding:5px 12px;border-radius:999px;font-size:13px;border:1px solid var(--line);background:var(--paper)}
+.daytabs button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.list{background:var(--paper);border-radius:12px;border:1px solid var(--line);overflow:hidden}
+.item{all:unset;cursor:pointer;display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 12px;border-bottom:1px solid var(--line);width:100%;box-sizing:border-box}
+.item:last-child{border-bottom:0}
+.item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.item .t{font-weight:700;font-variant-numeric:tabular-nums}
+.item .d small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px;white-space:nowrap;font-weight:700}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.wait{background:var(--warn-bg);color:var(--warn)} .pill.new{background:var(--new-bg);color:var(--new)} .pill.move{background:var(--line);color:var(--muted)}
+.tip{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 12px;font-size:13px}
+.edit{background:var(--paper);border:1.5px solid var(--accent);border-radius:12px;padding:12px;display:grid;gap:8px}
+.edit .top{display:flex;justify-content:space-between;align-items:baseline}
+.edit select{font:inherit;padding:7px 9px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink)}
+.edit .btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{all:unset;cursor:pointer;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:700;background:var(--accent);color:#fff}
+.btn.sec{background:var(--accent-soft);color:var(--accent)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 16px;border-radius:999px;font-size:14px;z-index:20;max-width:90vw}
+.mark{font-size:11px;color:var(--muted);text-align:center;padding:6px;background:var(--paper);border-top:1px solid var(--line)}
+</style>
+<style>
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:3px 10px;margin-bottom:10px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.sync.on i{background:var(--ok)} .sync.local i{background:var(--warn)}
+.pick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.pick button{all:unset;cursor:pointer;font-size:12px;padding:4px 10px;border-radius:999px;background:var(--paper);border:1px solid var(--line)}
+.pick button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.del{background:transparent;color:var(--warn);border:1px solid var(--warn)}
+</style>
+<div class="wrap">
+  <section class="intro">
+    <span class="tag">美業 LINE 預約系統｜測試版</span>
+    <h1>不收訂金，也能讓客人準時出現</h1>
+    <div class="sync" id="sync"><i></i><span>連線中…</span></div>
+    <p>這是可以實際操作的測試版：在「客人預約」送出的預約會真的存下來，「店家後台」看得到、改得了，換一支手機打開也一樣。</p>
+    <div class="points">
+      <div class="point"><b>系統只處理「對時間」，聊天還是你自己來</b><span>預約完成後，對話一樣留在 LINE 裡。客人留言、你回覆，跟現在完全一樣。</span></div>
+      <div class="point"><b>前一天自動提醒，取代訂金</b><span>提醒附「確認出席」和「我要改期」按鈕，讓客人有台階下，空檔也能提早補位。真的想收訂金，後台一鍵就能開啟。</span></div>
+      <div class="point"><b>誰還沒回覆，後台一眼看到</b><span>沒按確認的客人標成黃色，你可以親自傳一句關心。</span></div>
+    </div>
+    <div class="how">
+      <b>怎麼測試</b>
+      <ol>
+        <li>「客人預約」：點「立即預約」，選好送出。</li>
+        <li>「前一天提醒」：選一筆預約，按確認或改期。</li>
+        <li>「店家後台」：剛剛的預約和狀態都在這裡，可以改時間、改狀態、刪除、設公休。</li>
+      </ol>
+      <p style="font-size:13px;margin:6px 0 0">正式上線時，預約頁會掛在店家 LINE 官方帳號的選單裡，提醒由 LINE 自動推播。</p>
+    </div>
+    <p class="foot">測試版｜張晉森 規劃設計。店名、價格、人名皆為虛構示意，非真實店家。</p>
+  </section>
+
+  <section class="phone" aria-label="手機畫面">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-booking" data-v="booking" aria-selected="true">客人預約</button>
+      <button role="tab" id="tab-reminder" data-v="reminder" aria-selected="false">前一天提醒</button>
+      <button role="tab" id="tab-admin" data-v="admin" aria-selected="false">店家後台</button>
+    </div>
+    <div class="view" id="v-booking">
+      <div class="bar"><div class="avatar">暖</div><div><div class="name">暖日美學 Studio（示意）</div><div class="sub">LINE 官方帳號</div></div></div>
+      <div class="chat" id="chat"></div>
+      <div class="sheet" id="sheet" hidden></div>
+      <div class="menu" id="menu">
+        <button class="main" data-act="book"><span class="ic">📅</span>立即預約</button>
+        <button data-act="price"><span class="ic">💅</span>價目表</button>
+        <button data-act="mine"><span class="ic">🗓️</span>我的預約</button>
+        <button data-act="works"><span class="ic">🖼️</span>作品集</button>
+        <button data-act="where"><span class="ic">📍</span>店家位置</button>
+        <button data-act="talk"><span class="ic">💬</span>找老闆聊聊</button>
+      </div>
+    </div>
+    <div class="view" id="v-reminder" hidden>
+      <div class="bar"><div class="avatar">暖</div><div><div class="name">暖日美學 Studio（示意）</div><div class="sub">前一天 20:00 自動傳送</div></div></div>
+      <div class="chat" id="rchat"></div>
+    </div>
+    <div class="view" id="v-admin" hidden>
+      <div class="bar"><div class="avatar">暖</div><div><div class="name">店家後台</div><div class="sub">只有老闆和設計師看得到</div></div></div>
+      <div class="admin" id="admin"></div>
+    </div>
+    <div class="mark">測試版｜店名與資料皆為虛構</div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const SERVICES=[
+  {id:'gel',name:'單色凝膠',min:60,price:900},
+  {id:'art',name:'造型設計款',min:90,price:1500,from:true},
+  {id:'lash',name:'自然款美睫嫁接',min:80,price:1200},
+  {id:'care',name:'手部保養',min:45,price:600},
+];
+const STAFF=[{id:'any',name:'不指定',note:'由當天有空的設計師服務'},{id:'yu',name:'小語',note:'擅長日系手繪'},{id:'an',name:'安安',note:'美睫・保養'}];
+const STAFF_NAMES=['小語','安安'];
+const TIMES=['10:00','11:30','13:00','14:30','16:00','17:30','19:00','20:00'];
+const WD='日一二三四五六';
+const STATUS={ok:['已確認','ok'],wait:['未回覆提醒','wait'],new:['新預約','new'],move:['想改期','move']};
+const today=new Date(); today.setHours(0,0,0,0);
+const addDays=n=>{const d=new Date(today);d.setDate(d.getDate()+n);return d};
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const label=s=>{const d=parse(s);return `${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`};
+const $=s=>document.querySelector(s);
+function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2400)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+const ls={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
+
+/* ---------- store: cloud (db) or this-device fallback ---------- */
+let bookings=[], closed=[], deposit={on:false,amount:300}, mode='wait';
+const myIds=new Set(ls.get('salon-mine',[]));
+function rememberMine(id){myIds.add(id);ls.set('salon-mine',[...myIds])}
+let db=null;
+function goLocal(){if(!db)return;db=null;mode='wait';useLocal();toast('目前改用本機模式，資料會存在這支手機')}
+async function cloud(fn){if(!db)return false;try{return {v:await fn()}}catch(e){goLocal();return false}}
+const store={
+  async add(b){const c=await cloud(async()=>(await db.collection('bookings').add(b)).id);if(c)return c.v
+    const id='l'+Date.now();bookings.push({id,...b});saveLocal();refresh();return id},
+  async update(id,patch){if(await cloud(()=>db.doc('bookings/'+id).update(patch)))return;
+    const b=bookings.find(x=>x.id===id);if(b)Object.assign(b,patch);saveLocal();refresh()},
+  async remove(id){if(await cloud(()=>db.doc('bookings/'+id).delete()))return;
+    bookings=bookings.filter(x=>x.id!==id);saveLocal();refresh()},
+  async setClosed(days){if(await cloud(()=>db.doc('settings/closed').set({days})))return;
+    closed=days;saveLocal();refresh()},
+  async setDeposit(v){if(await cloud(()=>db.doc('settings/deposit').set(v)))return;
+    deposit=v;saveLocal();refresh()},
+};
+function saveLocal(){ls.set('salon-local',{bookings,closed,deposit})}
+function setSync(m){mode=m;const el=$('#sync');el.className='sync '+(m==='cloud'?'on':m==='local'?'local':'');
+  el.querySelector('span').textContent=m==='cloud'?'雲端同步中：換手機打開也看得到':m==='local'?'本機模式：資料只存在這支手機':'連線中…'}
+function useLocal(){
+  if(mode==='local')return;setSync('local');
+  const saved=ls.get('salon-local',null);
+  if(saved){bookings=saved.bookings||[];closed=saved.closed||[];if(saved.deposit)deposit=saved.deposit}
+  else{bookings=[
+    {id:'e1',day:iso(addDays(1)),time:'11:30',name:'王小姐（範例）',svc:'單色凝膠',staff:'小語',status:'ok',note:''},
+    {id:'e2',day:iso(addDays(1)),time:'14:30',name:'晴晴（範例）',svc:'造型設計款',staff:'小語',status:'wait',note:''}];saveLocal()}
+  refresh();
+}
+setTimeout(async()=>{
+  const timer=setTimeout(useLocal,10000);
+  let ns=null;
+  try{ns=window.claude&&window.claude.use?await window.claude.use('db'):null}catch(_){ns=null}
+  if(!ns){clearTimeout(timer);useLocal();return}
+  db=ns;let gotB=false;
+  db.collection('bookings').onSnapshot(s=>{
+    clearTimeout(timer);gotB=true;
+    if(!db)return;bookings=s.docs.map(d=>({id:d.id,...d.data()}));
+    if(mode!=='cloud')setSync('cloud');refresh();
+  },e=>{clearTimeout(timer);db=null;useLocal()});
+  db.doc('settings/closed').onSnapshot(s=>{if(!db)return;closed=(s.exists&&s.data().days)||[];refresh()},()=>{});
+  db.doc('settings/deposit').onSnapshot(s=>{if(db&&s.exists){const d=s.data();deposit={on:!!d.on,amount:Number(d.amount)||300}}refresh()},()=>{});
+},0);
+
+function refresh(){renderAdmin();renderReminder();if(!sheet.hidden)keepSheet()}
+
+/* ---------- chat ---------- */
+const chat=$('#chat');
+function say(text,me,box=chat){const m=document.createElement('div');m.className='msg'+(me?' me':'');m.textContent=text;box.appendChild(m);box.scrollTop=box.scrollHeight;return m}
+function sayLater(text,ms=600){setTimeout(()=>say(text),ms)}
+function cardHTML(b,head){return `<div class="head">${head}</div><dl><dt>日期</dt><dd>${label(b.day)}</dd><dt>時間</dt><dd>${esc(b.time)}</dd><dt>項目</dt><dd>${esc(b.svc)}</dd><dt>設計師</dt><dd>${esc(b.staff)}</dd></dl>`}
+say('嗨～謝謝你加入暖日美學 🤍\n想預約的話點下面「立即預約」就能直接選時間；有任何想法也可以直接打字跟我說，我都會親自回喔！');
+const myBookings=()=>bookings.filter(b=>myIds.has(b.id)&&b.day>=iso(today)).sort((a,b)=>(a.day+a.time).localeCompare(b.day+b.time));
+$('#menu').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;const a=b.dataset.act;
+  if(a==='book'){openSheet();return}
+  if(a==='price'){say('價目表',true);sayLater('單色凝膠 $900｜造型設計款 $1,500 起\n自然款美睫嫁接 $1,200｜手部保養 $600\n（價格為示意）')}
+  if(a==='mine'){say('我的預約',true);const m=myBookings();sayLater(m.length?m.map(x=>`${label(x.day)} ${x.time}｜${x.svc}（${x.staff}）｜${STATUS[x.status]?.[0]||''}`).join('\n'):'目前還沒有預約喔，點「立即預約」就能選時間 🙌')}
+  if(a==='works'){say('作品集',true);sayLater('這裡會放店裡的作品照片，客人可以先挑想做的款式（示意）')}
+  if(a==='where'){say('店家位置',true);sayLater('這裡會顯示地址、地圖和停車資訊（示意）')}
+  if(a==='talk'){say('我想問一下光療可以維持多久？',true);sayLater('這種問題就是老闆自己回覆的地方～系統不會搶你的聊天 💬',800)}
+});
+
+/* ---------- booking sheet ---------- */
+const sheet=$('#sheet');let pick={};
+function slotDisabled(dayIso,t){
+  if(closed.includes(dayIso))return true;
+  if(dayIso===iso(today)){const [h,m]=t.split(':').map(Number);const n=new Date();if(h*60+m<=n.getHours()*60+n.getMinutes()+60)return true}
+  const same=bookings.filter(b=>b.day===dayIso&&b.time===t);
+  const sn=STAFF.find(s=>s.id===pick.staff).name;
+  if(sn!=='不指定')return same.some(b=>b.staff===sn);
+  return STAFF_NAMES.every(n=>same.some(b=>b.staff===n));
+}
+function openSheet(){pick={svc:null,staff:'any',day:1,time:null,name:'',note:'',last5:''};chat.hidden=true;$('#menu').hidden=true;sheet.hidden=false;renderSheet()}
+function closeSheet(){sheet.hidden=true;chat.hidden=false;$('#menu').hidden=false;chat.scrollTop=chat.scrollHeight}
+function keepSheet(){const n=$('#f-name'),t=$('#f-note');if(n){pick.name=n.value;pick.note=t.value;const l=$('#f-last5');if(l)pick.last5=l.value}
+  const dIso=iso(addDays(pick.day));if(pick.time&&slotDisabled(dIso,pick.time)){pick.time=null;toast('這個時段剛剛被別人訂走了，請重選')}
+  const y=sheet.scrollTop;renderSheet();sheet.scrollTop=y}
+function renderSheet(){
+  const days=[...Array(14)].map((_,i)=>addDays(i));const dIso=iso(addDays(pick.day));const ready=pick.svc&&pick.time;
+  sheet.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>線上預約</b><button class="ghost" id="x">✕ 關閉</button></div>
+  <h3>1. 選擇服務</h3>
+  <div class="opts">${SERVICES.map(s=>`<button class="opt" data-svc="${s.id}" aria-pressed="${pick.svc===s.id}"><span><b>${s.name}</b><small>約 ${s.min} 分鐘</small></span><span class="price">$${s.price.toLocaleString()}${s.from?' 起':''}</span></button>`).join('')}</div>
+  <h3>2. 選擇設計師</h3>
+  <div class="opts">${STAFF.map(s=>`<button class="opt" data-staff="${s.id}" aria-pressed="${pick.staff===s.id}"><span><b>${s.name}</b><small>${s.note}</small></span></button>`).join('')}</div>
+  <h3>3. 選擇日期</h3>
+  <div class="row">${days.map((x,i)=>`<button class="chip" data-day="${i}" aria-pressed="${pick.day===i}" ${closed.includes(iso(x))?'disabled':''}>${i===0?'今天':'週'+WD[x.getDay()]}<b>${x.getDate()}</b></button>`).join('')}</div>
+  <h3>4. 選擇時段　<span style="font-size:11px">劃線＝已滿或公休</span></h3>
+  <div class="slots">${TIMES.map(t=>`<button class="slot" data-time="${t}" aria-pressed="${pick.time===t}" ${slotDisabled(dIso,t)?'disabled':''}>${t}</button>`).join('')}</div>
+  <div class="field"><label for="f-name">怎麼稱呼你</label><input id="f-name" value="${esc(pick.name)}" placeholder="例如：Mia" autocomplete="off" maxlength="12"></div>
+  <div class="field"><label for="f-note">想跟老闆說的話（選填）</label><textarea id="f-note" maxlength="60" placeholder="例如：想做秋冬奶茶色系">${esc(pick.note)}</textarea></div>
+  ${deposit.on?`<div class="point" style="margin-top:12px"><b>訂金 $${deposit.amount}（可抵當日消費）</b><span>轉帳到（示意）○○銀行 812-1234567890，或用 LINE Pay。付完填帳號末五碼，老闆對帳後會標成已付。也可以預約後再回來填。</span>
+    <div class="field"><label for="f-last5">轉帳帳號末五碼（選填）</label><input id="f-last5" inputmode="numeric" maxlength="5" value="${esc(pick.last5)}" placeholder="例如：12345" autocomplete="off"></div></div>`:''}
+  <button class="cta" id="go" aria-disabled="${!ready}">${ready?`確認預約　${label(dIso)} ${pick.time}`:'請選擇服務與時段'}</button>
+  <p class="hint">${deposit.on?`需付訂金 $${deposit.amount}，未付訂金的預約保留 24 小時。`:'不需付訂金。'}前一天晚上 8 點會收到 LINE 提醒。</p>`;
+}
+sheet.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b||b.disabled)return;
+  if(b.id==='x'){closeSheet();return}
+  const n=$('#f-name');if(n){pick.name=n.value;pick.note=$('#f-note').value;const l=$('#f-last5');if(l)pick.last5=l.value}
+  if(b.dataset.svc)pick.svc=b.dataset.svc;
+  else if(b.dataset.staff){pick.staff=b.dataset.staff;pick.time=null}
+  else if(b.dataset.day){pick.day=+b.dataset.day;pick.time=null}
+  else if(b.dataset.time)pick.time=b.dataset.time;
+  else if(b.id==='go'){if(b.getAttribute('aria-disabled')==='true'){toast('請先選服務和時段');return}confirmBooking();return}
+  else return;
+  const y=sheet.scrollTop;renderSheet();sheet.scrollTop=y;
+});
+let busy=false;
+async function confirmBooking(){
+  if(busy)return;busy=true;
+  const dIso=iso(addDays(pick.day));const s=SERVICES.find(x=>x.id===pick.svc);
+  let staff=STAFF.find(x=>x.id===pick.staff).name;
+  if(staff==='不指定'){const taken=bookings.filter(b=>b.day===dIso&&b.time===pick.time).map(b=>b.staff);staff=STAFF_NAMES.find(n=>!taken.includes(n))||STAFF_NAMES[0]}
+  const name=(pick.name||'').trim().slice(0,12)||'客人';const note=(pick.note||'').trim().slice(0,60);
+  const l=$('#f-last5');if(l)pick.last5=l.value;
+  const rec={day:dIso,time:pick.time,name,svc:s.name,staff,status:'new',note,createdAt:new Date().toISOString()};
+  if(deposit.on){rec.deposit=deposit.amount;rec.last5=(pick.last5||'').replace(/\D/g,'').slice(0,5);rec.paid=false}
+  try{
+    const id=await store.add(rec);rememberMine(id);
+    closeSheet();
+    say(`我要預約 ${label(dIso)} ${pick.time}`,true);
+    setTimeout(()=>{const c=document.createElement('div');c.className='card';c.innerHTML=cardHTML(rec,'✅ 預約完成')+`<div class="note">${rec.deposit?`訂金 $${rec.deposit}：${rec.last5?`已回報末五碼 ${esc(rec.last5)}，等老闆對帳`:'尚未付款，24 小時內轉帳即可'}`:'不需付訂金'}，前一天晚上會再提醒你</div>`;chat.appendChild(c);chat.scrollTop=chat.scrollHeight},400);
+    sayLater(`${name}你好～收到你的預約了！${note?`\n「${note}」我記下來了，當天幫你準備幾個色卡挑 🤍`:''}\n（這句是老闆親自回的）`,1400);
+    setTimeout(()=>toast('預約已存進「店家後台」'),900);
+  }catch(err){toast('沒有存成功，請再按一次確認預約')}
+  busy=false;
+}
+
+/* ---------- reminder ---------- */
+const rchat=$('#rchat');let rSel=null;
+function renderReminder(){
+  const upcoming=bookings.filter(b=>b.day>=iso(today)).sort((a,b)=>(a.day+a.time).localeCompare(b.day+b.time));
+  const mine=upcoming.filter(b=>myIds.has(b.id));
+  const choices=(mine.length?mine:upcoming).slice(0,6);
+  if(!choices.find(b=>b.id===rSel))rSel=choices[0]?.id||null;
+  const b=choices.find(x=>x.id===rSel);
+  if(!b){rchat.innerHTML='<div class="msg">還沒有預約。先到「客人預約」送出一筆，這裡就會出現前一天的提醒訊息。</div>';return}
+  const dPrev=parse(b.day);dPrev.setDate(dPrev.getDate()-1);
+  rchat.innerHTML=`<div class="pick">${choices.map(x=>`<button data-sel="${x.id}" aria-pressed="${x.id===rSel}">${esc(x.name)} ${label(x.day).replace(/（.）/,'')} ${x.time}</button>`).join('')}</div>
+  <div class="msg" style="align-self:center;background:transparent;font-size:12px;opacity:.75;padding:0">${dPrev.getMonth()+1}/${dPrev.getDate()} 20:00 自動傳送</div>`;
+  const c=document.createElement('div');c.className='card';
+  const done=b.status==='ok'||b.status==='move';
+  c.innerHTML=cardHTML(b,'⏰ 明天見！預約提醒')+`<div class="note">地址：（示意）台北市某某路 12 號 2F</div><div class="acts"><button data-r="ok" ${done?'disabled':''}>確認出席</button><button data-r="move" ${done?'disabled':''}>我要改期</button></div>`;
+  rchat.appendChild(c);
+  say(`${b.name}晚安～明天見囉！如果臨時有事也沒關係，按「我要改期」跟我說就好 🙂`,false,rchat);
+  if(b.status==='ok'){say('確認出席',true,rchat);say('收到～明天見！後台已標成「已確認」✅',false,rchat)}
+  if(b.status==='move'){say('我要改期',true,rchat);say('沒問題～原本的時段先幫你保留到明早 10 點，你可以直接重選時間，或跟我說哪天方便，我來幫你喬 🤍',false,rchat)}
+}
+rchat.addEventListener('click',async e=>{
+  const btn=e.target.closest('button');if(!btn||btn.disabled)return;
+  if(btn.dataset.sel){rSel=btn.dataset.sel;renderReminder();return}
+  if(btn.dataset.r){btn.disabled=true;try{await store.update(rSel,{status:btn.dataset.r});toast('到「店家後台」看看狀態變化')}catch(_){toast('沒有存成功，請再按一次')}}
+});
+
+/* ---------- admin ---------- */
+const admin=$('#admin');let aday=iso(addDays(1)),editing=null;
+function renderAdmin(){
+  if(document.activeElement&&admin.contains(document.activeElement)&&document.activeElement.tagName==='SELECT')return;
+  const list=bookings.filter(b=>b.day===aday).sort((a,b)=>a.time.localeCompare(b.time));
+  const tIso=iso(addDays(1));const tl=bookings.filter(b=>b.day===tIso);
+  const waits=tl.filter(b=>b.status!=='ok');
+  const daysBtn=[0,1,2,3].map(i=>{const d=addDays(i);const k=iso(d);const n=bookings.filter(b=>b.day===k).length;return `<button data-aday="${k}" aria-pressed="${aday===k}">${['今天','明天','後天',label(k).replace(/（.）/,'')][i]}${i<3?' '+(d.getMonth()+1)+'/'+d.getDate():''}${n?`・${n}`:''}</button>`}).join('');
+  admin.innerHTML=`
+  <div class="stats">
+    <div class="stat"><small>明天預約</small><b>${tl.length} 位</b></div>
+    <div class="stat"><small>已確認</small><b>${tl.filter(b=>b.status==='ok').length} 位</b></div>
+    <div class="stat"><small>待關心</small><b>${waits.length} 位</b></div>
+  </div>
+  ${waits.length?`<div class="tip">💡 ${waits.map(b=>esc(b.name)).join('、')} 還沒確認明天的預約，可以親自傳一句問候。</div>`:''}
+  <div class="daytabs" style="flex-wrap:wrap">${daysBtn}</div>
+  <div class="list">${list.length?list.map(b=>`<button class="item" data-id="${b.id}"><span class="t">${esc(b.time)}</span><span class="d">${esc(b.name)}<small>${esc(b.svc)}・${esc(b.staff)}${b.note?'・'+esc(b.note):''}</small></span><span style="display:grid;gap:4px;justify-items:end"><span class="pill ${(STATUS[b.status]||STATUS.new)[1]}">${(STATUS[b.status]||STATUS.new)[0]}</span>${b.deposit?`<span class="pill ${b.paid?'ok':'wait'}">${b.paid?'訂金已收':'待收訂金'}</span>`:''}</span></button>`).join(''):`<div style="padding:16px;color:var(--muted);font-size:14px">${closed.includes(aday)?'這天已設為公休，客人選不到。':'這天還沒有預約。'}</div>`}</div>
+  ${editing?editHTML(bookings.find(b=>b.id===editing)):''}
+  <div class="point" style="display:grid;gap:8px"><b style="margin:0">收訂金</b>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ${deposit.on?'':'sec'}" data-dep="toggle">${deposit.on?'已開啟：點一下關閉':'目前不收：點一下開啟'}</button>
+    ${deposit.on?[200,300,500].map(a=>`<button class="btn ${deposit.amount===a?'':'sec'}" data-amt="${a}">$${a}</button>`).join(''):''}</div>
+    <span>開啟後，客人預約時會看到訂金金額和轉帳資訊。關閉就跟現在一樣不收訂金。</span></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" data-close="1">${closed.includes(aday)?'取消公休':'這天設為公休'}</button></div>
+  <p class="hint">點任一筆預約可以改時間、改狀態或刪除。${mode==='cloud'?'客人一送出預約，這裡就會自動出現。':''}</p>`;
+}
+function editHTML(b){if(!b)return'';return `<div class="edit">
+  <div class="top"><b>${esc(b.name)}｜${esc(b.svc)}</b><button class="ghost" data-x="1">✕</button></div>
+  <label style="font-size:12px;color:var(--muted)" for="e-time">時間</label>
+  <select id="e-time">${TIMES.map(t=>`<option ${t===b.time?'selected':''}>${t}</option>`).join('')}</select>
+  <label style="font-size:12px;color:var(--muted)" for="e-st">狀態</label>
+  <select id="e-st">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===b.status?'selected':''}>${v[0]}</option>`).join('')}</select>
+  ${b.deposit?`<div style="font-size:13px">訂金 $${b.deposit}｜${b.paid?'已收款':'未收款'}${b.last5?`｜客人回報末五碼 <b>${esc(b.last5)}</b>`:'｜客人還沒回報'}</div>`:''}
+  <div class="btns"><button class="btn" data-save="1">儲存</button>${b.deposit?`<button class="btn sec" data-paid="1">${b.paid?'改回未收款':'標記已收訂金'}</button>`:''}<button class="btn sec" data-msg="1">傳 LINE 關心</button><button class="btn del" data-del="1">刪除</button></div></div>`}
+admin.addEventListener('click',async e=>{
+  const b=e.target.closest('button');if(!b)return;
+  try{
+    if(b.dataset.aday){aday=b.dataset.aday;editing=null}
+    else if(b.dataset.id){editing=b.dataset.id}
+    else if(b.dataset.x){editing=null}
+    else if(b.dataset.save){const id=editing;const patch={time:$('#e-time').value,status:$('#e-st').value};editing=null;b.blur();await store.update(id,patch);toast('已儲存')}
+    else if(b.dataset.msg){const x=bookings.find(y=>y.id===editing);toast(`正式版會開啟與 ${x?.name||'客人'} 的 LINE 對話`)}
+    else if(b.dataset.del){const id=editing;editing=null;b.blur();await store.remove(id);toast('已刪除這筆預約')}
+    else if(b.dataset.paid){const x=bookings.find(y=>y.id===editing);await store.update(editing,{paid:!x.paid});toast(x.paid?'已改回未收款':'已標記收到訂金')}
+    else if(b.dataset.dep){const was=deposit.on;await store.setDeposit({on:!was,amount:deposit.amount});toast(was?'已關閉收訂金':'已開啟收訂金，客人預約時會看到')}
+    else if(b.dataset.amt){await store.setDeposit({on:true,amount:+b.dataset.amt});toast('訂金改為 $'+b.dataset.amt)}
+    else if(b.dataset.close){const on=closed.includes(aday);await store.setClosed(on?closed.filter(d=>d!==aday):[...closed,aday]);toast(on?'已取消公休':'已設公休，客人端選不到這天')}
+    else return;
+  }catch(_){toast('沒有存成功，請再試一次')}
+  renderAdmin();
+});
+
+/* ---------- tabs ---------- */
+const VIEWS=['booking','reminder','admin'];
+function show(v){if(!VIEWS.includes(v))v='booking';VIEWS.forEach(x=>{$('#v-'+x).hidden=x!==v;$('#tab-'+x).setAttribute('aria-selected',x===v)});if(v==='admin')renderAdmin();if(v==='reminder')renderReminder()}
+document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;try{history.replaceState(null,'','#'+b.dataset.v)}catch(_){}show(b.dataset.v)});
+window.addEventListener('hashchange',()=>show(location.hash.slice(1)));
+renderAdmin();renderReminder();show(location.hash.slice(1));
+</script>
+
+</html>
