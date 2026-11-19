@@ -98,6 +98,8 @@ let SLIM = null, SLIM_SRC = null, SLIM_TXT = null, SLIM_TXT_KEY = "";
 function hashStr(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + s.length.toString(36); }
 const MEMBER_ITEMS = [
   { k: "MEMBER|VIP", n: "VIP 會員（月費）每月 10 張國內＋10 張國際運費券・VIP 專屬價", b: "ZOARÉ 會員方案", s: "", g: 1000, v: 1000, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_vip.jpg?v=2", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "vip" },
+  { k: "PACK|WEEK", n: "開團素材包・單週（10 款新品宣傳圖＋FB/IG/Threads 文案）VIP 免費，傳「素材包」領", b: "ZOARÉ 開團素材包", s: "", g: 149, v: 149, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/pack_cover.jpg", moq: 0, box: 0, pk: "", pd: 7, st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "pack" },
+  { k: "PACK|MONTH", n: "開團素材包・包月 4 週（每週 10 款新品宣傳圖＋文案）VIP 免費", b: "ZOARÉ 開團素材包", s: "", g: 399, v: 399, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/pack_cover.jpg", moq: 0, box: 0, pk: "", pd: 28, st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "pack" },
   { k: "MEMBER|GEN", n: "一般會員（月費）每月 5 張國內運費券", b: "ZOARÉ 會員方案", s: "", g: 100, v: 100, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_gen.jpg?v=2", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "member" },
 ];
 // 網站多加的分類（LINE 選單按鈕有上限，不放這些）
@@ -358,6 +360,15 @@ export async function handleShop(request, env, ctx, deps) {
     return Response.json(v ? { ok: true, cart: JSON.parse(v) } : { ok: false });
   }
   // 購物車追蹤（只記會員專屬連結的客人；加入、修改、清空都會同步）
+  if (p === "/shop/pack") {
+    const uid = await verifyToken(env, url.searchParams.get("t"));
+    const html = (s) => new Response(s, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    if (!uid) return html("<meta charset=utf-8><p style=\"font:16px sans-serif;padding:20px\">連結無效，請在 LINE 傳「素材包」重新取得連結</p>");
+    const a = await packAccess(env, uid), pk = await loadPack();
+    if (!pk) return html("<meta charset=utf-8><p style=\"font:16px sans-serif;padding:20px\">這週的素材包還在準備中～</p>");
+    if (!a.ok) return html("<meta charset=utf-8><p style=\"font:16px sans-serif;padding:20px\">素材包已到期，VIP 會員免費，或在商城購買單週 NT$149／包月 NT$399～</p>");
+    return html(packPage(pk, a));
+  }
   if (p === "/shop/cart" && request.method === "POST") {
     let body; try { body = await request.json(); } catch (e) { return Response.json({ ok: false }, { status: 400 }); }
     const uid = await verifyToken(env, body.t);
@@ -410,7 +421,7 @@ export async function handleShop(request, env, ctx, deps) {
       if (!it || !(q > 0) || q > 100000) continue;
       const price = tier === "vip" ? it.v : it.g;
       const rw = RAWK(await deps.loadCatalog(env)).get(it.base || it.k), rp = rw && rw.pb, c0 = it.sg ? it.c0 : costOf(it);
-      lines.push({ k: it.k, n: it.sg ? it.n + "（少量）" : it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : c0, ...(it.sg ? { sg: 1 } : {}), ...(rp && rp.cd && rp.d && !it.mem ? { rc: Math.round((c0 * rp.cd) / rp.d) } : {}), sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
+      lines.push({ k: it.k, n: it.sg ? it.n + "（少量）" : it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : c0, ...(it.sg ? { sg: 1 } : {}), ...(rp && rp.cd && rp.d && !it.mem ? { rc: Math.round((c0 * rp.cd) / rp.d) } : {}), sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", ...(it.pd ? { pd: it.pd } : {}), cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
     if (tier === "member") { const pcs = lines.filter((l) => !l.mem).reduce((x, l) => x + l.q, 0); if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `一般會員整張訂單混批合計要 21 件以上（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上\n\n加入 VIP 會員就沒有總件數限制，可以真正少量叫貨` }, { status: 400 }); }
@@ -493,6 +504,41 @@ export function campaignEarn(lines, camp) {
   return { amt: t ? t[1] : 0, base, next: camp.tiers.slice().reverse().find(([min]) => base < min) || null };
 }
 export const VIP_CREDIT = { n: 5, amt: 200, min: 3000 };
+// ---------- 開團素材包（數位商品，老闆 2026-11-19）----------
+// 內容放 repo post/pack.json：{ id, title, free, items:[{ name, img, retail, fb, ig, th }] }
+// 單週 NT$149（7 天）／包月 NT$399（28 天）；VIP 免費；pack.free=true 時所有人都能領（第一週免費）
+async function loadPack() {
+  try { const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/post/pack.json?t=" + Math.floor(Date.now() / 300000), { cf: { cacheTtl: 0 } }); return r.ok ? await r.json() : null; } catch (e) { return null; }
+}
+export async function packAccess(env, uid) {
+  const until = Number((await env.SESSIONS.get("pk:" + uid)) || 0);
+  if (until > Date.now()) return { ok: true, why: "buy", until };
+  if ((await getTier(env, uid)) === "vip") return { ok: true, why: "vip" };
+  const p = await loadPack();
+  if (p && p.free) return { ok: true, why: "free" };
+  return { ok: false };
+}
+export async function packLink(env, uid) { return `${SHOP_BASE}/shop/pack?t=${uid}.${await sign(env, uid)}`; }
+// 付款後開通：回傳要附在付款通知後面的文字
+async function grantPack(env, o) {
+  const days = (o.lines || []).filter((l) => l.mem === "pack").reduce((a, l) => a + (l.pd || 7) * (l.q || 1), 0);
+  if (!days || o.packUntil) return "";
+  const cur = Number((await env.SESSIONS.get("pk:" + o.uid)) || 0), until = Math.max(cur, Date.now()) + days * 86400e3;
+  await env.SESSIONS.put("pk:" + o.uid, String(until), { expirationTtl: Math.ceil((until - Date.now()) / 1000) + 86400 });
+  o.packUntil = until;
+  return `\n\n📦 開團素材包已開通，可以看到 ${fmtDay(until)}\n👉 ${await packLink(env, o.uid)}\n之後想再拿連結，傳「素材包」就可以～`;
+}
+export async function packReply(env, uid) {
+  const a = await packAccess(env, uid), p = await loadPack();
+  if (!p) return "這週的開團素材包還在準備中，好了會通知您～";
+  if (a.ok) return `📦 ${p.title || "本週開團素材包"}\n每款都有宣傳圖＋FB／IG／Threads 文案＋建議售價，複製就能開團👇\n${await packLink(env, uid)}${a.why === "free" ? "\n\n（這週免費領，下週起 VIP 會員免費，其他人單週 NT$149／包月 NT$399）" : a.why === "vip" ? "\n\n👑 VIP 會員免費" : ""}`;
+  return `📦 開團素材包：每週 10 款新品宣傳圖＋FB／IG／Threads 開團文案＋建議售價，拿了就能直接開團\n\n👑 VIP 會員免費\n其他人：單週 NT$149／包月 NT$399\n👉 ${await shopLink(env, uid)}&q=${encodeURIComponent("素材包")}`;
+}
+function packPage(p, a) {
+  const esc = (s) => String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const items = (p.items || []).map((it, i) => `<section class="it"><img src="${esc(it.img)}" alt=""><div class="b"><h2>${String(i + 1).padStart(2, "0")} ${esc(it.name)}</h2>${it.retail ? `<p class="r">建議零售價：${esc(it.retail)}</p>` : ""}<a class="dl" href="${esc(it.img)}" download target="_blank">下載圖片（長按圖片也可以存）</a>${[["FB 社團", it.fb], ["IG", it.ig], ["Threads", it.th]].filter((x) => x[1]).map(([t, c]) => `<div class="cp"><div class="ch"><b>${t}</b><button onclick="cp(this)">複製</button></div><pre>${esc(c)}</pre></div>`).join("")}</div></section>`).join("");
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>開團素材包</title><style>body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:#fff7f3;color:#333}header{padding:18px 16px;background:#ffe3d6}h1{margin:0;font-size:20px}header p{margin:6px 0 0;font-size:13px;color:#6b4a3c}.it{background:#fff;margin:14px 12px;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px #0001}.it img{width:100%;display:block}.b{padding:12px 14px}h2{font-size:17px;margin:0 0 6px}.r{margin:0 0 8px;color:#c0507a;font-weight:700}.dl{display:inline-block;margin-bottom:8px;font-size:13px;color:#555}.cp{border:1px solid #f0dcd2;border-radius:10px;margin-top:8px}.ch{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff1ea;border-radius:10px 10px 0 0}.ch button{border:0;background:#e0507d;color:#fff;border-radius:999px;padding:4px 12px;font-size:13px}pre{white-space:pre-wrap;margin:0;padding:10px;font-family:inherit;font-size:14px;line-height:1.6}footer{text-align:center;font-size:12px;color:#999;padding:20px}</style></head><body><header><h1>📦 ${esc(p.title || "開團素材包")}</h1><p>圖片底部白框放你的團名或 LINE，文案按「複製」直接貼上；價格、結單日請依你的團調整。${a.until ? "<br>可看到 " + esc(fmtDay(a.until)) : ""}</p></header>${items}<footer>ZOARÉ 開團素材包・請勿轉傳</footer><script>function cp(b){const t=b.closest(".cp").querySelector("pre").innerText;navigator.clipboard.writeText(t).then(()=>{b.textContent="已複製";setTimeout(()=>b.textContent="複製",1500)})}</script></body></html>`;
+}
 async function getCoupons(env, uid) { try { return JSON.parse((await env.SESSIONS.get("cp:" + uid)) || "[]"); } catch (e) { return []; } }
 async function saveCoupons(env, uid, list) { await env.SESSIONS.put("cp:" + uid, JSON.stringify(list.slice(0, 60))); }
 // 每張券的狀態：付款後生效／可使用／已使用／已過期／已失效（來源訂單取消）
@@ -855,6 +901,8 @@ export async function verifyPaymentImage(env, deps, uid, img) {
       o.memUntil = info.until; await env.SESSIONS.put("o:" + o.id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
       memMsg = `\n🎉 ${TIER_NAME[mem]}已開通，有效到 ${fmtDay(info.until)}，訂購網站會自動套用會員價～`;
     }
+    const pm = await grantPack(env, o);
+    if (pm) { memMsg += pm; await env.SESSIONS.put("o:" + o.id, JSON.stringify(o), { expirationTtl: 180 * 86400 }); }
   }
   const owner = await env.SESSIONS.get("owner");
   if (owner) await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [{ type: "text", text: ok
@@ -1153,10 +1201,12 @@ export async function shopOwnerCommand(env, text, deps = {}) {
         o.payInfo = Object.assign({ method: o.form.pay || "轉帳", amount: o.total }, o.payInfo || {});
         const mem = o.lines.find((l) => l.mem === "vip") ? "vip" : o.lines.find((l) => l.mem === "member") ? "member" : "";
         if (mem && !(o.memUntil && (await getTier(env, o.uid)) === mem)) { const r = await setMembership(env, o.uid, mem, { months: 1 }); o.memUntil = r.until; }
+        o._pm = await grantPack(env, o);
       }
       await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
       try { await computePools(env, deps); } catch (e) {}
-      const msg = { 已付款: `💰 已收到您的款項囉 謝謝🙏\n訂單 ${id} 我們會盡快安排出貨～`,
+      const pmTxt = o._pm || ""; delete o._pm; if (pmTxt) await env.SESSIONS.put("o:" + id, JSON.stringify(o), { expirationTtl: 180 * 86400 });
+      const msg = { 已付款: `💰 已收到您的款項囉 謝謝🙏\n訂單 ${id} 我們會盡快安排出貨～${pmTxt}`,
         已出貨: `🚚 您的訂單 ${id} 已出貨囉！${o.track ? "\n物流單號：" + o.track : ""}\n收到貨有任何問題都可以跟我們說～`,
         已取消: `您的訂單 ${id} 已取消，有問題可以直接跟我們說喔～` }[o.status];
       let sent = false;
