@@ -316,6 +316,30 @@ export async function handleShop(request, env, ctx, deps) {
     // 目錄版本放進網址：每次更新目錄，客人手機就一定抓新的商品清單（不會被快取卡住）
     return new Response(PAGE.replaceAll("__CV__", encodeURIComponent(deps.ver || "")), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   }
+  // ---------- 網頁版用 LINE 登入（LINE Login channel：env LINE_LOGIN_ID / LINE_LOGIN_SECRET） ----------
+  if (p === "/shop/login") {
+    const cid = env.LINE_LOGIN_ID, g = String(url.searchParams.get("g") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    if (!cid || !env.LINE_LOGIN_SECRET) return Response.redirect(g ? `${SHOP_BASE}/go?q=${encodeURIComponent("下單 #" + g)}` : `${SHOP_BASE}/go?q=${encodeURIComponent("訂購")}`, 302);
+    const ts = Date.now().toString(36), st = `${ts}.${g || "-"}.${await sign(env, "ll:" + ts + "." + g)}`;
+    const q = new URLSearchParams({ response_type: "code", client_id: cid, redirect_uri: SHOP_BASE + "/shop/callback", state: st, scope: "profile openid", bot_prompt: "aggressive" });
+    return Response.redirect("https://access.line.me/oauth2/v2.1/authorize?" + q, 302);
+  }
+  if (p === "/shop/callback") {
+    const bad = (m) => new Response(`<meta charset=utf-8><meta name=viewport content="width=device-width"><div style="font:16px sans-serif;padding:24px;line-height:1.7">${m}<br><br><a href="/shop/login">重新用 LINE 登入</a>｜<a href="/shop">先逛逛</a></div>`, { status: 400, headers: { "content-type": "text/html; charset=utf-8" } });
+    if (url.searchParams.get("error")) return bad("LINE 登入取消了");
+    const [ts, g0, sg] = String(url.searchParams.get("state") || "").split("."), g = g0 === "-" ? "" : g0;
+    if (!ts || !sg || Date.now() - parseInt(ts, 36) > 1800e3 || sg !== (await sign(env, "ll:" + ts + "." + g))) return bad("登入連結過期了");
+    const tr = await fetch("https://api.line.me/oauth2/v2.1/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "authorization_code", code: url.searchParams.get("code") || "", redirect_uri: SHOP_BASE + "/shop/callback", client_id: env.LINE_LOGIN_ID, client_secret: env.LINE_LOGIN_SECRET }) });
+    const tk = await tr.json().catch(() => ({}));
+    if (!tk.id_token) return bad("LINE 登入失敗，請再試一次");
+    const vr = await fetch("https://api.line.me/oauth2/v2.1/verify", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ id_token: tk.id_token, client_id: env.LINE_LOGIN_ID }) });
+    const id = await vr.json().catch(() => ({}));
+    const uid = id.sub;
+    if (!uid || !/^U[0-9a-f]{32}$/.test(uid)) return bad("LINE 登入失敗，請再試一次");
+    if (env.SESSIONS && id.name) await env.SESSIONS.put("wn:" + uid, String(id.name).slice(0, 40), { expirationTtl: 400 * 86400 }).catch(() => {});
+    return Response.redirect(`${SHOP_BASE}/shop?t=${uid}.${await sign(env, uid)}${g ? "&cart=" + g : ""}`, 302);
+  }
   if (p === "/shop/catalog") {
     // 商品清單很大：算好的結果存成文字（記憶體＋KV），同一版本／匯率／結單規則只算一次，避免每台伺服器都重算而逾時
     const hdr = { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" };
@@ -1374,7 +1398,8 @@ details.leg{display:inline}details.leg summary{display:inline;cursor:pointer;col
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
 <div class="lb" id="lb"><button class="lbc" id="lbc">×</button><img id="lbi" alt=""><div class="lbt" id="lbt"></div><div class="lbb"><button id="lbp">‹</button><button class="lbs" id="lbs">⬇️ 儲存照片</button><button id="lbn">›</button></div><small>儲存沒反應的話，長按圖片也可以存到手機</small></div>
 <script>
-const T=new URLSearchParams(location.search).get("t")||"";
+const T=(()=>{const u=new URLSearchParams(location.search).get("t")||"";try{if(u){localStorage.setItem("zo_t",u);return u}return localStorage.getItem("zo_t")||""}catch(e){return u}})();
+function logout(){try{localStorage.removeItem("zo_t")}catch(e){};location.href="/shop"}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let ME=null,ALL=[],VIEW=[],NEWV=[],shown=0,brand="新品上架",cart={},lastAd=null;
@@ -1395,15 +1420,15 @@ async function init(){
   }else{
   try{
     const [me,cat]=await Promise.all([fetch("/shop/me?t="+encodeURIComponent(T)).then(r=>r.json()),fetch("/shop/catalog?v=__CV__").then(r=>r.json())]);
-    if(!me.ok){$("#grid").innerHTML='<div class="err">'+esc(me.error)+'</div>';$("#who").textContent="";return}
+    if(!me.ok){try{if(!new URLSearchParams(location.search).get("t")){localStorage.removeItem("zo_t");location.replace("/shop");return}}catch(_){};$("#grid").innerHTML='<div class="err">'+esc(me.error)+'</div>';$("#who").textContent="";return}
     ME=me;ALL=cat;
   }catch(e){$("#grid").innerHTML='<div class="err">載入失敗，請稍後再試</div>';return}
   }
   ALL.filter(x=>x.su&&!x.hid&&!x.mem).forEach(x=>{ALL.push(Object.assign({},x,{k:x.k+"|S",base:x.k,sg:1,hid:1,g:Math.ceil(x.g*1.05),v:Math.ceil(x.v*1.05),moq:x.su,box:0,n:x.n+"（少量）",m:"少量・"+String(x.n).slice(0,24)}))});
   BYK=new Map(ALL.map(x=>[x.k,x]));
   {const KM=new Map(ALL.map(x=>[x.k,x]));ALL.forEach(x=>{if(x.alt&&!x.hid){const p=KM.get(x.alt);if(p)x._xt=p.n+" "+p.jan+" 現貨"}})}
-  if(ME.guest)$("#who").innerHTML='<b>歡迎逛逛 ZOARÉ</b><span class="tier">訪客</span><br>顯示一般價（VIP 會員每件最多再便宜 NT$30）・選好後用 LINE 一鍵下單';
-  else $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30");
+  if(ME.guest)$("#who").innerHTML='<b>歡迎逛逛 ZOARÉ</b><span class="tier">訪客</span><br>顯示一般價（VIP 會員每件最多再便宜 NT$30）・選好後用 LINE 一鍵下單<br><a href="/shop/login" style="display:inline-block;margin-top:6px;background:#06c755;color:#fff;padding:6px 14px;border-radius:999px;text-decoration:none;font-weight:700">💚 用 LINE 登入</a>';
+  else $("#who").innerHTML='<b>'+esc(ME.name)+'</b><span class="tier '+(ME.tier==="vip"?"vip":"")+'">'+esc(ME.tierName)+'</span>'+(ME.until?'<small style="margin-left:6px;color:#6b6f75">到 '+esc(ME.until)+(ME.days!=null&&ME.days<=7?'（剩 '+ME.days+' 天）':'')+'</small>':'')+'<br>'+(ME.tier==="vip"?"已套用 VIP 價":"VIP 會員每件再便宜 NT$30")+' <a href="javascript:logout()" style="font-size:12px;color:#6b6f75;margin-left:6px">登出</a>';
   const counts={},order=[];ALL.forEach(x=>(x.c||["其他"]).forEach(c=>{if(!(c in counts)){counts[c]=0;order.push(c)}counts[c]++}));
   const CO=["會員方案","吉伊卡哇","三麗鷗","寶可夢","史努比","角落生物","拉拉熊","哆啦A夢","mofusand","動漫角色","蠟筆小新","塔麻可吉","嚕嚕米","Smiski","夢奇奇","Pickles 小青蛙","好奇猴喬治","好餓的毛毛蟲","彼得兔","什麼都是生物","捏捏療癒小物"];
   const brands=["全部"].concat(CO.filter(c=>counts[c]),order.filter(c=>!CO.includes(c)&&c!=="其他"),counts["其他"]?["其他"]:[]);
@@ -1648,7 +1673,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
   '<label>付款方式</label><div class="pays">'+["轉帳","LINE Pay"].map(p=>'<label class="pay"><input type="radio" name="pay" value="'+p+'"'+((form.pay||"轉帳")===p?" checked":"")+'><span>'+(p==="轉帳"?"🏦 銀行轉帳":"💚 LINE Pay")+'</span></label>').join("")+'</div>'+
   '<label>備註（選填）</label><textarea class="f" name="note" rows="2"></textarea>'+
   '<button class="go" id="go">送出訂單</button></form>';
-  if(ME.guest){const f=$("#of");f.outerHTML='<button class="go" id="lg">💚 用 LINE 確認身分並下單</button><div style="font-size:12px;color:#6b6f75;margin-top:8px;line-height:1.6">會打開 ZOARÉ 的 LINE 官方帳號，按「傳送」後會收到你的專屬下單頁，購物車會自動帶過去，再填收件資料就完成了。<br>會員價會在專屬下單頁自動套用。</div>';$("#lg").onclick=guestCheckout}
+  if(ME.guest){const f=$("#of");f.outerHTML='<button class="go" id="lg">💚 用 LINE 確認身分並下單</button><div style="font-size:12px;color:#6b6f75;margin-top:8px;line-height:1.6">會用 LINE 登入確認身分（第一次會請你同意並加 ZOARÉ 好友），購物車會自動帶過去，再填收件資料就完成了。<br>會員價會在專屬下單頁自動套用。</div>';$("#lg").onclick=guestCheckout}
   $("#cx").onclick=()=>$("#sheet").classList.remove("on");
   if(!ME.guest)$("#of").onsubmit=submit;
   {const pc=L.filter(l=>!l.x.mem).reduce((a,l)=>a+l.q,0);if(TIER()==="member"&&pc>0&&pc<21){const b=$("#go")||$("#lg");if(b){b.disabled=true;b.style.opacity=".45";b.textContent="還差 "+(21-pc)+" 件才能送出（一般會員混批 21 件）"}}}
@@ -1657,7 +1682,7 @@ function renderCart(){$("#panel").classList.remove("vmode");VK=null;
 async function guestCheckout(){
   const b=$("#lg");b.disabled=true;b.textContent="處理中…";
   try{const r=await fetch("/shop/guestcart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cart})}).then(r=>r.json());
-    if(!r.ok)throw new Error(r.error||"失敗");location.href="/go?q="+encodeURIComponent("下單 #"+r.id);
+    if(!r.ok)throw new Error(r.error||"失敗");location.href="/shop/login?g="+encodeURIComponent(r.id);
   }catch(e){b.disabled=false;b.textContent="💚 用 LINE 確認身分並下單";alert("暫時無法處理，請稍後再試")}
 }
 async function submit(e){

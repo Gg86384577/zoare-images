@@ -396,6 +396,7 @@ async function displayName(env, userId) {
     const r = await lineApi(env, `/v2/bot/profile/${userId}`);
     if (r.ok) return (await r.json()).displayName || "老闆";
   } catch (e) {}
+  try { const n = env.SESSIONS && (await env.SESSIONS.get("wn:" + userId)); if (n) return n; } catch (e) {} // 網頁 LINE 登入時記下的名字（還沒加好友的客人）
   return "老闆";
 }
 async function imageBase64(env, messageId) {
