@@ -543,6 +543,7 @@ async function loadPack() {
 }
 // 免費：每週前 PACK_FREE_N 款；付費（單週／包月）或 VIP：本週全部＋全部商品素材庫
 export const PACK_FREE_N = 2;
+export async function packId() { const p = await loadPack(); return p ? p.id || "" : ""; }
 export async function packAccess(env, uid) {
   const until = Number((await env.SESSIONS.get("pk:" + uid)) || 0);
   if (until > Date.now()) return { ok: true, full: true, why: "buy", until };
