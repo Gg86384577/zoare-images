@@ -117,7 +117,7 @@ const RULES = `你是 ZOARÉ 的 LINE 批發客服。ZOARÉ 提供韓國、日�
 - 不要使用 Markdown（不要用 **、#、表格），LINE 不會顯示。
 
 【輸出格式】
-直接寫要傳給客人的文字（不要用 JSON、不要用程式碼格式）。
+直接寫要傳給客人的文字（不要用 JSON、不要用程式碼格式）。你寫的每個字都會原封不動傳給客人：用「您」直接跟客人說話，絕對不要寫分析或給老闆的說明（例如「客人問的是…」「這要分清楚」「應該先確認…」「我看不出…」），也不要提供應商、貿易商名稱或「候選商品」這種內部用語。不確定怎麼回就寫 #HANDOFF。
 回覆盡量精簡，每款商品只列必要欄位。
 最後另起一行加上控制指令（客人看不到）。只要回覆裡有列出商品，就一定要用 #SHOW 附上那幾款的圖片：
 #SHOW 要附上商品卡片的候選編號，用逗號分隔，回覆裡列出幾款就寫幾款，最多 10 個（例如：#SHOW 1,2,3；不需要就寫 #SHOW 0）
@@ -1031,6 +1031,8 @@ async function handleEvent(env, ev) {
 
     const messages = [...session.history, { role: "user", content: userContent }];
     const out = parseJson(await claude(env, RULES.replaceAll("{客人名稱}", name), messages));
+    // 保險：模型寫成「給老闆的分析」（第三人稱講客人、內部用語）就不要傳給客人，改轉真人
+    if (out.reply && /客人(問的|想要|要的|說的|是在問)|這要分清楚|應該先(確認|問)|我看不出|候選商品|老闆可以|建議老闆|回覆客人/.test(out.reply)) out.handoff = true;
 
     // 回答不出來、或跟前兩次回覆差不多（一直鬼打牆）→ 轉真人，機器人先不回
     const prevBot = session.history.filter((h) => h.role === "assistant").slice(-2).map((h) => h.content);
