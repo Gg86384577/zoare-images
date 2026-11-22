@@ -1246,7 +1246,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
 }
 
 // ---------- 網頁 ----------
-const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Chiron+Hei+HK:wght@400;500;700&display=swap">
+const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Chiron+Sung+HK:wght@500;700&family=M+PLUS+Rounded+1c:wght@700;800&display=swap">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ZOARÉ 批發商城</title>
 <style>
@@ -1552,8 +1552,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Ping
 @media(min-width:760px){.ht.l1{font-size:72px}.hp{width:220px!important}}
 /* ===== v6：封面 logo、新品 3D 滾輪、字體照 janm_ux（Inter Tight 緊排）、品牌色黑灰＋香檳金 ===== */
 :root{--bg:#F6F5F2;--ink:#151515;--sub:#76726B;--line:#E7E4DE;--vio:#A68B59;--gold:#A68B59}
-body{font-family:"Bricolage Grotesque","Chiron Hei HK",-apple-system,"PingFang TC",sans-serif}
-.ht.l1{font-weight:700!important;letter-spacing:-.03em!important}.ht.l2{font-weight:700;letter-spacing:-.06em}.nc .pr b,.sh2 b{font-weight:700}
+body{font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+.ht.l1,.sh2 b,.bt b,.stp b,.hsub2{font-family:"Instrument Serif","Chiron Sung HK","Songti TC",serif!important;font-weight:700!important;letter-spacing:.01em!important}
+.ht.l1{font-size:clamp(32px,10vw,46px)!important;line-height:1.12!important}
+.ht.l2{font-family:"Instrument Serif",Georgia,serif!important;font-style:italic;font-weight:400!important;letter-spacing:-.02em!important}
+.sh2 small,.hk{font-family:"Instrument Serif",Georgia,serif;font-style:italic;letter-spacing:1px!important;font-size:13px!important;text-transform:none}
+.stp i{font-family:"Instrument Serif",Georgia,serif!important;font-weight:400!important;letter-spacing:0!important}
+/* 金額一律圓體（老闆 11/23） */
+.pr b,.nc .pr b,#vpr,#sum b,#vsum,#vsum b,.bar .sum b,.price,.amt{font-family:"M PLUS Rounded 1c","Arial Rounded MT Bold","Hiragino Maru Gothic ProN",sans-serif!important;font-weight:800!important;letter-spacing:0!important}
+.nc .pr b{font-size:20px!important}.stp i{font-style:italic!important;font-size:22px!important}
 .hs:before{background:radial-gradient(closest-side,rgba(166,139,89,.18),rgba(166,139,89,.05) 60%,transparent)}
 .hlogo{display:flex;justify-content:center;margin-top:6px}.hlogo img{width:min(62vw,300px);height:auto;display:block}
 .hk{border:0;background:none;padding:0;margin-top:8px;font-size:10px;letter-spacing:4px;color:var(--sub)}.hk:before{display:none}
