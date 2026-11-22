@@ -1246,7 +1246,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
 }
 
 // ---------- 網頁 ----------
-const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ZOARÉ 批發商城</title>
 <style>
@@ -1550,11 +1550,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Ping
 .pb i,.pb2 i{background:var(--vio)!important}
 .search input{border-radius:999px;background:#fff;border:1px solid var(--line)}
 @media(min-width:760px){.ht.l1{font-size:72px}.hp{width:220px!important}}
+/* ===== v6：封面 logo、新品 3D 滾輪、字體照 janm_ux（Inter Tight 緊排）、品牌色黑灰＋香檳金 ===== */
+:root{--bg:#F6F5F2;--ink:#151515;--sub:#76726B;--line:#E7E4DE;--vio:#A68B59;--gold:#A68B59}
+body{font-family:"Inter Tight","Noto Sans TC",-apple-system,"PingFang TC",sans-serif}
+.hs:before{background:radial-gradient(closest-side,rgba(166,139,89,.18),rgba(166,139,89,.05) 60%,transparent)}
+.hlogo{display:flex;justify-content:center;margin-top:6px}.hlogo img{width:min(62vw,300px);height:auto;display:block}
+.hk{border:0;background:none;padding:0;margin-top:8px;font-size:10px;letter-spacing:4px;color:var(--sub)}.hk:before{display:none}
+.ht.l1{font-weight:600;letter-spacing:-.04em;font-size:clamp(30px,9.2vw,44px);line-height:1.08;margin-top:12px}
+.hsub{font-weight:400;font-size:13px}
+.hsub2{margin-top:12px;font-weight:600;letter-spacing:3px;color:var(--gold)}
+.ht.l2{font-weight:600;letter-spacing:-.05em;top:50%;color:#E6E2DA}
+.hstage{height:min(27vh,230px);perspective:1100px;margin-top:0}
+.wheel{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(-6deg)}
+.wr{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d;transform:rotateY(calc(var(--p,0) * -220deg));animation:wspin 40s linear infinite}
+@keyframes wspin{to{rotate:y -360deg}}
+.wc{--w:min(26vw,128px);position:absolute;left:calc(var(--w) / -2);top:calc(var(--w) * -.62);width:var(--w);aspect-ratio:4/5;border:0;padding:0;border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(21,21,21,.12);overflow:hidden;cursor:pointer;transform:rotateY(calc(var(--i) * 360deg / var(--n))) translateZ(calc(var(--w) * var(--n) / 6.1));-webkit-backface-visibility:visible}
+.wc img{width:100%;height:100%;object-fit:contain;padding:8%;box-sizing:border-box;background:#fff}
+.hline{box-shadow:0 10px 24px rgba(6,199,85,.22)}
+.sh2 b{font-weight:700;letter-spacing:-.03em}
+.bt b{font-weight:700;letter-spacing:-.02em}
+.stp{color:var(--ink)!important;background:#fff!important;border:1px solid var(--line);box-shadow:0 10px 24px rgba(21,21,21,.06)!important}
+.stp:nth-child(2),.stp:nth-child(3){background:#fff!important}
+.stp i{color:var(--gold)!important}.stp b{color:var(--ink)!important}.stp p{color:var(--sub)!important}
+.stp:first-child{background:#151515!important;border-color:#151515}.stp:first-child b{color:#fff!important}.stp:first-child p{color:rgba(255,255,255,.7)!important}
+.nc .pr b{font-weight:700}
+@media(min-width:760px){.wc{--w:170px}}
+@media(prefers-reduced-motion:reduce){.wr{animation:none}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}.card.rv .ph img{transform:none}.hero{height:auto}.hs{position:relative;height:auto}}
 </style></head><body>
 <header><div class="search"><input id="q" type="search" placeholder="搜尋角色、商品、JAN 碼" enterkeyhint="search"></div>
 <div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div><button id="hord" class="hcart hord" aria-label="訂單查詢">📦</button><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div></header>
-<section class="hero" id="hero"><div class="hs"><div class="hk">ZOARÉ ・ JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hsub">少量也能批・24 小時都能下單</div><div class="hsub2">本週熱賣</div><div class="hstage"><div class="ht l2">Sanrio · Chiikawa · Pokémon · Snoopy · Sanrio · Chiikawa</div><div class="hp a"></div><div class="hp b"></div><div class="hp c"></div></div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hfeat"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg>多款混搭</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0"/></svg>少量拿貨</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3z"/></svg>每週新品</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2"/></svg>24 小時下單</span></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同廠商湊滿約 NT$30,000 就叫貨</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
+<section class="hero" id="hero"><div class="hs"><div class="hlogo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="hk">JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hsub">少量也能批・24 小時都能下單</div><div class="hsub2">NEW IN ・ 這週新到</div><div class="hstage"><div class="ht l2">Sanrio · Chiikawa · Pokémon · Snoopy · Sanrio · Chiikawa</div><div class="wheel"><div class="wr" id="wr"></div></div></div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hfeat"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg>多款混搭</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0"/></svg>少量拿貨</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3z"/></svg>每週新品</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2"/></svg>24 小時下單</span></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同廠商湊滿約 NT$30,000 就叫貨</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
 <div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
@@ -1902,9 +1928,9 @@ if(!RM){
 const HERO=$("#hero");let HP=-1;
 function heroTick(){if(!HERO||HERO.hidden)return;const r=HERO.getBoundingClientRect(),span=Math.max(1,r.height-innerHeight),p=Math.min(1,Math.max(0,-r.top/span));if(Math.abs(p-HP)>.002){HP=p;HERO.style.setProperty("--p",p.toFixed(3))}}
 if(!RM){let tk=false;addEventListener("scroll",()=>{if(!tk){tk=true;requestAnimationFrame(()=>{tk=false;heroTick()})}},{passive:true});addEventListener("resize",heroTick)}
-async function fillHero(){if(!HERO)return;if(!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}
-  const hot=(HOT||[]).map(k=>byK(k)).filter(x=>x&&x.img&&!x.mem&&!x.hid),seen={},pick=[];for(const x of hot.concat(NEWV.filter(y=>y.img&&!y.mem))){const f=x._f||x.k;if(!seen[f]){seen[f]=1;pick.push(x)}if(pick.length>=3)break}
-  HERO.querySelectorAll(".hp").forEach((el,i)=>{const x=pick[i];if(x){el.innerHTML='<img src="'+esc(x.img)+'" alt=""><em>TOP '+(i===1?1:i===0?2:3)+'</em>';el.dataset.k=x.k;el.onclick=()=>openItem(x)}});
+async function fillHero(){if(!HERO)return;
+  const seen={},pick=[];for(const x of NEWV){if(!x.img||x.mem||x.hid)continue;const f=x._f||x.k;if(!seen[f]){seen[f]=1;pick.push(x)}if(pick.length>=14)break}
+  const wr=$("#wr"),N=pick.length;if(wr&&N){const st=360/N;wr.style.setProperty("--n",N);wr.innerHTML=pick.map((x,i)=>'<button class="wc" style="--i:'+i+'" data-k="'+esc(x.k)+'" aria-label="'+esc(x.n||"")+'"><img src="'+esc(x.img)+'" alt="" loading="lazy"></button>').join("");wr.onclick=e=>{const t=e.target.closest(".wc");if(t){const x=byK(t.dataset.k);if(x)openItem(x)}}}
   const c=$("#hcta");if(ME&&!ME.guest)c.innerHTML='<p style="display:block">嗨 <b>'+esc(ME.name)+'</b>，'+(ME.tier==="vip"?"已經套用 VIP 價":ME.tier==="member"?"已經套用一般會員價":"歡迎回來")+'<br>往下滑看這週新到</p>';heroTick()}
 // 分類大小格（點了直接切到那個分類）
 function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.querySelectorAll("#cats .cat")].slice(0,7);if(!cs.length){B.hidden=true;return}
