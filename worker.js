@@ -10,7 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, packReply, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, packReply, packId, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
@@ -1447,7 +1447,29 @@ async function memberVideoCmd(env, act) {
   const q = await env.SESSIONS.get("bc:memvid");
   return `📣 會員群發預覽：資源包宣傳影片\n收件人：一般會員 ${mem.length - vip} 位＋VIP ${vip} 位${done.size ? `（已收過 ${mem.length - left.length} 位，這次只傳剩下 ${left.length} 位）` : ""}\n每人 2 則訊息（影片＋說明文字），用掉 ${left.length} 則推播額度\n\n說明文字：\n————\n${packVideoMsgs()[1].text}\n————${q ? "\n⏳ 目前排隊中，額度恢復後會自動補傳" : ""}${res ? `\n上次結果：成功 ${res.ok} 位、剩 ${res.left} 位${res.err ? `（${res.err}）` : ""}` : ""}\n\n確定請回「會員群發 確認」`;
 }
+// VIP 素材包推播：每位 VIP 一則（各自的專屬連結），同一週只傳一次，額度不夠時下次再傳會補剩下的人
+async function vipPackCmd(env, act) {
+  const id = await packId();
+  if (!id) return "目前沒有素材包內容（post/pack.json）";
+  const key = "bc:vippack:" + id + ":done";
+  if (act === "取消") return "好👌 沒有傳送";
+  const vips = (await activeMembers(env)).filter((m) => m.tier === "vip");
+  const done = new Set(JSON.parse((await env.SESSIONS.get(key)) || "[]"));
+  const left = vips.filter((m) => !done.has(m.uid));
+  if (act !== "確認") return `📣 VIP 素材包推播預覽（${id}）\n收件人：VIP ${vips.length} 位${done.size ? `（已收過 ${vips.length - left.length} 位，這次只傳剩下 ${left.length} 位）` : ""}\n每人 1 則，各自附專屬連結，用掉 ${left.length} 則推播額度\n\n內容：\n————\n👑 VIP 專屬福利：本週開團素材包上線了，VIP 免費看全部！\n（接著是素材包連結與說明）\n————\n\n確定請回「VIP素材包 確認」`;
+  if (!left.length) return `所有 VIP 都已經收過這週的素材包了（共 ${vips.length} 位）`;
+  let ok = 0, err = "";
+  for (const m of left) {
+    const text = "👑 VIP 專屬福利：本週開團素材包上線了，VIP 免費看全部！\n\n" + (await packReply(env, m.uid));
+    const r = await lineApi(env, "/v2/bot/message/push", { to: m.uid, messages: [{ type: "text", text }] });
+    if (r && r.ok) { ok++; done.add(m.uid); } else { err = String(r ? r.status : "?"); break; }
+  }
+  await env.SESSIONS.put(key, JSON.stringify([...done]), { expirationTtl: 60 * 86400 });
+  return err ? `📣 已傳 ${ok} 位 VIP，還有 ${left.length - ok} 位沒傳到（LINE 回應 ${err}${err === "429" ? "，推播額度用完了" : ""}）\n之後再回「VIP素材包 確認」會補傳剩下的人，不會重複` : `📣 已把本週素材包傳給 ${ok} 位 VIP`;
+}
 async function broadcastCommand(env, t) {
+  const vp = t.match(/^#?VIP\s*素材包\s*(確認|取消)?$/i);
+  if (vp) return vipPackCmd(env, vp[1]);
   const mv = t.match(/^#?會員群發(?:影片)?\s*(確認|取消)?$/);
   if (mv) return memberVideoCmd(env, mv[1]);
   const bp = t.match(/^#?圖文群發\s*(確認|取消|預覽)?$/);

@@ -390,8 +390,15 @@ export async function handleShop(request, env, ctx, deps) {
     if (!uid) return html("<meta charset=utf-8><p style=\"font:16px sans-serif;padding:20px\">連結無效，請在 LINE 傳「素材包」重新取得連結</p>");
     const a = await packAccess(env, uid), pk = await loadPack();
     if (!pk) return html("<meta charset=utf-8><p style=\"font:16px sans-serif;padding:20px\">這週的素材包還在準備中～</p>");
-    if (!a.ok) return html("<meta charset=utf-8><p style=\"font:16px sans-serif;padding:20px\">素材包已到期，VIP 會員免費，或在商城購買單週 NT$149／包月 NT$399～</p>");
-    return html(packPage(pk, a));
+    return html(packPage(pk, a, await shopLink(env, uid), url.searchParams.get("t")));
+  }
+  // 付費／VIP 才拿得到：全部上架商品的素材（商品圖＋自動文案在前端產生）
+  if (p === "/shop/pack/all") {
+    const uid = await verifyToken(env, url.searchParams.get("t"));
+    const a = uid ? await packAccess(env, uid) : { full: false };
+    if (!a.full) return Response.json({ ok: false }, { status: 403 });
+    const L = slim(await deps.loadCatalog(env), deps.isExpired).filter((x) => x.img && !x.hid && !x.mem).map((x) => ({ n: x.n, b: x.b, img: x.img, c: (x.c || [])[0] || "" }));
+    return Response.json({ ok: true, items: L }, { headers: { "cache-control": "private, max-age=600" } });
   }
   if (p === "/shop/cart" && request.method === "POST") {
     let body; try { body = await request.json(); } catch (e) { return Response.json({ ok: false }, { status: 400 }); }
@@ -534,13 +541,14 @@ export const VIP_CREDIT = { n: 5, amt: 200, min: 3000 };
 async function loadPack() {
   try { const r = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/post/pack.json?t=" + Math.floor(Date.now() / 300000), { cf: { cacheTtl: 0 } }); return r.ok ? await r.json() : null; } catch (e) { return null; }
 }
+// 免費：每週前 PACK_FREE_N 款；付費（單週／包月）或 VIP：本週全部＋全部商品素材庫
+export const PACK_FREE_N = 2;
+export async function packId() { const p = await loadPack(); return p ? p.id || "" : ""; }
 export async function packAccess(env, uid) {
   const until = Number((await env.SESSIONS.get("pk:" + uid)) || 0);
-  if (until > Date.now()) return { ok: true, why: "buy", until };
-  if ((await getTier(env, uid)) === "vip") return { ok: true, why: "vip" };
-  const p = await loadPack();
-  if (p && p.free) return { ok: true, why: "free" };
-  return { ok: false };
+  if (until > Date.now()) return { ok: true, full: true, why: "buy", until };
+  if ((await getTier(env, uid)) === "vip") return { ok: true, full: true, why: "vip" };
+  return { ok: true, full: false, why: "free" };
 }
 export async function packLink(env, uid) { return `${SHOP_BASE}/shop/pack?t=${uid}.${await sign(env, uid)}`; }
 // 付款後開通：回傳要附在付款通知後面的文字
@@ -555,13 +563,96 @@ async function grantPack(env, o) {
 export async function packReply(env, uid) {
   const a = await packAccess(env, uid), p = await loadPack();
   if (!p) return "這週的開團素材包還在準備中，好了會通知您～";
-  if (a.ok) return `📦 ${p.title || "本週開團素材包"}\n每款都有宣傳圖＋FB／IG／Threads 文案＋建議售價，複製就能開團👇\n${await packLink(env, uid)}${a.why === "free" ? "\n\n（這週免費領，下週起 VIP 會員免費，其他人單週 NT$149／包月 NT$399）" : a.why === "vip" ? "\n\n👑 VIP 會員免費" : ""}`;
-  return `📦 開團素材包：每週 10 款新品宣傳圖＋FB／IG／Threads 開團文案＋建議售價，拿了就能直接開團\n\n👑 VIP 會員免費\n其他人：單週 NT$149／包月 NT$399\n👉 ${await shopLink(env, uid)}&q=${encodeURIComponent("素材包")}`;
+  if (a.full) return `📦 ${p.title || "本週開團素材包"}\n本週新品＋全部商品素材庫，每款都有圖和 FB／IG／Threads 文案，圖上自動印你的團名👇\n${await packLink(env, uid)}${a.why === "vip" ? "\n\n👑 VIP 會員免費" : ""}`;
+  if (a.ok) return `📦 免費試用：本週 ${PACK_FREE_N} 款開團素材（宣傳圖＋三平台文案＋建議售價），圖上自動印你的團名👇\n${await packLink(env, uid)}\n\n🔓 付費後可以拿到全部商品的素材：單週 NT$149／包月 NT$399（VIP 會員免費）\n👉 ${await shopLink(env, uid)}&q=${encodeURIComponent("素材包")}`;
+  return `📦 開團素材包：每週新品宣傳圖＋FB／IG／Threads 開團文案＋建議售價，拿了就能直接開團\n\n👑 VIP 會員免費\n其他人：單週 NT$149／包月 NT$399\n👉 ${await shopLink(env, uid)}&q=${encodeURIComponent("素材包")}`;
 }
-function packPage(p, a) {
+function packPage(p, a, shop, tok) {
   const esc = (s) => String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  const items = (p.items || []).map((it, i) => `<section class="it"><img src="${esc(it.img)}" alt=""><div class="b"><h2>${String(i + 1).padStart(2, "0")} ${esc(it.name)}</h2>${it.retail ? `<p class="r">建議零售價：${esc(it.retail)}</p>` : ""}<a class="dl" href="${esc(it.img)}" download target="_blank">下載圖片（長按圖片也可以存）</a>${[["FB 社團", it.fb], ["IG", it.ig], ["Threads", it.th]].filter((x) => x[1]).map(([t, c]) => `<div class="cp"><div class="ch"><b>${t}</b><button onclick="cp(this)">複製</button></div><pre>${esc(c)}</pre></div>`).join("")}</div></section>`).join("");
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>開團素材包</title><style>body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:#fff7f3;color:#333}header{padding:18px 16px;background:#ffe3d6}h1{margin:0;font-size:20px}header p{margin:6px 0 0;font-size:13px;color:#6b4a3c}.it{background:#fff;margin:14px 12px;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px #0001}.it img{width:100%;display:block}.b{padding:12px 14px}h2{font-size:17px;margin:0 0 6px}.r{margin:0 0 8px;color:#c0507a;font-weight:700}.dl{display:inline-block;margin-bottom:8px;font-size:13px;color:#555}.cp{border:1px solid #f0dcd2;border-radius:10px;margin-top:8px}.ch{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff1ea;border-radius:10px 10px 0 0}.ch button{border:0;background:#e0507d;color:#fff;border-radius:999px;padding:4px 12px;font-size:13px}pre{white-space:pre-wrap;margin:0;padding:10px;font-family:inherit;font-size:14px;line-height:1.6}footer{text-align:center;font-size:12px;color:#999;padding:20px}</style></head><body><header><h1>📦 ${esc(p.title || "開團素材包")}</h1><p>圖片底部白框放你的團名或 LINE，文案按「複製」直接貼上；價格、結單日請依你的團調整。${a.until ? "<br>可看到 " + esc(fmtDay(a.until)) : ""}</p></header>${items}<footer>ZOARÉ 開團素材包・請勿轉傳</footer><script>function cp(b){const t=b.closest(".cp").querySelector("pre").innerText;navigator.clipboard.writeText(t).then(()=>{b.textContent="已複製";setTimeout(()=>b.textContent="複製",1500)})}</script></body></html>`;
+  const all = p.items || [], list = a.full ? all : all.slice(0, PACK_FREE_N), locked = a.full ? [] : all.slice(PACK_FREE_N);
+  const buy = shop ? `${shop}&q=${encodeURIComponent("素材包")}` : "";
+  const shopQ = (n) => (shop ? `${shop}&q=${encodeURIComponent(n)}` : "");
+  // 群組公告：把本週每款的名稱＋建議售價整理成一則，結單日可在上方輸入後自動帶入
+  const notice = `📣 本週開團（${list.length} 款）\n\n${list.map((it, i) => `${i + 1}. ${it.name}${it.retail ? "｜" + it.retail : ""}`).join("\n")}\n\n📅 結單日：__/__\n📦 日本正版，到貨約 2～3 週\n👉 留言「+1＋品項」或私訊喊單`;
+  const items = list.map((it, i) => `<section class="it"><div class="ph"><img class="pic" data-src="${esc(it.img)}" data-bar="${Number(it.bar) || 0.85}" src="${esc(it.img)}" alt="${esc(it.name)}"></div><div class="b"><h2><span>${String(i + 1).padStart(2, "0")}</span>${esc(it.name)}</h2>${it.retail ? `<p class="r">建議售價 ${esc(it.retail)}</p>` : ""}<div class="act"><button class="dl" onclick="dl(${i})">下載圖片</button>${shop ? `<a class="go" href="${esc(shopQ(it.name))}" target="_blank">到商城訂這款</a>` : ""}</div>${[["FB 社團", it.fb], ["IG", it.ig], ["Threads", it.th]].filter((x) => x[1]).map(([t, c]) => `<div class="cp"><div class="ch"><b>${t}</b><button onclick="cp(this)">複製</button></div><pre class="tx" data-raw="${esc(c)}">${esc(c)}</pre></div>`).join("")}</div></section>`).join("");
+  const lockHtml = locked.length ? `<section class="up"><h3>🔓 付費後可以拿到全部商品的素材</h3><div class="lk">${locked.map((it) => `<div><img src="${esc(it.img)}" alt="" loading="lazy"><span>${esc(it.name)}</span></div>`).join("")}</div><ul><li>本週全部新品的宣傳圖＋三平台文案</li><li>全部上架商品的素材庫，可以搜尋，每款都能印團名、複製文案</li><li>群組公告、結單日自動帶入</li></ul><p class="pr">單週 NT$149／包月 NT$399　👑 VIP 會員免費</p>${buy ? `<a class="all" href="${esc(buy)}" target="_blank">購買素材包</a>` : ""}</section>` : "";
+  const libHtml = a.full ? `<h3>🗂 全部商品素材庫</h3><div class="set"><input id="q" placeholder="搜尋角色或商品，例：吉伊卡哇、大耳狗" oninput="lib(1)"><div id="cats" class="cats"></div></div><div id="lib" class="lib"></div><button id="more" class="more" onclick="lib()">載入更多</button>` : "";
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZOARÉ 開團素材包</title><style>
+:root{--bg:#fdf6ee;--pk:#f7dcc8;--rs:#a9502a;--ink:#3a2a22;--mu:#8a6f60;--ln:#efdccd}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink)}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px 30px}
+header{text-align:center;padding:26px 16px 18px;background:var(--pk);border-radius:0 0 26px 26px}
+.logo{font-family:Georgia,serif;letter-spacing:.35em;font-size:22px;color:var(--rs);margin:0}
+h1{margin:8px 0 0;font-size:21px}header p{margin:6px 0 0;font-size:13px;color:var(--mu)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}
+.st{background:#fff;border:1.5px dashed var(--ln);border-radius:14px;padding:10px 8px;text-align:center;font-size:12.5px;line-height:1.5}
+.st b{display:block;color:var(--rs);font-size:18px}
+.set{background:#fff;border-radius:16px;padding:14px;box-shadow:0 1px 4px #0001}
+.set label{display:block;font-size:13px;font-weight:700;margin:2px 0 6px}
+.set input{width:100%;font-size:16px;padding:10px 12px;border:1.5px solid var(--ln);border-radius:10px;background:var(--bg);margin-bottom:10px}
+.set small{color:var(--mu);font-size:12px}
+.all{display:block;width:100%;margin-top:6px;border:0;border-radius:999px;background:var(--rs);color:#fff;font-size:15px;font-weight:700;padding:11px}
+.it{background:#fff;margin:16px 0;border-radius:18px;overflow:hidden;box-shadow:0 1px 4px #0001}
+.ph{background:#fff}.pic{width:100%;display:block}
+.b{padding:12px 14px 14px}h2{font-size:17px;margin:0 0 4px;display:flex;gap:8px;align-items:center}
+h2 span{font:700 13px Georgia,serif;color:#fff;background:var(--rs);border-radius:999px;padding:2px 8px}
+.r{margin:0 0 10px;color:var(--rs);font-weight:700}
+.act{display:flex;gap:8px;margin-bottom:6px}
+.dl,.go{flex:1;text-align:center;border-radius:999px;padding:8px 10px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
+.dl{border:1.5px solid var(--rs);background:#fff;color:var(--rs)}.go{background:var(--pk);color:var(--rs);border:0}
+.cp{border:1px solid var(--ln);border-radius:12px;margin-top:8px}
+.ch{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff6ef;border-radius:12px 12px 0 0}
+.ch button{border:0;background:var(--rs);color:#fff;border-radius:999px;padding:4px 14px;font-size:13px}
+pre{white-space:pre-wrap;margin:0;padding:10px;font-family:inherit;font-size:14px;line-height:1.65}
+h3{font-size:16px;margin:22px 0 8px}
+footer{text-align:center;font-size:12px;color:var(--mu);padding:20px}
+.up{background:#fff;border:2px dashed var(--rs);border-radius:18px;padding:14px;margin:18px 0}.up h3{margin:0 0 10px}
+.lk{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.lk div{position:relative;aspect-ratio:4/5;border-radius:12px;overflow:hidden}
+.lk img{width:100%;height:100%;object-fit:cover;filter:blur(6px);transform:scale(1.1)}.lk span{position:absolute;inset:auto 0 0;background:#0007;color:#fff;font-size:11.5px;padding:4px;text-align:center}
+.up ul{margin:12px 0 6px;padding-left:20px;font-size:14px;line-height:1.8}.pr{font-weight:800;color:var(--rs);margin:6px 0}
+.cats{display:flex;gap:6px;overflow-x:auto}.cats button{flex:none;border:1.5px solid var(--ln);background:#fff;border-radius:999px;padding:5px 12px;font-size:13px}.cats button.on{background:var(--rs);color:#fff;border-color:var(--rs)}
+.lib{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.lc{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px #0001;font-size:13px}
+.lc img{width:100%;display:block;aspect-ratio:1/1.18;object-fit:cover;background:#fff}.lc .n{padding:6px 8px;line-height:1.4;height:3.4em;overflow:hidden}.lc .a{display:flex;gap:4px;padding:0 8px 8px}.lc .a button{flex:1;border:1.5px solid var(--rs);background:#fff;color:var(--rs);border-radius:999px;padding:5px 0;font-size:12.5px;font-weight:700}
+.more{display:block;margin:14px auto;border:1.5px solid var(--rs);background:#fff;color:var(--rs);border-radius:999px;padding:9px 24px;font-weight:700}
+</style></head><body><header><p class="logo">ZOARÉ</p><h1>📦 ${esc(p.title || "開團素材包")}</h1><p>${a.full ? `本週 ${all.length} 款＋全部商品素材庫` : `免費試用 ${list.length} 款`}｜宣傳圖＋FB／IG／Threads 文案${a.until ? "｜可看到 " + esc(fmtDay(a.until)) : a.why === "vip" ? "｜👑 VIP" : ""}</p></header>
+<div class="wrap">
+<div class="steps"><div class="st"><b>1</b>填團名、結單日</div><div class="st"><b>2</b>下載已加團名的圖</div><div class="st"><b>3</b>複製文案貼文</div></div>
+<div class="set"><label>你的團名／LINE ID（會自動印在每張圖下方白框）</label><input id="nm" maxlength="24" placeholder="例：小美日貨團｜LINE @xxxx" oninput="go()">
+<label>結單日（會自動帶入所有文案）</label><input id="dd" maxlength="10" placeholder="例：11/28" oninput="go()">
+<small>只存在你這支手機，下次打開還在。</small><button class="all" onclick="dlAll()">全部圖片一次下載</button></div>
+<h3>📣 群組公告（一次介紹本週全部商品）</h3><div class="cp"><div class="ch"><b>LINE 群／FB 社團置頂</b><button onclick="cp(this)">複製</button></div><pre class="tx" data-raw="${esc(notice)}">${esc(notice)}</pre></div>
+${items}
+${lockHtml}${libHtml}
+<footer>價格請依你的團調整｜ZOARÉ 開團素材包・請勿轉傳</footer></div>
+<script>
+const $=s=>[...document.querySelectorAll(s)],K="zpk";let S={};try{S=JSON.parse(localStorage.getItem(K)||"{}")}catch(e){}
+nm.value=S.nm||"";dd.value=S.dd||"";
+const cache={};function load(u){return cache[u]||(cache[u]=new Promise((ok,no)=>{const i=new Image();i.crossOrigin="anonymous";i.onload=()=>ok(i);i.onerror=no;i.src=u}))}
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+async function paint(el){const t=nm.value.trim();if(!t){el.src=el.dataset.src;return}
+ try{const im=await load(el.dataset.src),W=im.naturalWidth,H=im.naturalHeight,cv=document.createElement("canvas");cv.width=W;cv.height=H;const c=cv.getContext("2d");c.drawImage(im,0,0);
+ const y0=Math.round(H*(+el.dataset.bar||.85)),bh=H-y0;c.fillStyle="#fff";c.fillRect(0,y0,W,bh);
+ const pw=W*.86,ph=bh*.62,px=(W-pw)/2,py=y0+(bh-ph)/2;rr(c,px,py,pw,ph,ph/2);c.fillStyle="#fdf6ee";c.fill();c.lineWidth=Math.max(3,W/300);c.strokeStyle="#a9502a";c.stroke();
+ let fs=ph*.5;c.font="900 "+fs+"px 'PingFang TC','Noto Sans TC',sans-serif";while(c.measureText(t).width>pw*.88&&fs>10){fs-=2;c.font="900 "+fs+"px 'PingFang TC','Noto Sans TC',sans-serif"}
+ c.fillStyle="#a9502a";c.textAlign="center";c.textBaseline="middle";c.fillText(t,W/2,py+ph/2+fs*.04);el.src=cv.toDataURL("image/jpeg",.92)}catch(e){el.src=el.dataset.src}}
+function txt(){const d=dd.value.trim();$(".tx").forEach(p=>{p.textContent=d?p.dataset.raw.replace(/__\\/__/g,d):p.dataset.raw})}
+let tm;function go(){S={nm:nm.value,dd:dd.value};try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}txt();clearTimeout(tm);tm=setTimeout(()=>$(".pic").forEach(paint),250)}
+function dl(i){const el=$(".pic")[i],a=document.createElement("a");a.href=el.src;a.download="ZOARE-"+String(i+1).padStart(2,"0")+".jpg";a.target="_blank";document.body.appendChild(a);a.click();a.remove()}
+async function dlAll(){const n=$(".pic").length;for(let i=0;i<n;i++){dl(i);await new Promise(r=>setTimeout(r,700))}}
+function cp(b){const t=b.closest(".cp").querySelector("pre").innerText;navigator.clipboard.writeText(t).then(()=>{b.textContent="已複製";setTimeout(()=>b.textContent="複製",1500)})}
+txt();if(nm.value)$(".pic").forEach(paint);
+${a.full ? `const TOK=${JSON.stringify(String(tok || ""))},SHOP=${JSON.stringify(shop || "")};let ALL=[],F=[],shown=0,cat="";
+fetch("/shop/pack/all?t="+encodeURIComponent(TOK)).then(r=>r.json()).then(d=>{if(!d.ok)return;ALL=d.items;const cs=[...new Set(ALL.map(x=>x.c).filter(Boolean))].slice(0,14);cats.innerHTML=["全部",...cs].map((c,i)=>'<button class="'+(i?"":"on")+'" data-c="'+(i?c:"")+'">'+c+'</button>').join("");cats.onclick=e=>{const b=e.target.closest("button");if(!b)return;cat=b.dataset.c;$(".cats button").forEach(x=>x.classList.toggle("on",x===b));lib(1)};lib(1)});
+const E=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+function cap(x){const d=dd.value.trim()||"__/__";return x.n+" 開團啦✨\\n日本正版 "+x.b+"\\n\\n💰 售價 $___\\n📅 結單日："+d+"\\n📦 到貨約 2～3 週\\n\\n留言「+1」或私訊我喊單"}
+function lib(reset){if(reset){const q=(document.getElementById("q").value||"").trim().toLowerCase();F=ALL.filter(x=>(!cat||x.c===cat)&&(!q||(x.n+" "+x.b).toLowerCase().includes(q)));shown=0;document.getElementById("lib").innerHTML=""}
+ const part=F.slice(shown,shown+24);shown+=part.length;document.getElementById("lib").insertAdjacentHTML("beforeend",part.map((x,i)=>'<div class="lc"><img loading="lazy" src="'+E(x.img)+'" alt=""><div class="n">'+E(x.n)+'</div><div class="a"><button onclick="ld(this)" data-i="'+ALL.indexOf(x)+'">印團名下載</button><button onclick="lc(this)" data-i="'+ALL.indexOf(x)+'">複製文案</button></div></div>').join(""));
+ more.style.display=shown<F.length?"block":"none"}
+function lc(b){navigator.clipboard.writeText(cap(ALL[+b.dataset.i])).then(()=>{b.textContent="已複製";setTimeout(()=>b.textContent="複製文案",1500)})}
+async function ld(b){const x=ALL[+b.dataset.i],t=nm.value.trim();try{const im=await load(x.img),W=im.naturalWidth,H0=im.naturalHeight,bh=Math.round(H0*.18),cv=document.createElement("canvas");cv.width=W;cv.height=H0+bh;const c=cv.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,W,H0+bh);c.drawImage(im,0,0);
+ if(t){const pw=W*.86,ph=bh*.62,px=(W-pw)/2,py=H0+(bh-ph)/2;rr(c,px,py,pw,ph,ph/2);c.fillStyle="#fdf6ee";c.fill();c.lineWidth=Math.max(3,W/300);c.strokeStyle="#a9502a";c.stroke();let fs=ph*.5;c.font="900 "+fs+"px sans-serif";while(c.measureText(t).width>pw*.88&&fs>10){fs-=2;c.font="900 "+fs+"px sans-serif"}c.fillStyle="#a9502a";c.textAlign="center";c.textBaseline="middle";c.fillText(t,W/2,py+ph/2)}
+ const a=document.createElement("a");a.href=cv.toDataURL("image/jpeg",.92);a.download="ZOARE-"+x.n.slice(0,20)+".jpg";document.body.appendChild(a);a.click();a.remove()}catch(e){window.open(x.img,"_blank")}}` : ""}
+</script></body></html>`;
 }
 async function getCoupons(env, uid) { try { return JSON.parse((await env.SESSIONS.get("cp:" + uid)) || "[]"); } catch (e) { return []; } }
 async function saveCoupons(env, uid, list) { await env.SESSIONS.put("cp:" + uid, JSON.stringify(list.slice(0, 60))); }
