@@ -1386,19 +1386,59 @@ header{background:var(--hd);color:var(--ink);padding:12px 14px 8px}
 .vps{position:absolute;left:12px;bottom:10px;display:flex;gap:6px}.vps button{position:relative;width:44px;height:44px;border-radius:10px;border:2px solid #fff;padding:0;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.18)}.vps button.on{border-color:var(--acc)}.vps img{width:100%;height:100%;object-fit:cover;max-width:none;max-height:none;border-radius:0;mix-blend-mode:normal}.vps i{position:absolute;left:0;right:0;bottom:0;font-style:normal;font-size:9px;color:#fff;background:rgba(0,0,0,.5);line-height:1.5}
 .cat.hasai .ci img{object-fit:cover}
 details.leg{display:inline}details.leg summary{display:inline;cursor:pointer;color:var(--acc);font-size:12px;margin-left:6px;list-style:none}details.leg summary::-webkit-details-marker{display:none}details.leg[open]{display:block}details.leg[open] summary{margin-left:0}
+/* ===== 新版外觀＋動態（2026-11 學 janm_ux）：手機優先、LINE 內建瀏覽器也順；系統設定「減少動態」時全部關掉 ===== */
+.logo img{height:16px;display:block}
+.add,.go,.bar button:not(.ghost),.chip.on,.chip.news.on,.selb,.tier.vip,.hcart b,.vti b,.pay input:checked+span{color:var(--ink)!important}
+.add,.go,.bar button,.chip,.cat,.hcart,.vt,.oc,.more,.qty button{transition:transform .22s cubic-bezier(.3,1.6,.5,1),background-color .2s,border-color .2s}
+.add:active,.go:active,.bar button:active,.chip:active,.cat:active,.hcart:active,.vt:active,.oc:active,.more:active,.qty button:active{transform:scale(.93)}
+.card{transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s}
+.card.rv{opacity:0;transform:translateY(18px) scale(.98)}
+.card.rv.in{opacity:1;transform:none;transition:opacity .5s ease,transform .6s cubic-bezier(.2,.8,.2,1)}
+.sk{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(120,80,60,.07)}
+.sk i,.sk b{display:block;background:linear-gradient(100deg,#F7EEE9 30%,#FFF9F4 50%,#F7EEE9 70%);background-size:300% 100%;animation:shim 1.3s linear infinite}
+.sk i{aspect-ratio:1}.sk b{height:12px;margin:10px;border-radius:6px}.sk b+b{width:45%;height:16px}
+@keyframes shim{from{background-position:100% 0}to{background-position:0 0}}
+.sheet.on{animation:fadeIn .22s ease}.sheet.on .panel{animation:sheetUp .42s cubic-bezier(.2,.9,.25,1)}
+@keyframes fadeIn{from{opacity:0}}@keyframes sheetUp{from{transform:translateY(40px);opacity:.4}}
+body.intro .pb i,body.intro .pb2 i,.panel.fresh .pb i,.panel.fresh .pb2 i{animation:grow 1.1s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{width:0}}
+.hcart.bump{animation:bump .5s cubic-bezier(.3,1.8,.5,1)}#sum b.bump{display:inline-block;animation:bump .45s cubic-bezier(.3,1.8,.5,1)}
+@keyframes bump{30%{transform:scale(1.25)}}
+.fly{position:fixed;z-index:80;border-radius:50%;object-fit:cover;background:#fff;box-shadow:0 4px 14px rgba(120,80,60,.25);pointer-events:none}
+@media(hover:hover) and (pointer:fine){.nc{transform-style:preserve-3d;will-change:transform}.nc:hover{box-shadow:0 10px 24px rgba(120,80,60,.14)}.nc .ph::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--mx,50%) var(--my,0%),rgba(255,255,255,.45),transparent 55%);opacity:0;transition:opacity .3s}.nc:hover .ph::after{opacity:1}}
+/* 訪客歡迎頁：用 LINE 登入 */
+.wl{position:fixed;inset:0;z-index:90;background:linear-gradient(120deg,#FFD9CC,#FFE9B8 55%,#D9EEFF);display:flex;flex-direction:column;overflow:hidden;transition:opacity .35s,transform .35s}
+.wl.out{opacity:0;transform:scale(1.03);pointer-events:none}
+.wl:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 80% 15%,rgba(255,255,255,.7),transparent 42%)}
+.wlh{position:relative;text-align:center;padding:calc(28px + env(safe-area-inset-top)) 16px 0}.wlh img{height:24px}.wlh p{font-size:12px;letter-spacing:2px;margin-top:6px;color:var(--ink)}
+.wlf{position:relative;flex:1;min-height:200px}
+.wlc{position:absolute;width:30%;max-width:150px;background:#fff;border-radius:12px;box-shadow:0 6px 18px rgba(120,80,60,.12);overflow:hidden;animation:flt 6s ease-in-out infinite}
+.wlc span{display:flex;aspect-ratio:1;align-items:center;justify-content:center}.wlc img{width:84%;height:84%;object-fit:contain;mix-blend-mode:multiply}
+.wlc:nth-child(1){left:7%;top:10%;--r:-7deg;animation-delay:-1s}.wlc:nth-child(2){left:36%;top:2%;--r:3deg;z-index:2;animation-delay:-3s}.wlc:nth-child(3){right:6%;top:14%;--r:8deg;animation-delay:-2s}.wlc:nth-child(4){left:15%;top:52%;--r:5deg;animation-delay:-4s}.wlc:nth-child(5){right:14%;top:55%;--r:-5deg;z-index:2;animation-delay:-5s}
+.wlc:nth-child(1) span{background:var(--p1)}.wlc:nth-child(2) span{background:var(--p5)}.wlc:nth-child(3) span{background:var(--p4)}.wlc:nth-child(4) span{background:var(--p2)}.wlc:nth-child(5) span{background:var(--p3)}
+@keyframes flt{0%,100%{transform:rotate(var(--r)) translateY(0)}50%{transform:rotate(var(--r)) translateY(-10px)}}
+.wlb{position:relative;background:#fff;border-radius:18px 18px 0 0;padding:22px 16px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(120,80,60,.1);animation:sheetUp .6s .1s cubic-bezier(.2,.9,.25,1) both}
+.wlb h1{font-size:22px;font-weight:800;line-height:1.35}.wlb h1 span{display:block;animation:lineIn .6s cubic-bezier(.2,.8,.2,1) both}.wlb h1 span+span{animation-delay:.12s}
+@keyframes lineIn{from{opacity:0;transform:translateY(12px)}}
+.wlt{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 16px}.wlt span{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accsoft)}
+.wll,.wlg{display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:999px;font-weight:700;font-size:15px;text-decoration:none;width:100%;border:0;font-family:inherit}
+.wll{background:#06C755;color:#fff}.wlg{background:#fff;color:var(--ink);margin-top:10px;box-shadow:0 1px 4px rgba(120,80,60,.12)}
+.wlb small{display:block;text-align:center;font-size:12px;margin-top:12px;color:var(--ink)}
+@media(min-width:640px){.wl{align-items:center}.wlf,.wlb{width:100%;max-width:480px}.wlb{border-radius:18px;margin-bottom:24px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}}
 </style></head><body>
 <header><div class="search"><input id="q" type="search" placeholder="🔍 搜尋商品、角色、JAN 碼" enterkeyhint="search"><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div>
-<div class="brand"><div class="logo">ZOARÉ</div><div class="who" id="who">載入中…</div></div></header>
+<div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div></div></header>
 <div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
-<div class="grid" id="grid"></div>
+<div class="grid" id="grid"><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div></div>
 <button class="more" id="more" hidden>載入更多</button>
 <div class="bar"><button id="openOrders" class="ghost">訂單查詢</button><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
 <div class="lb" id="lb"><button class="lbc" id="lbc">×</button><img id="lbi" alt=""><div class="lbt" id="lbt"></div><div class="lbb"><button id="lbp">‹</button><button class="lbs" id="lbs">⬇️ 儲存照片</button><button id="lbn">›</button></div><small>儲存沒反應的話，長按圖片也可以存到手機</small></div>
 <script>
-const T=(()=>{const u=new URLSearchParams(location.search).get("t")||"";try{if(u){localStorage.setItem("zo_t",u);return u}return localStorage.getItem("zo_t")||""}catch(e){return u}})();
+const T=(()=>{const u=new URLSearchParams(location.search).get("t")||"";try{if(u){localStorage.setItem("zo_t",u);try{const q=new URLSearchParams(location.search);q.delete("t");history.replaceState(null,"",location.pathname+(q.toString()?"?"+q:"")+location.hash)}catch(_){};return u}return localStorage.getItem("zo_t")||""}catch(e){return u}})();
 function logout(){try{localStorage.removeItem("zo_t")}catch(e){};location.href="/shop"}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1628,7 +1668,7 @@ async function openNews(){$("#panel").classList.remove("vmode");VK=null;
 }
 const STC={"待付款":"s1","已回報匯款":"s2","待確認":"s1","已付款":"s2","已出貨":"s3","已取消":"s4"};
 async function openOrders(){$("#panel").classList.remove("vmode");VK=null;
-  if(ME&&ME.guest){$("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">訪客看不到訂單喔<br>在 ZOARÉ 的 LINE 傳「訂購」就會收到你的專屬連結，可以查訂單</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
+  if(ME&&ME.guest){$("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">登入後才看得到你的訂單<br><a href="/shop/login" style="display:inline-block;margin-top:10px;background:#06c755;color:#fff;padding:8px 18px;border-radius:999px;text-decoration:none;font-weight:700">用 LINE 登入</a></div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
   $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
@@ -1699,7 +1739,54 @@ async function submit(e){
     '<p style="margin-top:12px;color:#6b6f75;font-size:13px">訂單明細也已經傳到你的 LINE 囉</p><button class="go" style="width:100%;margin-top:14px" onclick="sheet.classList.remove(\\'on\\')">繼續逛</button></div>';
   }catch(err){btn.disabled=false;btn.textContent="送出訂單";alert(err.message)}
 }
-init();
+// ===== 動態層（學 janm_ux）：卡片浮現、圖片飛進商品頁、加入購物車飛進去、數字跳動、桌機 3D 傾斜 =====
+const RM=(()=>{try{return matchMedia("(prefers-reduced-motion: reduce)").matches}catch(e){return false}})();
+document.body.classList.add("intro");setTimeout(()=>document.body.classList.remove("intro"),4000);
+if(!RM&&"IntersectionObserver" in window){
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const el=e.target;el.style.transitionDelay=(el._d||0)+"ms";el.classList.add("in");io.unobserve(el);setTimeout(()=>{el.style.transitionDelay="";el.classList.remove("rv","in")},900+(el._d||0))}})},{rootMargin:"0px 0px -5% 0px"});
+  let n=0,t=null;
+  new MutationObserver(ms=>{ms.forEach(m=>m.addedNodes.forEach(el=>{if(el.nodeType!==1||!el.classList.contains("card")||el._w)return;el._w=1;el.classList.add("rv");el._d=Math.min(n++,7)*60;clearTimeout(t);t=setTimeout(()=>{n=0},150);io.observe(el)}))}).observe($("#grid"),{childList:true});
+}
+// 商品圖從列表直接放大接到商品頁
+let FLIP=null;
+document.addEventListener("click",e=>{if(RM||e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");const im=g&&g.querySelector(".ph img");if(im)FLIP={r:im.getBoundingClientRect(),at:Date.now()}},true);
+new MutationObserver(()=>{const p=$("#panel");if(!FLIP||Date.now()-FLIP.at>800)return;const im=p.querySelector(".vhero img");if(!im)return;const f=FLIP;FLIP=null;
+  requestAnimationFrame(()=>{const r=im.getBoundingClientRect();if(!r.width||!im.animate)return;const s=f.r.width/r.width;
+    im.animate([{transform:"translate("+(f.r.left+f.r.width/2-r.left-r.width/2)+"px,"+(f.r.top+f.r.height/2-r.top-r.height/2)+"px) scale("+s+")"},{transform:"none"}],{duration:480,easing:"cubic-bezier(.2,.9,.25,1)"})})}).observe($("#panel"),{childList:true});
+// 打開面板時讓進度條長一次
+new MutationObserver(()=>{const s=$("#sheet");if(s.classList.contains("on")&&!s._on){s._on=1;const p=$("#panel");p.classList.add("fresh");setTimeout(()=>p.classList.remove("fresh"),1500)}else if(!s.classList.contains("on"))s._on=0}).observe($("#sheet"),{attributes:true,attributeFilter:["class"]});
+// 加入購物車：商品縮成小圓點飛進購物車
+document.addEventListener("click",e=>{const a=e.target.dataset&&e.target.dataset.a;if(RM||(a!=="add"&&a!=="+"))return;
+  const c=e.target.closest(".card,.vrow,.op,#panel");const im=(c&&c.querySelector("img"))||$("#panel .vhero img");const to=$("#sheet").classList.contains("on")?$(".vbar")||$("#hcart"):$("#hcart");
+  if(!im||!to||!document.body.animate)return;const a0=im.getBoundingClientRect(),b0=to.getBoundingClientRect();if(!a0.width)return;
+  const f=document.createElement("img");f.src=im.currentSrc||im.src;f.className="fly";const z=Math.min(64,a0.width);
+  f.style.cssText="width:"+z+"px;height:"+z+"px;left:"+(a0.left+a0.width/2-z/2)+"px;top:"+(a0.top+a0.height/2-z/2)+"px";document.body.appendChild(f);
+  const dx=b0.left+b0.width/2-(a0.left+a0.width/2),dy=b0.top+b0.height/2-(a0.top+a0.height/2);
+  f.animate([{transform:"translate(0,0) scale(1)",opacity:1},{transform:"translate("+dx*.5+"px,"+(dy*.5-60)+"px) scale(.6)",opacity:1,offset:.5},{transform:"translate("+dx+"px,"+dy+"px) scale(.2)",opacity:.3}],{duration:650,easing:"cubic-bezier(.5,0,.6,1)"}).onfinish=()=>{f.remove();const h=$("#hcart");h.classList.remove("bump");void h.offsetWidth;h.classList.add("bump")}},true);
+// 合計金額數字滾動
+{const _bar=bar;let last=0;bar=function(){_bar();const b=$("#sum b");if(!b)return;const to=Number(b.textContent.replace(/[^0-9]/g,""))||0,fr=last;last=to;if(RM||fr===to)return;
+  b.classList.remove("bump");void b.offsetWidth;b.classList.add("bump");const t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/450),v=Math.round(fr+(to-fr)*(1-Math.pow(1-k,3)));b.textContent=fmt(v);if(k<1)requestAnimationFrame(step)};requestAnimationFrame(step)}}
+// 桌機滑鼠：商品卡 3D 傾斜＋光澤（手機不做，省電）
+if(!RM&&matchMedia("(hover:hover) and (pointer:fine)").matches){
+  $("#grid").addEventListener("pointermove",e=>{const c=e.target.closest(".nc");if(!c)return;const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+    c.style.transform="perspective(700px) rotateX("+((.5-y)*8).toFixed(2)+"deg) rotateY("+((x-.5)*10).toFixed(2)+"deg) translateY(-3px)";c.style.setProperty("--mx",(x*100).toFixed(0)+"%");c.style.setProperty("--my",(y*100).toFixed(0)+"%")});
+  $("#grid").addEventListener("pointerout",e=>{const c=e.target.closest(".nc");if(c&&!c.contains(e.relatedTarget))c.style.transform=""});
+}
+// 訪客歡迎頁：一鍵用 LINE 登入，或先逛逛
+function welcome(){
+  if(!ME||!ME.guest)return;const sp=new URLSearchParams(location.search);if(sp.get("cart")||sp.get("q")||sp.get("mf")||sp.get("v"))return;
+  try{if(sessionStorage.getItem("zo_wl"))return}catch(e){}
+  const pics=NEWV.filter(x=>x.img).slice(0,5);
+  const w=document.createElement("div");w.className="wl";w.setAttribute("role","dialog");w.setAttribute("aria-label","歡迎來到 ZOARÉ");
+  w.innerHTML='<div class="wlh"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"><p>日本角色商品批發</p></div>'+
+    '<div class="wlf">'+pics.map(x=>'<div class="wlc"><span><img src="'+esc(x.img)+'" alt=""></span></div>').join("")+'</div>'+
+    '<div class="wlb"><h1><span>小賣家、團購主的</span><span>日本角色商品批發</span></h1><div class="wlt"><span>少量也能批</span><span>24 小時下單</span><span>會員價自動算好</span></div>'+
+    '<a class="wll" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用 LINE 登入</a>'+
+    '<button class="wlg" type="button">先逛逛</button><small>登入後看得到你的會員價、購物車和訂單</small></div>';
+  document.body.appendChild(w);
+  w.querySelector(".wlg").onclick=()=>{try{sessionStorage.setItem("zo_wl","1")}catch(e){}w.classList.add("out");setTimeout(()=>w.remove(),400)};
+}
+init().then(()=>{try{welcome()}catch(e){}});
 </script></body></html>`;
 
 // ---------- LINE 商品目錄：先選系列 → 再選角色 → 傳商品圖片卡 ----------
