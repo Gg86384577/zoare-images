@@ -1246,7 +1246,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
 }
 
 // ---------- 網頁 ----------
-const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Chiron+Hei+HK:wght@400;500;700&display=swap">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ZOARÉ 批發商城</title>
 <style>
@@ -1552,7 +1552,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Ping
 @media(min-width:760px){.ht.l1{font-size:72px}.hp{width:220px!important}}
 /* ===== v6：封面 logo、新品 3D 滾輪、字體照 janm_ux（Inter Tight 緊排）、品牌色黑灰＋香檳金 ===== */
 :root{--bg:#F6F5F2;--ink:#151515;--sub:#76726B;--line:#E7E4DE;--vio:#A68B59;--gold:#A68B59}
-body{font-family:"Inter Tight","Noto Sans TC",-apple-system,"PingFang TC",sans-serif}
+body{font-family:"Bricolage Grotesque","Chiron Hei HK",-apple-system,"PingFang TC",sans-serif}
+.ht.l1{font-weight:700!important;letter-spacing:-.03em!important}.ht.l2{font-weight:700;letter-spacing:-.06em}.nc .pr b,.sh2 b{font-weight:700}
 .hs:before{background:radial-gradient(closest-side,rgba(166,139,89,.18),rgba(166,139,89,.05) 60%,transparent)}
 .hlogo{display:flex;justify-content:center;margin-top:6px}.hlogo img{width:min(62vw,300px);height:auto;display:block}
 .hk{border:0;background:none;padding:0;margin-top:8px;font-size:10px;letter-spacing:4px;color:var(--sub)}.hk:before{display:none}
