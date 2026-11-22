@@ -319,7 +319,10 @@ export async function handleShop(request, env, ctx, deps) {
   // ---------- 網頁版用 LINE 登入（LINE Login channel：env LINE_LOGIN_ID / LINE_LOGIN_SECRET） ----------
   if (p === "/shop/login") {
     const cid = env.LINE_LOGIN_ID, g = String(url.searchParams.get("g") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
-    if (!cid || !env.LINE_LOGIN_SECRET) return Response.redirect(g ? `${SHOP_BASE}/go?q=${encodeURIComponent("下單 #" + g)}` : `${SHOP_BASE}/go?q=${encodeURIComponent("訂購")}`, 302);
+    if (!cid || !env.LINE_LOGIN_SECRET) {
+      if (g) return Response.redirect(`${SHOP_BASE}/go?q=${encodeURIComponent("下單 #" + g)}`, 302);
+      return new Response(`<meta charset=utf-8><meta name=viewport content="width=device-width"><div style="font:15px/1.8 -apple-system,'PingFang TC',sans-serif;padding:32px 20px;color:#2A2826;text-align:center">LINE 登入還在開通中，再等我們一下🙏<br><br><a href="/shop" style="display:inline-block;padding:10px 22px;border-radius:999px;background:#2A2826;color:#fff;text-decoration:none">先逛逛</a></div>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
     const ts = Date.now().toString(36), st = `${ts}.${g || "-"}.${await sign(env, "ll:" + ts + "." + g)}`;
     const q = new URLSearchParams({ response_type: "code", client_id: cid, redirect_uri: SHOP_BASE + "/shop/callback", state: st, scope: "profile openid", bot_prompt: "aggressive" });
     return Response.redirect("https://access.line.me/oauth2/v2.1/authorize?" + q, 302);
@@ -1388,12 +1391,12 @@ header{background:var(--hd);color:var(--ink);padding:12px 14px 8px}
 details.leg{display:inline}details.leg summary{display:inline;cursor:pointer;color:var(--acc);font-size:12px;margin-left:6px;list-style:none}details.leg summary::-webkit-details-marker{display:none}details.leg[open]{display:block}details.leg[open] summary{margin-left:0}
 /* ===== 新版外觀＋動態（2026-11 學 janm_ux）：手機優先、LINE 內建瀏覽器也順；系統設定「減少動態」時全部關掉 ===== */
 .logo img{height:16px;display:block}
-.add,.go,.bar button:not(.ghost),.chip.on,.chip.news.on,.selb,.tier.vip,.hcart b,.vti b,.pay input:checked+span{color:var(--ink)!important}
+.add,.go,.bar button:not(.ghost),.chip.on,.chip.news.on,.selb,.tier.vip,.hcart b,.vti b,.pay input:checked+span{color:#fff!important}
 .add,.go,.bar button,.chip,.cat,.hcart,.vt,.oc,.more,.qty button{transition:transform .22s cubic-bezier(.3,1.6,.5,1),background-color .2s,border-color .2s}
 .add:active,.go:active,.bar button:active,.chip:active,.cat:active,.hcart:active,.vt:active,.oc:active,.more:active,.qty button:active{transform:scale(.93)}
 .card{transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s}
-.card.rv{opacity:0;transform:translateY(18px) scale(.98)}
-.card.rv.in{opacity:1;transform:none;transition:opacity .5s ease,transform .6s cubic-bezier(.2,.8,.2,1)}
+.card.rv{opacity:0;transform:translateY(26px)}.card.rv .ph img{transform:scale(.82) rotate(-5deg)}.card .ph img{transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.card.rv.in .ph img{transform:none}.card.rv.in{opacity:1;transform:none;transition:opacity .5s ease,transform .6s cubic-bezier(.2,.8,.2,1)}
 .sk{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(120,80,60,.07)}
 .sk i,.sk b{display:block;background:linear-gradient(100deg,#F7EEE9 30%,#FFF9F4 50%,#F7EEE9 70%);background-size:300% 100%;animation:shim 1.3s linear infinite}
 .sk i{aspect-ratio:1}.sk b{height:12px;margin:10px;border-radius:6px}.sk b+b{width:45%;height:16px}
@@ -1406,29 +1409,61 @@ body.intro .pb i,body.intro .pb2 i,.panel.fresh .pb i,.panel.fresh .pb2 i{animat
 @keyframes bump{30%{transform:scale(1.25)}}
 .fly{position:fixed;z-index:80;border-radius:50%;object-fit:cover;background:#fff;box-shadow:0 4px 14px rgba(120,80,60,.25);pointer-events:none}
 @media(hover:hover) and (pointer:fine){.nc{transform-style:preserve-3d;will-change:transform}.nc:hover{box-shadow:0 10px 24px rgba(120,80,60,.14)}.nc .ph::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--mx,50%) var(--my,0%),rgba(255,255,255,.45),transparent 55%);opacity:0;transition:opacity .3s}.nc:hover .ph::after{opacity:1}}
-/* 訪客歡迎頁：用 LINE 登入 */
-.wl{position:fixed;inset:0;z-index:90;background:linear-gradient(120deg,#FFD9CC,#FFE9B8 55%,#D9EEFF);display:flex;flex-direction:column;overflow:hidden;transition:opacity .35s,transform .35s}
-.wl.out{opacity:0;transform:scale(1.03);pointer-events:none}
-.wl:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 80% 15%,rgba(255,255,255,.7),transparent 42%)}
-.wlh{position:relative;text-align:center;padding:calc(28px + env(safe-area-inset-top)) 16px 0}.wlh img{height:24px}.wlh p{font-size:12px;letter-spacing:2px;margin-top:6px;color:var(--ink)}
-.wlf{position:relative;flex:1;min-height:200px}
-.wlc{position:absolute;width:30%;max-width:150px;background:#fff;border-radius:12px;box-shadow:0 6px 18px rgba(120,80,60,.12);overflow:hidden;animation:flt 6s ease-in-out infinite}
-.wlc span{display:flex;aspect-ratio:1;align-items:center;justify-content:center}.wlc img{width:84%;height:84%;object-fit:contain;mix-blend-mode:multiply}
-.wlc:nth-child(1){left:7%;top:10%;--r:-7deg;animation-delay:-1s}.wlc:nth-child(2){left:36%;top:2%;--r:3deg;z-index:2;animation-delay:-3s}.wlc:nth-child(3){right:6%;top:14%;--r:8deg;animation-delay:-2s}.wlc:nth-child(4){left:15%;top:52%;--r:5deg;animation-delay:-4s}.wlc:nth-child(5){right:14%;top:55%;--r:-5deg;z-index:2;animation-delay:-5s}
-.wlc:nth-child(1) span{background:var(--p1)}.wlc:nth-child(2) span{background:var(--p5)}.wlc:nth-child(3) span{background:var(--p4)}.wlc:nth-child(4) span{background:var(--p2)}.wlc:nth-child(5) span{background:var(--p3)}
-@keyframes flt{0%,100%{transform:rotate(var(--r)) translateY(0)}50%{transform:rotate(var(--r)) translateY(-10px)}}
-.wlb{position:relative;background:#fff;border-radius:18px 18px 0 0;padding:22px 16px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(120,80,60,.1);animation:sheetUp .6s .1s cubic-bezier(.2,.9,.25,1) both}
-.wlb h1{font-size:22px;font-weight:800;line-height:1.35}.wlb h1 span{display:block;animation:lineIn .6s cubic-bezier(.2,.8,.2,1) both}.wlb h1 span+span{animation-delay:.12s}
-@keyframes lineIn{from{opacity:0;transform:translateY(12px)}}
-.wlt{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 16px}.wlt span{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accsoft)}
-.wll,.wlg{display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:999px;font-weight:700;font-size:15px;text-decoration:none;width:100%;border:0;font-family:inherit}
-.wll{background:#06C755;color:#fff}.wlg{background:#fff;color:var(--ink);margin-top:10px;box-shadow:0 1px 4px rgba(120,80,60,.12)}
-.wlb small{display:block;text-align:center;font-size:12px;margin-top:12px;color:var(--ink)}
-@media(min-width:640px){.wl{align-items:center}.wlf,.wlb{width:100%;max-width:480px}.wlb{border-radius:18px;margin-bottom:24px}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}}
+/* ===== 中性低彩度主題：介面退後，讓商品本身的顏色跳出來 ===== */
+:root{--bg:#F6F4F1;--card:#fff;--ink:#2A2826;--sub:#6B6F75;--line:#E7E3DE;--red:#2A2826;--acc:#2A2826;--acc2:#2A2826;--accbg:#F1EEEA;--accsoft:#ECE8E3;--hd:rgba(246,244,241,.86);--p1:#F2F0ED;--p2:#F0EFEC;--p3:#EFF0EE;--p4:#F1EFEE;--p5:#EEF0F1;--gold:#B8955A}
+body{background:var(--bg)}
+header{background:var(--hd)!important;-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid rgba(42,40,38,.06)}
+.search input{background:#fff;border:1px solid var(--line)}.hcart{background:#fff;border:1px solid var(--line)}
+.chip{background:#fff;color:var(--ink)}.chip.news{background:#fff;color:var(--ink);border-color:var(--line)}
+.nc .pr b,.vpr,.oc.on .o2{color:var(--ink)!important}.tgs span{color:var(--sub);border-color:var(--line)}.qi,.mg,.oh,.tag,.cd,.info a{color:var(--ink)!important}
+.pb i,.pb2 i,.bar i{background:var(--ink)!important}.pb2,.pb{background:#E7E3DE}
+.vt.on,.oc.on{border-color:var(--ink);background:#fff}.vt.on .vtn{color:var(--ink)}
+.tier{background:#fff;border:1px solid var(--line)}.tier.vip{background:var(--gold);border-color:var(--gold)}
+.bar{background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}.bar .ghost{background:var(--accbg);color:var(--ink)}
+.cat .ci{background:#fff!important;border-color:#fff}.cat.on .ci{border-color:var(--ink)}.cat.on .cn{color:var(--ink)}
+.nc .ph,.grid>.nc .ph{background:#fff!important}
+/* 首頁大標：往下滑時字橫向滑過、商品轉動放大 */
+.hero{position:relative;height:150vh;margin-top:-1px}
+.hero[hidden]{display:none}
+.hs{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding:22px 0 90px}
+.hk{font-size:11px;letter-spacing:4px;color:var(--sub);text-align:center}
+.ht{font-size:clamp(32px,10vw,92px);font-weight:900;line-height:1.02;letter-spacing:-1px;white-space:nowrap;will-change:transform}
+.ht.l1{transform:translateX(calc(6vw - var(--p,0) * 70vw))}.ht.l2{transform:translateX(calc(-30vw + var(--p,0) * 50vw));color:transparent;-webkit-text-stroke:1.5px var(--ink)}
+.hstage{position:relative;height:min(30vh,260px);margin:4px 0}
+.hp{position:absolute;left:50%;top:50%;width:min(38vw,200px);aspect-ratio:1;background:#fff;border-radius:18px;box-shadow:0 18px 40px rgba(42,40,38,.12);display:flex;align-items:center;justify-content:center;overflow:hidden;will-change:transform}
+.hp img{width:86%;height:86%;object-fit:contain}
+.hp.a{transform:translate(-50%,-50%) translateX(calc(-30vw * (1 - var(--p,0) * 1.4))) rotate(calc(-14deg + var(--p,0) * 40deg)) scale(calc(.78 + var(--p,0) * .1));z-index:1}
+.hp.b{transform:translate(-50%,-50%) rotate(calc(var(--p,0) * -12deg)) scale(calc(1 + var(--p,0) * .32));z-index:3}
+.hp.c{transform:translate(-50%,-50%) translateX(calc(30vw * (1 - var(--p,0) * 1.4))) rotate(calc(14deg - var(--p,0) * 40deg)) scale(calc(.78 + var(--p,0) * .1));z-index:2}
+.hcta{padding:8px 16px 0;text-align:center;opacity:calc(1 - var(--p,0) * 2.2)}
+.hcta p{font-size:13px;line-height:1.6;margin-bottom:10px}
+.hline{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 26px;border-radius:999px;background:#06C755;color:#fff;font-weight:700;font-size:15px;text-decoration:none}
+.hcta small{display:block;font-size:12px;color:var(--sub);margin-top:8px}
+.hscroll{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);font-size:11px;color:var(--sub);letter-spacing:2px;animation:hb 1.6s ease-in-out infinite}
+@keyframes hb{50%{transform:translate(-50%,6px)}}
+/* 分類大小格 */
+.bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:84px;gap:8px;padding:8px 10px 4px}
+.bento[hidden]{display:none}
+.bt{position:relative;border:0;border-radius:16px;background:#fff;overflow:hidden;text-align:left;font:inherit;color:var(--ink);padding:10px;box-shadow:0 1px 4px rgba(42,40,38,.06)}
+.bt img{position:absolute;right:-6%;bottom:-6%;width:72%;height:86%;object-fit:contain;transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.bt b{position:relative;z-index:1;font-size:14px;font-weight:800}.bt small{position:relative;z-index:1;display:block;font-size:11px;color:var(--sub);margin-top:2px}
+.bt.x{grid-column:span 2;grid-row:span 2}.bt.x b{font-size:20px}.bt.w{grid-column:span 2}.bt.w img{width:50%}
+.bt.in img{animation:bfl 5s ease-in-out infinite}.bt:nth-child(2n).in img{animation-delay:-2.5s}
+@keyframes bfl{50%{transform:translateY(-6px) rotate(-3deg)}}
+.bt:active img{transform:scale(1.08)}
+.sh2{display:flex;justify-content:space-between;align-items:baseline;padding:18px 14px 4px}.sh2 b{font-size:20px;font-weight:900;letter-spacing:-.3px}.sh2 small{font-size:11px;letter-spacing:3px;color:var(--sub)}
+/* 下單三步驟：卡片一張疊一張 */
+.steps{padding:4px 12px 10px}.steps[hidden]{display:none}
+.stp{position:sticky;top:76px;background:#fff;border-radius:18px;padding:18px 16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(42,40,38,.08);min-height:120px;display:flex;gap:14px;align-items:center}
+.stp:nth-child(2){top:88px}.stp:nth-child(3){top:100px}
+.stp i{font-style:normal;font-size:34px;font-weight:900;color:var(--gold);min-width:48px}
+.stp b{font-size:16px}.stp p{font-size:13px;line-height:1.6;color:var(--sub);margin-top:2px}
+@media(min-width:760px){.bento{grid-template-columns:repeat(6,1fr);grid-auto-rows:110px}.ht{font-size:110px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}.card.rv .ph img{transform:none}.hero{height:auto}.hs{position:relative;height:auto}}
 </style></head><body>
 <header><div class="search"><input id="q" type="search" placeholder="🔍 搜尋商品、角色、JAN 碼" enterkeyhint="search"><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div>
 <div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div></div></header>
+<section class="hero" id="hero"><div class="hs"><div class="hk">ZOARÉ ・ JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hstage"><div class="hp a"></div><div class="hp b"></div><div class="hp c"></div></div><div class="ht l2">SANRIO CHIIKAWA POKÉMON SNOOPY</div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格，少量也能批</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同一家廠商湊滿約 NT$30,000 就叫貨，進度隨時看得到</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 賣貨便取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
 <div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
@@ -1766,27 +1801,29 @@ document.addEventListener("click",e=>{const a=e.target.dataset&&e.target.dataset
 // 合計金額數字滾動
 {const _bar=bar;let last=0;bar=function(){_bar();const b=$("#sum b");if(!b)return;const to=Number(b.textContent.replace(/[^0-9]/g,""))||0,fr=last;last=to;if(RM||fr===to)return;
   b.classList.remove("bump");void b.offsetWidth;b.classList.add("bump");const t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/450),v=Math.round(fr+(to-fr)*(1-Math.pow(1-k,3)));b.textContent=fmt(v);if(k<1)requestAnimationFrame(step)};requestAnimationFrame(step)}}
-// 桌機滑鼠：商品卡 3D 傾斜＋光澤（手機不做，省電）
-if(!RM&&matchMedia("(hover:hover) and (pointer:fine)").matches){
+// 商品卡 3D 傾斜＋光澤（桌機跟著滑鼠，手機手指按住時跟著手指）
+if(!RM){
   $("#grid").addEventListener("pointermove",e=>{const c=e.target.closest(".nc");if(!c)return;const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
     c.style.transform="perspective(700px) rotateX("+((.5-y)*8).toFixed(2)+"deg) rotateY("+((x-.5)*10).toFixed(2)+"deg) translateY(-3px)";c.style.setProperty("--mx",(x*100).toFixed(0)+"%");c.style.setProperty("--my",(y*100).toFixed(0)+"%")});
-  $("#grid").addEventListener("pointerout",e=>{const c=e.target.closest(".nc");if(c&&!c.contains(e.relatedTarget))c.style.transform=""});
+  $("#grid").addEventListener("pointerout",e=>{const c=e.target.closest(".nc");if(c&&!c.contains(e.relatedTarget))c.style.transform=""});["pointerup","pointercancel"].forEach(t=>$("#grid").addEventListener(t,e=>{const c=e.target.closest(".nc");if(c&&e.pointerType!=="mouse")c.style.transform=""}));
 }
-// 訪客歡迎頁：一鍵用 LINE 登入，或先逛逛
-function welcome(){
-  if(!ME||!ME.guest)return;const sp=new URLSearchParams(location.search);if(sp.get("cart")||sp.get("q")||sp.get("mf")||sp.get("v"))return;
-  try{if(sessionStorage.getItem("zo_wl"))return}catch(e){}
-  const pics=NEWV.filter(x=>x.img).slice(0,5);
-  const w=document.createElement("div");w.className="wl";w.setAttribute("role","dialog");w.setAttribute("aria-label","歡迎來到 ZOARÉ");
-  w.innerHTML='<div class="wlh"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"><p>日本角色商品批發</p></div>'+
-    '<div class="wlf">'+pics.map(x=>'<div class="wlc"><span><img src="'+esc(x.img)+'" alt=""></span></div>').join("")+'</div>'+
-    '<div class="wlb"><h1><span>小賣家、團購主的</span><span>日本角色商品批發</span></h1><div class="wlt"><span>少量也能批</span><span>24 小時下單</span><span>會員價自動算好</span></div>'+
-    '<a class="wll" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用 LINE 登入</a>'+
-    '<button class="wlg" type="button">先逛逛</button><small>登入後看得到你的會員價、購物車和訂單</small></div>';
-  document.body.appendChild(w);
-  w.querySelector(".wlg").onclick=()=>{try{sessionStorage.setItem("zo_wl","1")}catch(e){}w.classList.add("out");setTimeout(()=>w.remove(),400)};
-}
-init().then(()=>{try{welcome()}catch(e){}});
+// 首頁大標：捲動進度 --p（0～1）帶動大字橫移、商品轉動放大
+const HERO=$("#hero");let HP=-1;
+function heroTick(){if(!HERO||HERO.hidden)return;const r=HERO.getBoundingClientRect(),span=Math.max(1,r.height-innerHeight),p=Math.min(1,Math.max(0,-r.top/span));if(Math.abs(p-HP)>.002){HP=p;HERO.style.setProperty("--p",p.toFixed(3))}}
+if(!RM){let tk=false;addEventListener("scroll",()=>{if(!tk){tk=true;requestAnimationFrame(()=>{tk=false;heroTick()})}},{passive:true});addEventListener("resize",heroTick)}
+function fillHero(){if(!HERO)return;const pool=NEWV.filter(x=>x.img&&!x.mem);const src=pool.filter(x=>x.ai).length>=6?pool.filter(x=>x.ai):pool,seen={},pick=[];for(const x of src){const c=(x.c||[x.b])[0];if(!seen[c]){seen[c]=1;pick.push(x)}if(pick.length>=3)break}
+  HERO.querySelectorAll(".hp").forEach((el,i)=>{const x=pick[i];if(x)el.innerHTML='<img src="'+esc(x.ai||x.img)+'" alt="">'});
+  const c=$("#hcta");if(ME&&!ME.guest)c.innerHTML='<p>嗨 <b>'+esc(ME.name)+'</b>，'+(ME.tier==="vip"?"已經套用 VIP 價":ME.tier==="member"?"已經套用一般會員價":"歡迎回來")+'<br>往下滑看這週新到</p>';heroTick()}
+// 分類大小格（點了直接切到那個分類）
+function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.querySelectorAll("#cats .cat")].slice(0,7);if(!cs.length){B.hidden=true;return}
+  const cnt={};ALL.forEach(x=>{if(!x.hid)(x.c||[]).forEach(c=>{cnt[c]=(cnt[c]||0)+1})});const sz=["x","","","w","","",""];
+  B.innerHTML=cs.map((el,i)=>{const b=el.dataset.b,im=el.querySelector("img");return '<button class="bt '+sz[i]+'" data-bb="'+esc(b)+'"><b>'+esc(b)+'</b><small>'+(cnt[b]||0)+' 款</small>'+(im?'<img loading="lazy" src="'+esc(im.getAttribute("src"))+'" alt="">':'')+'</button>'}).join("");
+  B.onclick=e=>{const t=e.target.closest("[data-bb]");if(!t)return;const c=document.querySelector('#cats .cat[data-b="'+CSS.escape(t.dataset.bb)+'"]');if(c){c.click();const g=$("#chips");scrollTo({top:g.getBoundingClientRect().top+scrollY-70,behavior:RM?"auto":"smooth"})}};
+  if("IntersectionObserver" in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}));B.querySelectorAll(".bt").forEach(b=>io.observe(b))}}
+// 只有在首頁（新品上架、沒有搜尋）時顯示大標、分類格、步驟
+{const _f=filter;filter=function(){_f();const home=brand==="新品上架"&&!$("#q").value.trim();["#hero","#bento","#steps","#bentoh"].forEach(s=>{const el=$(s);if(el)el.hidden=!home});if(home)heroTick()}}
+function homeInit(){fillBento();fillHero();setTimeout(fillHero,1800);filter()}
+init().then(()=>{try{homeInit()}catch(e){console.log(e)}});
 </script></body></html>`;
 
 // ---------- LINE 商品目錄：先選系列 → 再選角色 → 傳商品圖片卡 ----------
