@@ -1472,7 +1472,7 @@ header.mini .brand{max-height:0;opacity:0;margin:0}
 .hs{padding:18px 0 92px}
 .hk{font-size:10px;letter-spacing:3px;text-align:left;padding:0 20px}
 .ht.l1{font-size:clamp(34px,10vw,40px);font-weight:800;line-height:1.2;letter-spacing:0;padding:0 20px;white-space:normal;transform:none;margin-top:6px}
-.hstage{margin:18px 0 0;height:min(25vh,210px)}
+.hstage{margin:8px 0 0;height:min(24vh,200px)}
 .hp{border-radius:6px;padding:8px 8px 26px;box-shadow:0 12px 30px rgba(36,36,36,.12)}
 .hp img{width:100%;height:100%;object-fit:cover;border-radius:2px}
 .hp.a{transform:translate(-50%,-50%) translateX(calc(-26vw - var(--p,0) * 8vw)) rotate(calc(-8deg + var(--p,0) * 6deg))}
@@ -1512,11 +1512,15 @@ header.mini .brand{max-height:0;opacity:0;margin:0}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;overflow:visible}
 .stp{flex:none;min-height:0;padding:12px 10px}.stp i{font-family:Georgia,serif;font-style:italic;font-weight:400;font-size:28px}.stp b{font-size:14px}.stp p{font-size:11px;line-height:1.5}
 .sh2 b{font-family:"Noto Serif TC","Songti TC",Georgia,serif;font-weight:900}
+/* 封面：熱賣商品實拍，不用拍立得貼紙框 */
+.hp{padding:0!important;border-radius:16px!important;background:#fff;cursor:pointer;box-shadow:0 14px 34px rgba(36,36,36,.12)!important}.hp img{object-fit:contain!important;width:88%!important;height:88%!important;border-radius:0!important}
+.hp em{position:absolute;left:8px;top:8px;font-style:normal;font-family:Georgia,serif;font-size:11px;letter-spacing:1px;color:#fff;background:#242424;border-radius:999px;padding:2px 8px}
+.hp.c em{left:auto;right:8px}.hsub2{text-align:center;font-size:11px;letter-spacing:3px;color:var(--sub);margin-top:14px}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}.card.rv .ph img{transform:none}.hero{height:auto}.hs{position:relative;height:auto}}
 </style></head><body>
 <header><div class="search"><input id="q" type="search" placeholder="搜尋角色、商品、JAN 碼" enterkeyhint="search"></div>
 <div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div><button id="hord" class="hcart hord" aria-label="訂單查詢">📦</button><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div></header>
-<section class="hero" id="hero"><div class="hs"><div class="hk">ZOARÉ ・ JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hsub">少量也能批・24 小時都能下單</div><div class="hstage"><div class="hp a"></div><div class="hp b"></div><div class="hp c"></div></div><div class="ht l2">SANRIO　CHIIKAWA　POKÉMON　SNOOPY</div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hfeat"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg>多款混搭</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0"/></svg>少量拿貨</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3z"/></svg>每週新品</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2"/></svg>24 小時下單</span></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同廠商湊滿約 NT$30,000 就叫貨</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
+<section class="hero" id="hero"><div class="hs"><div class="hk">ZOARÉ ・ JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hsub">少量也能批・24 小時都能下單</div><div class="hsub2">本週熱賣</div><div class="hstage"><div class="hp a"></div><div class="hp b"></div><div class="hp c"></div></div><div class="ht l2">SANRIO　CHIIKAWA　POKÉMON　SNOOPY</div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hfeat"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg>多款混搭</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0"/></svg>少量拿貨</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3z"/></svg>每週新品</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2"/></svg>24 小時下單</span></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同廠商湊滿約 NT$30,000 就叫貨</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
 <div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
@@ -1864,9 +1868,10 @@ if(!RM){
 const HERO=$("#hero");let HP=-1;
 function heroTick(){if(!HERO||HERO.hidden)return;const r=HERO.getBoundingClientRect(),span=Math.max(1,r.height-innerHeight),p=Math.min(1,Math.max(0,-r.top/span));if(Math.abs(p-HP)>.002){HP=p;HERO.style.setProperty("--p",p.toFixed(3))}}
 if(!RM){let tk=false;addEventListener("scroll",()=>{if(!tk){tk=true;requestAnimationFrame(()=>{tk=false;heroTick()})}},{passive:true});addEventListener("resize",heroTick)}
-function fillHero(){if(!HERO)return;const pool=NEWV.filter(x=>x.img&&!x.mem);const src=pool.filter(x=>x.ai).length>=6?pool.filter(x=>x.ai):pool,seen={},pick=[];for(const x of src){const c=(x.c||[x.b])[0];if(!seen[c]){seen[c]=1;pick.push(x)}if(pick.length>=3)break}
-  HERO.querySelectorAll(".hp").forEach((el,i)=>{const x=pick[i];if(x)el.innerHTML='<img src="'+esc(x.ai||x.img)+'" alt="">'});
-  const c=$("#hcta");if(ME&&!ME.guest)c.innerHTML='<p>嗨 <b>'+esc(ME.name)+'</b>，'+(ME.tier==="vip"?"已經套用 VIP 價":ME.tier==="member"?"已經套用一般會員價":"歡迎回來")+'<br>往下滑看這週新到</p>';heroTick()}
+async function fillHero(){if(!HERO)return;if(!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}
+  const hot=(HOT||[]).map(k=>byK(k)).filter(x=>x&&x.img&&!x.mem&&!x.hid),seen={},pick=[];for(const x of hot.concat(NEWV.filter(y=>y.img&&!y.mem))){const f=x._f||x.k;if(!seen[f]){seen[f]=1;pick.push(x)}if(pick.length>=3)break}
+  HERO.querySelectorAll(".hp").forEach((el,i)=>{const x=pick[i];if(x){el.innerHTML='<img src="'+esc(x.img)+'" alt=""><em>TOP '+(i===1?1:i===0?2:3)+'</em>';el.dataset.k=x.k;el.onclick=()=>openItem(x)}});
+  const c=$("#hcta");if(ME&&!ME.guest)c.innerHTML='<p style="display:block">嗨 <b>'+esc(ME.name)+'</b>，'+(ME.tier==="vip"?"已經套用 VIP 價":ME.tier==="member"?"已經套用一般會員價":"歡迎回來")+'<br>往下滑看這週新到</p>';heroTick()}
 // 分類大小格（點了直接切到那個分類）
 function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.querySelectorAll("#cats .cat")].slice(0,7);if(!cs.length){B.hidden=true;return}
   const cnt={};ALL.forEach(x=>{if(!x.hid)(x.c||[]).forEach(c=>{cnt[c]=(cnt[c]||0)+1})});const sz=["x","","","w","","",""];
@@ -1879,7 +1884,7 @@ function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.quer
 $("#hord").onclick=()=>$("#openOrders").click();
 {let ly=0;addEventListener("scroll",()=>{const y=scrollY,h=document.querySelector("header");if(y>160&&y>ly+4)h.classList.add("mini");else if(y<ly-4||y<120)h.classList.remove("mini");ly=y},{passive:true})}
 {const _b2=bar;bar=function(){_b2();const s=$("#sum");if(s&&s.textContent==="購物車是空的")s.textContent="購物車 0 件"}}
-function homeInit(){fillBento();fillHero();setTimeout(fillHero,1800);filter()}
+function homeInit(){fillBento();fillHero();filter()}
 init().then(()=>{try{homeInit()}catch(e){console.log(e)}});
 </script></body></html>`;
 
