@@ -1438,7 +1438,7 @@ header{background:var(--hd)!important;-webkit-backdrop-filter:saturate(1.4) blur
 .hcta{padding:8px 16px 0;text-align:center;opacity:calc(1 - var(--p,0) * 2.2)}
 .hcta p{font-size:13px;line-height:1.6;margin-bottom:10px}
 .hline{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 26px;border-radius:999px;background:#06C755;color:#fff;font-weight:700;font-size:15px;text-decoration:none}
-.hcta small{display:block;font-size:12px;color:var(--sub);margin-top:8px}
+.hcta small{display:block;font-size:12px;color:var(--sub);margin-top:6px}
 .hscroll{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);font-size:11px;color:var(--sub);letter-spacing:2px;animation:hb 1.6s ease-in-out infinite}
 @keyframes hb{50%{transform:translate(-50%,6px)}}
 /* 分類大小格 */
@@ -1459,11 +1459,64 @@ header{background:var(--hd)!important;-webkit-backdrop-filter:saturate(1.4) blur
 .stp i{font-style:normal;font-size:34px;font-weight:900;color:var(--gold);min-width:48px}
 .stp b{font-size:16px}.stp p{font-size:13px;line-height:1.6;color:var(--sub);margin-top:2px}
 @media(min-width:760px){.bento{grid-template-columns:repeat(6,1fr);grid-auto-rows:110px}.ht{font-size:110px}}
+/* ===== v3：照 ChatGPT UI 建議微調（日系編輯風、商品是主角） ===== */
+:root{--bg:#F7F6F2;--ink:#242424;--sub:#77736D;--line:#EAE8E2;--gold:#A68B59;--blk:#EAE8E2;--acc:#242424;--acc2:#242424;--red:#242424}
+header{padding:10px 20px 10px;transition:padding .25s}
+header .brand{order:-1;margin:0 0 8px;display:flex;align-items:center;gap:8px;max-height:40px;transition:max-height .25s,opacity .2s,margin .25s;overflow:hidden}
+header{display:flex;flex-direction:column}
+header.mini .brand{max-height:0;opacity:0;margin:0}
+.brand .who{flex:1;font-size:12px;color:var(--ink);max-width:none;text-align:right}.who .tier{font-size:11px}
+.brand .hcart,.brand .hord{width:36px;height:36px;font-size:16px}
+.search input{height:44px;border-radius:12px;font-size:15px}
+.hero{height:140vh}
+.hs{padding:18px 0 92px}
+.hk{font-size:10px;letter-spacing:3px;text-align:left;padding:0 20px}
+.ht.l1{font-size:clamp(34px,10vw,40px);font-weight:800;line-height:1.2;letter-spacing:0;padding:0 20px;white-space:normal;transform:none;margin-top:6px}
+.hstage{margin:18px 0 0;height:min(25vh,210px)}
+.hp{border-radius:6px;padding:8px 8px 26px;box-shadow:0 12px 30px rgba(36,36,36,.12)}
+.hp img{width:100%;height:100%;object-fit:cover;border-radius:2px}
+.hp.a{transform:translate(-50%,-50%) translateX(calc(-26vw - var(--p,0) * 8vw)) rotate(calc(-8deg + var(--p,0) * 6deg))}
+.hp.b{transform:translate(-50%,-50%) scale(calc(1 + var(--p,0) * .06))}
+.hp.c{transform:translate(-50%,-50%) translateX(calc(26vw + var(--p,0) * 8vw)) rotate(calc(8deg - var(--p,0) * 6deg))}
+.ht.l2{font-size:46px;-webkit-text-stroke:1px var(--ink);margin:10px 0 4px;transform:translateX(calc(-10vw - var(--p,0) * 70vw))}
+.hcta{text-align:left;padding:8px 20px 0}
+.sh2{padding:22px 20px 8px}.sh2 b{font-size:20px}
+.bento{grid-template-columns:repeat(2,1fr);grid-auto-rows:132px;gap:8px;padding:0 20px}
+.bt{border-radius:16px;padding:12px}.bt b{font-size:17px}.bt small{color:#77736D}
+.bt img{width:60%;height:70%;right:0;bottom:0}
+.bt.x{grid-column:span 2;grid-row:span 1}.bt.x b{font-size:20px}.bt.x img{width:55%;height:100%;right:4%;bottom:0}
+.bt.w{grid-column:span 1}.bt.w img{width:60%}
+.bt:active{transform:scale(.98)}
+.steps{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 20px 6px;scrollbar-width:none}.steps::-webkit-scrollbar{display:none}
+.stp{position:relative;top:auto!important;flex:0 0 72%;scroll-snap-align:start;min-height:108px;margin:0;padding:14px;box-shadow:0 1px 4px rgba(36,36,36,.06);flex-direction:column;align-items:flex-start;gap:4px}
+.stp i{font-size:30px;line-height:1}.stp b{font-size:15px}.stp p{font-size:12px}
+.grid{gap:10px;padding:8px 20px}
+.card{border-radius:14px}
+.nc .ph,.grid>.nc .ph{background:#F3F2EE!important}.nc .ph img{mix-blend-mode:multiply}
+.nc .nm{font-size:13px}.nc .pr b{font-size:18px;font-weight:700;color:#242424!important}.tgs span{font-size:11px;color:#9A958E;border:0;padding:0}
+.pz.now{background:#E6EEE8!important;color:#486B58!important}.pz.pre{background:#ECE9F3!important;color:#5D5277!important}
+.card.rv .ph img{transform:none}.card.rv{transform:translateY(12px)}
+.pb i,.pb2 i{background:var(--gold)!important}
+.bar{min-height:64px;padding:10px 20px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #EAE8E2}
+.bar .ghost{display:none}.bar button{height:44px;padding:0 22px}
+.bar .sum{font-size:13px;color:var(--ink)}
+/* ===== v4：採用 ChatGPT 模擬圖的做法：襯線大標、置中排版、斜體跑馬燈、特色列、三步驟並排 ===== */
+.hk{text-align:center;padding:0 20px}
+.ht.l1{font-family:"Noto Serif TC","Songti TC","PMingLiU",Georgia,serif;font-weight:900;text-align:center;font-size:clamp(32px,9.4vw,40px);letter-spacing:1px;margin-top:8px}
+.hsub{display:flex;align-items:center;justify-content:center;gap:10px;font-size:13px;color:var(--ink);margin-top:6px}.hsub:before,.hsub:after{content:"";width:22px;height:1px;background:var(--gold)}
+.ht.l2{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;font-size:34px;color:#BDB4A6;-webkit-text-stroke:0;letter-spacing:2px;margin:6px 0 2px}
+.hcta{text-align:center;padding:6px 20px 0}.hcta p{display:none}
+.hfeat{display:grid;grid-template-columns:repeat(4,1fr);margin:10px 20px 0;padding-top:10px;border-top:1px solid var(--line)}
+.hfeat span{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--ink);border-left:1px solid var(--line)}.hfeat span:first-child{border-left:0}
+.hfeat svg{width:20px;height:20px;stroke:var(--ink);fill:none;stroke-width:1.5}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;overflow:visible}
+.stp{flex:none;min-height:0;padding:12px 10px}.stp i{font-family:Georgia,serif;font-style:italic;font-weight:400;font-size:28px}.stp b{font-size:14px}.stp p{font-size:11px;line-height:1.5}
+.sh2 b{font-family:"Noto Serif TC","Songti TC",Georgia,serif;font-weight:900}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}.card.rv .ph img{transform:none}.hero{height:auto}.hs{position:relative;height:auto}}
 </style></head><body>
-<header><div class="search"><input id="q" type="search" placeholder="🔍 搜尋商品、角色、JAN 碼" enterkeyhint="search"><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div>
-<div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div></div></header>
-<section class="hero" id="hero"><div class="hs"><div class="hk">ZOARÉ ・ JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hstage"><div class="hp a"></div><div class="hp b"></div><div class="hp c"></div></div><div class="ht l2">SANRIO CHIIKAWA POKÉMON SNOOPY</div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格，少量也能批</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同一家廠商湊滿約 NT$30,000 就叫貨，進度隨時看得到</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 賣貨便取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
+<header><div class="search"><input id="q" type="search" placeholder="搜尋角色、商品、JAN 碼" enterkeyhint="search"></div>
+<div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div><button id="hord" class="hcart hord" aria-label="訂單查詢">📦</button><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div></header>
+<section class="hero" id="hero"><div class="hs"><div class="hk">ZOARÉ ・ JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hsub">少量也能批・24 小時都能下單</div><div class="hstage"><div class="hp a"></div><div class="hp b"></div><div class="hp c"></div></div><div class="ht l2">SANRIO　CHIIKAWA　POKÉMON　SNOOPY</div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hfeat"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg>多款混搭</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0"/></svg>少量拿貨</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3z"/></svg>每週新品</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2"/></svg>24 小時下單</span></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同廠商湊滿約 NT$30,000 就叫貨</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
 <div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
@@ -1792,7 +1845,7 @@ new MutationObserver(()=>{const p=$("#panel");if(!FLIP||Date.now()-FLIP.at>800)r
 new MutationObserver(()=>{const s=$("#sheet");if(s.classList.contains("on")&&!s._on){s._on=1;const p=$("#panel");p.classList.add("fresh");setTimeout(()=>p.classList.remove("fresh"),1500)}else if(!s.classList.contains("on"))s._on=0}).observe($("#sheet"),{attributes:true,attributeFilter:["class"]});
 // 加入購物車：商品縮成小圓點飛進購物車
 document.addEventListener("click",e=>{const a=e.target.dataset&&e.target.dataset.a;if(RM||(a!=="add"&&a!=="+"))return;
-  const c=e.target.closest(".card,.vrow,.op,#panel");const im=(c&&c.querySelector("img"))||$("#panel .vhero img");const to=$("#sheet").classList.contains("on")?$(".vbar")||$("#hcart"):$("#hcart");
+  const c=e.target.closest(".card,.vrow,.op,#panel");const im=(c&&c.querySelector("img"))||$("#panel .vhero img");const to=$("#sheet").classList.contains("on")?$(".vbar")||$("#hcart"):(document.querySelector("header").classList.contains("mini")?$("#openCart"):$("#hcart"));
   if(!im||!to||!document.body.animate)return;const a0=im.getBoundingClientRect(),b0=to.getBoundingClientRect();if(!a0.width)return;
   const f=document.createElement("img");f.src=im.currentSrc||im.src;f.className="fly";const z=Math.min(64,a0.width);
   f.style.cssText="width:"+z+"px;height:"+z+"px;left:"+(a0.left+a0.width/2-z/2)+"px;top:"+(a0.top+a0.height/2-z/2)+"px";document.body.appendChild(f);
@@ -1822,6 +1875,10 @@ function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.quer
   if("IntersectionObserver" in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}));B.querySelectorAll(".bt").forEach(b=>io.observe(b))}}
 // 只有在首頁（新品上架、沒有搜尋）時顯示大標、分類格、步驟
 {const _f=filter;filter=function(){_f();const home=brand==="新品上架"&&!$("#q").value.trim();["#hero","#bento","#steps","#bentoh"].forEach(s=>{const el=$(s);if(el)el.hidden=!home});if(home)heroTick()}}
+// v3：訂單查詢移到上方、往下滑時收起上排、購物車空的時候顯示件數
+$("#hord").onclick=()=>$("#openOrders").click();
+{let ly=0;addEventListener("scroll",()=>{const y=scrollY,h=document.querySelector("header");if(y>160&&y>ly+4)h.classList.add("mini");else if(y<ly-4||y<120)h.classList.remove("mini");ly=y},{passive:true})}
+{const _b2=bar;bar=function(){_b2();const s=$("#sum");if(s&&s.textContent==="購物車是空的")s.textContent="購物車 0 件"}}
 function homeInit(){fillBento();fillHero();setTimeout(fillHero,1800);filter()}
 init().then(()=>{try{homeInit()}catch(e){console.log(e)}});
 </script></body></html>`;
