@@ -1,0 +1,172 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="連線代購專用：丟商品、客人喊 +1，後台自動整單、算金額、通知付款。手機點開就能試玩（店名虛構示意）。">
+<meta property="og:type" content="website"><meta property="og:url" content="https://gg86384577.github.io/zoare-images/tuan/">
+<meta property="og:title" content="+1 自動整單系統｜連線代購不用再看截圖">
+<meta property="og:description" content="客人喊 +1 就下單，後台自動整單、算金額、一鍵通知付款。手機點開就能玩（店名虛構示意）。">
+<meta property="og:image" content="https://gg86384577.github.io/zoare-images/tuan/cover.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://gg86384577.github.io/zoare-images/tuan/cover.png">
+<title>+1 自動整單系統</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&display=swap">
+<style>
+:root{
+  --bg:#fff6f1; --paper:#ffffff; --ink:#3a2a2a; --muted:#8a7470; --line:#f1ddd5;
+  --accent:#e2574c; --accent2:#f59e7a; --soft:#ffe9e1; --butter:#ffe8a8; --chat:#a9c3dc; --green:#06c755; --bubble-me:#a6e38b;
+  --ok:#2f8a57; --ok-bg:#e3f3e9;
+  --display:"Noto Serif TC",Georgia,serif; --body:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1f1817; --paper:#2b2221; --ink:#f6ebe7; --muted:#bba49e; --line:#463634;
+  --accent:#ff8a7e; --accent2:#f7b195; --soft:#3e2a27; --butter:#4a3d1f; --chat:#33404d; --bubble-me:#4f8a3a; --ok:#7fd3a0; --ok-bg:#1f3a2a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1f1817; --paper:#2b2221; --ink:#f6ebe7; --muted:#bba49e; --line:#463634;
+  --accent:#ff8a7e; --accent2:#f7b195; --soft:#3e2a27; --butter:#4a3d1f; --chat:#33404d; --bubble-me:#4f8a3a; --ok:#7fd3a0; --ok-bg:#1f3a2a; color-scheme:dark}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;
+  padding:24px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:1060px;margin:0 auto;display:grid;grid-template-columns:1fr 400px;gap:40px;align-items:start}
+@media (max-width:880px){.wrap{grid-template-columns:1fr}}
+.tag{display:inline-block;background:var(--soft);color:var(--accent);font-weight:700;font-size:13px;padding:4px 12px;border-radius:99px}
+h1{font-family:var(--display);font-size:clamp(30px,5vw,46px);line-height:1.2;margin:14px 0 10px;letter-spacing:.02em}
+h1 em{font-style:normal;color:var(--accent);background:linear-gradient(transparent 62%,var(--butter) 62%)}
+.lead{color:var(--muted);font-size:16px;margin:0 0 22px}
+.pain{display:grid;gap:12px;margin:0 0 22px}
+.pain div{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.pain b{display:block}.pain span.s{color:var(--muted);font-size:13.5px}
+.pain i{font-style:normal;font-size:22px;width:44px;height:44px;border-radius:12px;background:var(--soft);display:grid;place-items:center}
+.how{background:var(--paper);border:1px dashed var(--accent2);border-radius:18px;padding:16px 18px;margin-bottom:18px}
+.how h3{margin:0 0 8px;font-size:15px}
+.how ol{margin:0;padding-left:20px;color:var(--muted)}.how li b{color:var(--ink)}
+.cta{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:99px}
+.small{color:var(--muted);font-size:12.5px;margin-top:10px}
+/* phone */
+.phone{background:var(--paper);border:1px solid var(--line);border-radius:34px;box-shadow:0 20px 50px -20px rgba(160,70,50,.35);overflow:hidden;position:sticky;top:16px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}
+.tabs button{all:unset;cursor:pointer;text-align:center;padding:13px 4px;font-weight:700;font-size:14px;color:var(--muted);min-height:20px}
+.tabs button[aria-selected=true]{color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
+.badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;line-height:18px;margin-left:4px}
+.screen{height:600px;overflow:auto}
+.chat{background:var(--chat);min-height:100%;padding:12px 10px 10px;display:flex;flex-direction:column;gap:8px}
+.grp{text-align:center;font-size:12px;color:#fff;background:rgba(0,0,0,.18);border-radius:99px;padding:2px 10px;align-self:center}
+.msg{display:flex;gap:7px;align-items:flex-end;max-width:92%}
+.msg .av{width:30px;height:30px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:15px;background:#fff}
+.msg .nm{font-size:11px;color:#2a3440;opacity:.75;margin:0 0 2px 2px}
+.bub{background:#fff;color:#222;border-radius:16px;padding:7px 11px;font-size:14px;word-break:break-word}
+.me{align-self:flex-end}.me .bub{background:var(--bubble-me)}
+.hit{outline:2px solid var(--accent);outline-offset:1px}
+.ok{font-size:11px;color:#fff;background:var(--accent);border-radius:99px;padding:0 7px;margin-left:4px;white-space:nowrap}
+.prod{background:#fff;color:#222;border-radius:16px;overflow:hidden;width:250px}
+.prod .pic{height:120px;display:grid;place-items:center;font-size:54px;position:relative}
+.prod .code{position:absolute;left:10px;top:10px;background:#fff;color:var(--accent);font-weight:900;border-radius:10px;padding:0 9px;font-size:16px}
+.prod .bd{padding:9px 12px 11px}.prod .bd b{display:block}.prod .bd span{color:#e2574c;font-weight:700}
+.prod .bd small{display:block;color:#888;font-size:12px}
+.bar{display:flex;gap:6px;padding:8px;background:var(--paper);border-top:1px solid var(--line);position:sticky;bottom:0}
+.bar input{flex:1;min-width:0;border:1px solid var(--line);border-radius:99px;padding:9px 14px;font:inherit;background:var(--bg);color:var(--ink)}
+.bar button,.btn{border:0;border-radius:99px;padding:9px 14px;font:inherit;font-weight:700;cursor:pointer;background:var(--accent);color:#fff;min-height:40px}
+.btn.ghost{background:var(--soft);color:var(--accent)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;padding:0 8px 8px;background:var(--paper)}
+.quick button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 11px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+.pane{padding:14px}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.kpi div{background:var(--soft);border-radius:14px;padding:10px;text-align:center}
+.kpi b{display:block;font-size:22px;color:var(--accent);font-family:var(--display)}.kpi span{font-size:12px;color:var(--muted)}
+.card{border:1px solid var(--line);border-radius:14px;padding:11px 12px;margin-bottom:10px}
+.card h4{margin:0 0 6px;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:3px 0;border-top:1px dashed var(--line)}
+.row:first-of-type{border-top:0}
+.meter{height:6px;border-radius:9px;background:var(--line);overflow:hidden;margin:6px 0 4px}.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
+.seg{display:flex;gap:6px;margin-bottom:10px}.seg button{flex:1;border:1px solid var(--line);background:var(--paper);color:var(--muted);border-radius:99px;padding:7px;font:inherit;font-weight:700;cursor:pointer}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.empty{color:var(--muted);text-align:center;padding:40px 10px}
+.note{background:#06c75514;border:1px solid #06c75540;border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:13.5px;white-space:pre-line}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:9px 16px;border-radius:99px;font-size:14px;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1}
+</style></head><body>
+<div class="wrap">
+<section>
+  <span class="tag">連線代購・團購主專用</span>
+  <h1>客人喊 <em>+1</em>，<br>單就自己整好了</h1>
+  <p class="lead">不用再一張張看截圖、對私訊。你在 LINE 丟商品，客人留言 +1，系統自動記下誰買了什麼、幾個、總共多少，結單後一鍵通知付款。</p>
+  <div class="pain">
+    <div><i>📸</i><p style="margin:0"><b>不用截圖私訊喊單</b><span class="s">客人直接在群組留言「A+1」就算下單，不怕漏看、不怕訊息被洗掉</span></p></div>
+    <div><i>🔁</i><p style="margin:0"><b>不用跳轉平台</b><span class="s">從看商品、喊單到收到付款通知，全部在 LINE 裡完成</span></p></div>
+    <div><i>🧮</i><p style="margin:0"><b>不用人工對單、統計</b><span class="s">每款賣幾個、每位客人要付多少，即時算好，還能匯出 Excel 出貨</span></p></div>
+  </div>
+  <div class="how"><h3>右邊手機可以直接玩</h3><ol>
+    <li>按 <b>「模擬一場連線」</b>，看客人在群組喊單</li>
+    <li>你也可以自己打 <b>A+1、B+2、C+1 粉色、取消 A</b></li>
+    <li>切到 <b>「後台整單」</b> 看系統即時整理好的訂單</li>
+    <li>到 <b>「結單通知」</b> 看每位客人收到的付款訊息、匯出 Excel</li></ol></div>
+  <a class="cta" href="https://line.me/R/ti/p/@475fizio" target="_blank" rel="noopener">💬 LINE 聊聊（@475fizio）</a>
+  <p class="small">店名、商品、客人都是虛構示意。正式版會照你的商品、付款和運費方式設定。</p>
+</section>
+
+<div class="phone" role="region" aria-label="系統示意">
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-t="chat">LINE 群組</button>
+    <button role="tab" aria-selected="false" data-t="admin">後台整單<span class="badge" id="nOrd" hidden>0</span></button>
+    <button role="tab" aria-selected="false" data-t="bill">結單通知</button>
+  </div>
+  <div class="screen" id="scr">
+    <div id="v-chat"><div class="chat" id="chat"><span class="grp">🇯🇵 東京連線團（示意）・群組 128 人</span></div></div>
+    <div id="v-admin" class="pane" hidden></div>
+    <div id="v-bill" class="pane" hidden></div>
+  </div>
+  <div id="inbar">
+    <div class="quick"><button data-q="A+1">A+1</button><button data-q="B+2">B+2</button><button data-q="C+1 粉色">C+1 粉色</button><button data-q="取消 A">取消 A</button><button id="sim" style="background:var(--soft);color:var(--accent);border-color:transparent;font-weight:700">▶ 模擬一場連線</button></div>
+    <form class="bar" id="f"><input id="in" placeholder="以「你」的身份留言，例如 A+1" autocomplete="off" enterkeyhint="send"><button>送出</button></form>
+  </div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const P=[
+ {c:"A",n:"北海道牛奶夾心餅 12入",p:390,e:"🍪",bg:"linear-gradient(135deg,#ffe3c2,#ffc7a6)",lim:30},
+ {c:"B",n:"日本藥妝 保濕面膜 7片",p:280,e:"🧖‍♀️",bg:"linear-gradient(135deg,#dff1ff,#c4ddf7)",lim:40},
+ {c:"C",n:"兔兔絨毛吊飾",p:450,e:"🐰",bg:"linear-gradient(135deg,#ffe0ec,#ffc4d9)",lim:20,opt:["粉色","白色"]},
+ {c:"D",n:"抹茶生巧克力 20入",p:520,e:"🍵",bg:"linear-gradient(135deg,#e5f3d6,#c9e6b1)",lim:25}];
+const AV={"你":"🙋","小美":"👩🏻","Joyce":"👱🏻‍♀️","阿凱媽咪":"👩🏽‍🍼","Wendy":"👩🏻‍🦰","佩佩":"🧕🏻","Tina":"👧🏻","小葉":"🧑🏻"};
+let orders={}; // name -> {code:{q,opt}}
+const $=s=>document.querySelector(s), chat=$("#chat");
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),1800)}
+function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function scrollChat(){const s=$("#scr");s.scrollTop=s.scrollHeight}
+function postProduct(p){const d=document.createElement("div");d.className="msg";d.innerHTML='<div class="av" style="background:var(--accent);color:#fff">玲</div><div><div class="nm">連線主・示意</div><div class="prod"><div class="pic" style="background:'+p.bg+'"><span class="code">'+p.c+'</span>'+p.e+'</div><div class="bd"><b>'+p.n+'</b><span>$'+p.p+'</span><small>留言「'+p.c+'+數量」就下單'+(p.opt?'，可選粉色／白色':'')+'・限量 '+p.lim+'</small></div></div></div>';chat.appendChild(d)}
+function parse(t){t=t.replace(/＋/g,"+").replace(/\s+/g," ").trim();const r=[];
+ let m=t.match(/^(取消|不要了?)\s*([A-Da-d])/);if(m)return[{c:m[2].toUpperCase(),cancel:1}];
+ const re=/([A-Da-d])\s*(?:款|號)?\s*\+\s*(\d{1,2})\s*(粉色|白色)?/g;while((m=re.exec(t)))r.push({c:m[1].toUpperCase(),q:+m[2],opt:m[3]||""});return r}
+function say(name,text){const me=name==="你",d=document.createElement("div");d.className="msg"+(me?" me":"");
+ const res=parse(text);let tag="";
+ res.forEach(x=>{orders[name]=orders[name]||{};const k=x.c+(x.opt?"|"+x.opt:"");
+  if(x.cancel){Object.keys(orders[name]).forEach(kk=>{if(kk[0]===x.c)delete orders[name][kk]});tag+='<span class="ok">已取消 '+x.c+'</span>'}
+  else{orders[name][k]=(orders[name][k]||0)+x.q;tag+='<span class="ok">✓ '+x.c+(x.opt?x.opt:"")+'×'+x.q+'</span>'}});
+ if(orders[name]&&!Object.keys(orders[name]).length)delete orders[name];
+ d.innerHTML=(me?'':'<div class="av">'+(AV[name]||"🙂")+'</div>')+'<div>'+(me?'':'<div class="nm">'+esc(name)+'</div>')+'<div class="bub'+(res.length?' hit':'')+'">'+esc(text)+tag+'</div></div>';
+ chat.appendChild(d);scrollChat();render();if(res.length&&me)toast("系統已記下你的單 ✓")}
+function tally(){const by={};P.forEach(p=>by[p.c]={p,q:0,who:[]});let n=0,amt=0;
+ for(const [name,o] of Object.entries(orders)){for(const [k,q] of Object.entries(o)){const [c,opt]=k.split("|");by[c].q+=q;by[c].who.push([name,q,opt]);amt+=q*by[c].p.p}n++}
+ return{by,n,amt}}
+let billMode="msg";
+function render(){const t=tally(),items=Object.values(t.by).reduce((a,b)=>a+b.q,0);
+ const b=$("#nOrd");b.hidden=!t.n;b.textContent=t.n;
+ $("#v-admin").innerHTML='<div class="kpi"><div><b>'+t.n+'</b><span>下單人數</span></div><div><b>'+items+'</b><span>商品件數</span></div><div><b>$'+t.amt.toLocaleString()+'</b><span>總金額</span></div></div>'+
+ (t.n?Object.values(t.by).map(x=>'<div class="card"><h4><span>'+x.p.c+'・'+x.p.n+'</span><span style="color:var(--accent)">'+x.q+'/'+x.p.lim+'</span></h4><div class="meter"><i style="width:'+Math.min(100,x.q/x.p.lim*100)+'%"></i></div>'+(x.who.length?x.who.map(w=>'<div class="row"><span>'+esc(w[0])+(w[2]?'（'+w[2]+'）':'')+'</span><b>×'+w[1]+'</b></div>').join(""):'<div class="row"><span style="color:var(--muted)">還沒有人喊</span></div>')+'</div>').join("")
+ :'<div class="empty">還沒有訂單<br>回到「LINE 群組」留言 A+1，<br>或按「模擬一場連線」</div>');
+ const people=Object.entries(orders).map(([name,o])=>{let sum=0;const lines=Object.entries(o).map(([k,q])=>{const [c,opt]=k.split("|"),p=t.by[c].p;sum+=p.p*q;return{c,opt,q,p}});return{name,lines,sum}});
+ $("#v-bill").innerHTML='<div class="seg"><button data-m="msg" class="'+(billMode==="msg"?"on":"")+'">客人收到的通知</button><button data-m="xls" class="'+(billMode==="xls"?"on":"")+'">出貨對帳表</button></div>'+
+ (!people.length?'<div class="empty">有人下單後，這裡會自動產生<br>每位客人的付款通知</div>':
+ billMode==="msg"?people.map(u=>'<div class="note"><b>給 '+esc(u.name)+'</b>\n🧾 東京連線團 結單囉！\n'+u.lines.map(l=>l.c+'. '+l.p.n+(l.opt?'（'+l.opt+'）':'')+' ×'+l.q+'　$'+(l.p.p*l.q)).join("\n")+'\n小計 $'+u.sum+'　運費 $60\n💰 應付 $'+(u.sum+60)+'\n請於 2 天內匯款，回覆末五碼即可～</div>').join("")+'<button class="btn" style="width:100%" id="push">📣 一鍵傳給 '+people.length+' 位客人</button>'
+ :'<div class="card">'+people.map(u=>'<div class="row"><span><b>'+esc(u.name)+'</b><br><small style="color:var(--muted)">'+u.lines.map(l=>l.c+(l.opt||"")+'×'+l.q).join("、")+'</small></span><b>$'+(u.sum+60)+'</b></div>').join("")+'</div><button class="btn ghost" style="width:100%" id="csv">⬇ 匯出 Excel（CSV）</button>');
+ const push=$("#push");if(push)push.onclick=()=>toast("示意：已用 LINE 傳給 "+people.length+" 位客人");
+ const csv=$("#csv");if(csv)csv.onclick=()=>{const rows=[["客人","商品","規格","數量","單價","小計"]];people.forEach(u=>u.lines.forEach(l=>rows.push([u.name,l.c+" "+l.p.n,l.opt,l.q,l.p.p,l.p.p*l.q])));
+  const blob=new Blob(["﻿"+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="東京連線團-整單.csv";a.click()};
+ document.querySelectorAll(".seg button").forEach(x=>x.onclick=()=>{billMode=x.dataset.m;render()})}
+function tab(t){document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.t===t));["chat","admin","bill"].forEach(v=>$("#v-"+v).hidden=v!==t);$("#inbar").hidden=t!=="chat";$("#scr").scrollTop=t==="chat"?1e6:0}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
+document.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>say("你",b.dataset.q));
+$("#f").onsubmit=e=>{e.preventDefault();const v=$("#in").value.trim();if(!v)return;$("#in").value="";say("你",v)};
+P.forEach(postProduct);
+const S=[["小美","A+2"],["Joyce","C+1 粉色"],["阿凱媽咪","好可愛😍 B+3"],["Wendy","A+1 D+1"],["佩佩","C＋2 白色"],["Tina","請問D還有嗎"],["Tina","D+2"],["小葉","B+1"],["小美","取消 A"],["小美","A+1"],["Joyce","D+1 謝謝玲玲～"]];
+let running=0;$("#sim").onclick=()=>{if(running)return;running=1;let i=0;const go=()=>{if(i>=S.length){running=0;toast("切到「後台整單」看看 👉");return}say(S[i][0],S[i][1]);i++;setTimeout(go,650)};go()};
+render();
+</script></body></html>
