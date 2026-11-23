@@ -1740,7 +1740,8 @@ async function init(){
   fetch(AIB+"index.json?h="+Math.floor(Date.now()/3e5)).then(r=>r.json()).then(r=>{AIX=r||{};const it=AIX.items||{};let n=0;for(const k in it){const x=byK(k);if(x){x.ai=AIB+it[k];n++;const v=byK(k+"|S");if(v)v.ai=x.ai}}
     const cs=AIX.cats||{};document.querySelectorAll("#cats .cat").forEach(el=>{const u=cs[el.dataset.b];if(u){el.querySelector(".ci").innerHTML='<img src="'+esc(AIB+u)+'" alt="">';el.classList.add("hasai")}});
     const fm=AIX.fams||{};for(const f in fm){(FAM[f]||[]).forEach(x=>{x.fai=AIB+fm[f];if(!x.ai){x.ai=x.fai;const v=byK(x.k+"|S");if(v)v.ai=x.ai}n++})}
-    if(n)filter()}).catch(()=>{});
+    document.querySelectorAll("#cats .cat:not(.hasai)").forEach(el=>{const y=ALL.find(z=>!z.hid&&!z.mem&&z.ai&&(z.c||[]).includes(el.dataset.b));if(y){el.querySelector(".ci").innerHTML='<img src="'+esc(y.ai)+'" alt="">';el.classList.add("hasai")}});
+    if(n)filter();if(typeof fillHero==="function"&&$("#wr")){fillHero();fillBento()}}).catch(()=>{});
   fetch("/shop/pools").then(r=>r.json()).then(r=>{if(r&&r.ok){POOL=r;filter()}}).catch(()=>{});
   {const byD={};ALL.forEach(x=>{if(x.hid||x.mem||!x.img)return;const d=x.ad||"";(byD[d]=byD[d]||[]).push(x)});
    Object.keys(byD).sort().reverse().forEach(d=>{const g={},ord=[];byD[d].forEach(x=>{if(!g[x.b]){g[x.b]=[];ord.push(x.b)}g[x.b].push(x)});let more=true;for(let i=0;more;i++){more=false;ord.forEach(b=>{if(g[b][i]){NEWV.push(g[b][i]);more=true}})}})}
@@ -2035,7 +2036,7 @@ function heroTick(){if(!HERO||HERO.hidden)return;const r=HERO.getBoundingClientR
 if(!RM){let tk=false;addEventListener("scroll",()=>{if(!tk){tk=true;requestAnimationFrame(()=>{tk=false;heroTick()})}},{passive:true});addEventListener("resize",heroTick)}
 async function fillHero(){if(!HERO)return;
   const seen={},pick=[];for(const x of NEWV){if(!x.img||x.mem||x.hid)continue;const f=x._f||x.k;if(!seen[f]){seen[f]=1;pick.push(x)}if(pick.length>=14)break}
-  const wr=$("#wr"),N=pick.length;if(wr&&N){const st=360/N;wr.style.setProperty("--n",N);wr.innerHTML=pick.map((x,i)=>'<button class="wc" style="--i:'+i+'" data-k="'+esc(x.k)+'" aria-label="'+esc(x.n||"")+'"><img src="'+esc(x.img)+'" alt="" loading="lazy"></button>').join("");wr.onclick=e=>{const t=e.target.closest(".wc");if(t){const x=byK(t.dataset.k);if(x)openItem(x)}}}
+  const wr=$("#wr"),N=pick.length;if(wr&&N){const st=360/N;wr.style.setProperty("--n",N);wr.innerHTML=pick.map((x,i)=>'<button class="wc" style="--i:'+i+'" data-k="'+esc(x.k)+'" aria-label="'+esc(x.n||"")+'"><img src="'+esc(cov(x))+'" alt="" loading="lazy"></button>').join("");wr.onclick=e=>{const t=e.target.closest(".wc");if(t){const x=byK(t.dataset.k);if(x)openItem(x)}}}
   const c=$("#hcta");if(ME&&!ME.guest)c.innerHTML='<p style="display:block">嗨 <b>'+esc(ME.name)+'</b>，'+(ME.tier==="vip"?"已經套用 VIP 價":ME.tier==="member"?"已經套用一般會員價":"歡迎回來")+'<br>往下滑看這週新到</p>';heroTick()}
 // 分類大小格（點了直接切到那個分類）
 function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.querySelectorAll("#cats .cat")].slice(0,7);if(!cs.length){B.hidden=true;return}
