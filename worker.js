@@ -10,15 +10,17 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
-import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, packReply, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
+import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, packReply, packId, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const BUILD_TAG = "promo-3";
-const CATALOG_VERSION = "20261122-0940";
-const CATALOG_SHA = "4971cb41e3adbcb839f6cf34aeb8f6b7cfa46cad"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
+const BUILD_TAG = "kw-only-1";
+// AI 自由聊天回覆開關：false＝只回關鍵字/選單/指令/付款截圖/品番對到的照片，其他交給真人
+const AI_CHAT = false;
+const CATALOG_VERSION = "20261124-0200";
+const CATALOG_SHA = "97c9785d7d9e2522da099c7244fc48c09fac6b89"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -980,6 +982,8 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && /^(韓國|日本|中國)批發$/.test(text)) await env.SESSIONS.put("org:" + uid, text, { expirationTtl: 1800 });
   if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name).replaceAll("{shop}", uid ? await shopLink(env, uid) : "") }]);
 
+  // AI 自由回覆已關閉（老闆 2026-11-23：常常答非所問）：關鍵字以外的文字不自動回，由真人在 LINE 後台親自回
+  if (!AI_CHAT && msg.type === "text") return;
   if (uid) lineApi(env, "/v2/bot/chat/loading/start", { chatId: uid, loadingSeconds: 20 }).catch(() => {});
 
   try {
@@ -1030,7 +1034,9 @@ async function handleEvent(env, ev) {
       : prompt;
 
     const messages = [...session.history, { role: "user", content: userContent }];
-    const out = parseJson(await claude(env, RULES.replaceAll("{客人名稱}", name), messages));
+    // AI 關閉時：照片只有「品番/JAN 直接對到目錄」才自動跳商品卡，其他都留給真人回
+    if (!AI_CHAT && !hits.length) return;
+    const out = AI_CHAT ? parseJson(await claude(env, RULES.replaceAll("{客人名稱}", name), messages)) : { reply: "", show: [] };
     // 保險：模型寫成「給老闆的分析」（第三人稱講客人、內部用語）就不要傳給客人，改轉真人
     if (out.reply && /客人(問的|想要|要的|說的|是在問)|這要分清楚|應該先(確認|問)|我看不出|候選商品|老闆可以|建議老闆|回覆客人/.test(out.reply)) out.handoff = true;
 
@@ -1447,7 +1453,29 @@ async function memberVideoCmd(env, act) {
   const q = await env.SESSIONS.get("bc:memvid");
   return `📣 會員群發預覽：資源包宣傳影片\n收件人：一般會員 ${mem.length - vip} 位＋VIP ${vip} 位${done.size ? `（已收過 ${mem.length - left.length} 位，這次只傳剩下 ${left.length} 位）` : ""}\n每人 2 則訊息（影片＋說明文字），用掉 ${left.length} 則推播額度\n\n說明文字：\n————\n${packVideoMsgs()[1].text}\n————${q ? "\n⏳ 目前排隊中，額度恢復後會自動補傳" : ""}${res ? `\n上次結果：成功 ${res.ok} 位、剩 ${res.left} 位${res.err ? `（${res.err}）` : ""}` : ""}\n\n確定請回「會員群發 確認」`;
 }
+// VIP 素材包推播：每位 VIP 一則（各自的專屬連結），同一週只傳一次，額度不夠時下次再傳會補剩下的人
+async function vipPackCmd(env, act) {
+  const id = await packId();
+  if (!id) return "目前沒有素材包內容（post/pack.json）";
+  const key = "bc:vippack:" + id + ":done";
+  if (act === "取消") return "好👌 沒有傳送";
+  const vips = (await activeMembers(env)).filter((m) => m.tier === "vip");
+  const done = new Set(JSON.parse((await env.SESSIONS.get(key)) || "[]"));
+  const left = vips.filter((m) => !done.has(m.uid));
+  if (act !== "確認") return `📣 VIP 素材包推播預覽（${id}）\n收件人：VIP ${vips.length} 位${done.size ? `（已收過 ${vips.length - left.length} 位，這次只傳剩下 ${left.length} 位）` : ""}\n每人 1 則，各自附專屬連結，用掉 ${left.length} 則推播額度\n\n內容：\n————\n👑 VIP 專屬福利：本週開團素材包上線了，VIP 免費看全部！\n（接著是素材包連結與說明）\n————\n\n確定請回「VIP素材包 確認」`;
+  if (!left.length) return `所有 VIP 都已經收過這週的素材包了（共 ${vips.length} 位）`;
+  let ok = 0, err = "";
+  for (const m of left) {
+    const text = "👑 VIP 專屬福利：本週開團素材包上線了，VIP 免費看全部！\n\n" + (await packReply(env, m.uid));
+    const r = await lineApi(env, "/v2/bot/message/push", { to: m.uid, messages: [{ type: "text", text }] });
+    if (r && r.ok) { ok++; done.add(m.uid); } else { err = String(r ? r.status : "?"); break; }
+  }
+  await env.SESSIONS.put(key, JSON.stringify([...done]), { expirationTtl: 60 * 86400 });
+  return err ? `📣 已傳 ${ok} 位 VIP，還有 ${left.length - ok} 位沒傳到（LINE 回應 ${err}${err === "429" ? "，推播額度用完了" : ""}）\n之後再回「VIP素材包 確認」會補傳剩下的人，不會重複` : `📣 已把本週素材包傳給 ${ok} 位 VIP`;
+}
 async function broadcastCommand(env, t) {
+  const vp = t.match(/^#?VIP\s*素材包\s*(確認|取消)?$/i);
+  if (vp) return vipPackCmd(env, vp[1]);
   const mv = t.match(/^#?會員群發(?:影片)?\s*(確認|取消)?$/);
   if (mv) return memberVideoCmd(env, mv[1]);
   const bp = t.match(/^#?圖文群發\s*(確認|取消|預覽)?$/);
