@@ -92,6 +92,27 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--b);padd
 .pend select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--paper);color:var(--ink)}
 .note{white-space:pre-line;background:#06c75512;border:1px solid #06c75540;border-radius:14px;padding:10px 12px;font-size:13.5px}
 .hint{color:var(--mut);font-size:12.5px;margin:8px 0 0}
+.scr{position:relative}
+.card a{cursor:pointer}
+#liff{position:absolute;inset:0;background:#f4f5f7;z-index:5;display:flex;flex-direction:column;color:#111;animation:up .25s}
+@keyframes up{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+.lf-h{display:flex;align-items:center;gap:8px;background:#fff;padding:12px 14px;border-bottom:1px solid #e6e6e6;font-weight:700;font-size:15px}
+.lf-h small{display:block;font-weight:400;color:#888;font-size:11px}.lf-h .x{margin-left:auto;font-size:20px;cursor:pointer;color:#555;background:none;border:0}
+.lf-b{flex:1;overflow:auto;padding:12px;display:grid;gap:10px;align-content:start}
+.lf-c{background:#fff;border-radius:14px;padding:12px}
+.lf-c h6{margin:0 0 8px;font-size:13px;color:#888;font-weight:500}
+.lf-i{display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #f0f0f0}.lf-i:first-of-type{border-top:0}
+.lf-i .mini{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-size:24px;flex:none}
+.lf-i div{flex:1;font-size:13.5px;line-height:1.35}.lf-i small{color:#888}.lf-i b{font-size:14px}
+.lf-ship{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lf-ship label{border:1.5px solid #e3e3e3;border-radius:12px;padding:8px;font-size:13px;cursor:pointer;display:flex;justify-content:space-between}
+.lf-ship input{display:none}.lf-ship label:has(input:checked){border-color:#06c755;background:#06c75510;font-weight:700}
+.lf-store{margin-top:8px;width:100%;border:1px dashed #bbb;background:#fafafa;border-radius:12px;padding:9px;font:13px var(--b);text-align:left;cursor:pointer;color:#333}
+.lf-sum{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0}.lf-sum.tot{font-size:16px;font-weight:900;border-top:1px solid #eee;margin-top:4px;padding-top:8px}.lf-sum.tot b{color:#e2574c}
+.lf-f{padding:10px 12px 14px;background:#fff;border-top:1px solid #e6e6e6}
+.lf-f button{width:100%;border:0;border-radius:12px;background:#06c755;color:#fff;font:700 16px var(--b);padding:12px;cursor:pointer}
+.okst{font-size:11px;background:var(--okbg);color:var(--ok);border-radius:99px;padding:1px 7px;margin-left:6px;white-space:nowrap}
+#toAdmin{display:none}@media(max-width:960px){#toAdmin{display:block}}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#222;color:#fff;padding:8px 16px;border-radius:99px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:9}.toast.on{opacity:1}
 </style></head><body>
 <div class="top"><span class="logo">+1 <em>自動整單</em></span><span class="tag">LINE 群組・連線代購・虛構示意</span>
@@ -110,6 +131,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--b);padd
   <p>或自己點，扮演客人留言：</p>
   <div class="qk"><button data-q="+1">+1</button><button data-q="吉伊卡哇 粉色+1">吉伊卡哇 粉色+1</button><button data-q="抹茶+2">抹茶+2</button><button data-q="+1" data-r="1">回覆第一張照片 +1</button><button data-q="取消抹茶">取消抹茶</button></div>
   <button class="btn g" id="close">⏰ 模擬「結單時間到」</button>
+  <button class="btn" id="toAdmin" style="background:var(--ink);color:var(--paper)">📊 往下看玲玲的後台</button>
  </div>
 </div>
 <div class="panel">
@@ -187,7 +209,7 @@ function say(who,text,quotedKey){const quoted=quotedKey?(P.find(p=>p.photo===quo
 // --- auto close ---
 function people(){const L=[];for(const[who,o]of Object.entries(orders)){let sum=0,c=0,items=0;const lines=[];for(const[k,q]of Object.entries(o)){const[id,opt]=k.split("|"),p=byId(id);lines.push({p,opt,q});sum+=price(p)*q;c+=cost(p)*q;items+=q}L.push({who,lines,sum,c,items,ship:SHIP[who]||"7-11"})}return L}
 function doClose(){if(closed)return;closed=true;P.forEach(p=>p.closed=1);const U=people(),items=U.reduce((a,u)=>a+u.items,0);
- add('<div class="m oa"><div class="av">整單</div><div><div class="nm">整單小幫手（玲玲的官方 LINE）</div><div class="rw"><div class="card"><h5>🧾 本團已結單！</h5><div>共 '+U.length+' 位、'+items+' 件，謝謝大家 💕\n個人明細已用 LINE 私訊給每位，\n請點下面確認取貨門市～</div><a>查看我的訂單</a></div><span class="t">'+tm()+'</span></div></div></div>');
+ add('<div class="m oa"><div class="av">整單</div><div><div class="nm">整單小幫手（玲玲的官方 LINE）</div><div class="rw"><div class="card"><h5>🧾 本團已結單！</h5><div>共 '+U.length+' 位、'+items+' 件，謝謝大家 💕\n個人明細已用 LINE 私訊給每位，\n請點下面確認取貨門市～</div><a onclick="openLiff()">查看我的訂單</a></div><span class="t">'+tm()+'</span></div></div></div>');
  render();document.querySelector('.tabs [data-t="c"]').click();toast("已自動結單，明細算好了 👉")}
 // --- admin render ---
 function render(){const U=people();let items=0,rev=0,gp=0;U.forEach(u=>{items+=u.items;rev+=u.sum;gp+=u.sum-u.c});
@@ -202,7 +224,7 @@ function render(){const U=people();let items=0,rev=0,gp=0;U.forEach(u=>{items+=u
  $("#v-w").innerHTML=pending.length?'<div class="ord">'+pending.map((w,i)=>'<div class="oc pend"><span><b>'+esc(w.who)+'</b>：「'+esc(w.text)+'」</span><span><select data-w="'+i+'"><option value="">歸到哪個商品？</option>'+P.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join("")+'</select></span></div>').join("")+'</div><p class="hint">打錯字或看不懂的留言不會亂猜，放在這裡讓你選一下就入單。</p>':'<div class="empty">沒有待確認的留言 👍</div>';
  document.querySelectorAll("[data-w]").forEach(s=>s.onchange=()=>{const w=pending[+s.dataset.w],p=byId(s.value);if(!p)return;const q=+(w.text.match(/\+\s*(\d+)/)||[0,1])[1];orders[w.who]=orders[w.who]||{};const k=p.id+"|";orders[w.who][k]=(orders[w.who][k]||0)+q;pending.splice(+s.dataset.w,1);render();toast("已入單："+w.who+" "+p.name+" ×"+q)});
  const g={};U.forEach(u=>(g[u.ship]=g[u.ship]||[]).push(u));
- $("#v-c").innerHTML=U.length?'<div style="display:grid;gap:10px">'+(closed?'<div class="note" style="background:var(--okbg);border-color:transparent"><b>✓ 已自動結單</b>　結單時間到，系統自動關單、在群組發公告，之後的 +1 不會再入單。</div>':'<div class="note" style="background:var(--warnbg);border-color:transparent">接單中。到結單日時間，系統會自動關單並整理下面的清單（可按左邊「模擬結單時間到」）。</div>')+Object.entries(g).map(([s,L])=>'<div class="oc"><h4><span>📦 '+s+'（'+L.length+' 位）</span><span>代收合計 $'+L.reduce((a,u)=>a+u.sum+FEE[u.ship],0).toLocaleString()+'</span></h4>'+L.map(u=>'<div class="row"><span>'+esc(u.who)+'　'+u.lines.map(l=>l.p.name.slice(0,6)+(l.opt?"("+l.opt+")":"")+'×'+l.q).join("、")+'</span><b>'+(s==="面交"?'面交收':'貨到付款')+' $'+(u.sum+FEE[u.ship])+'</b></div>').join("")+'</div>').join("")+
+ $("#v-c").innerHTML=U.length?'<div style="display:grid;gap:10px">'+(closed?'<div class="note" style="background:var(--okbg);border-color:transparent"><b>✓ 已自動結單</b>　結單時間到，系統自動關單、在群組發公告，之後的 +1 不會再入單。</div>':'<div class="note" style="background:var(--warnbg);border-color:transparent">接單中。到結單日時間，系統會自動關單並整理下面的清單（可按左邊「模擬結單時間到」）。</div>')+Object.entries(g).map(([s,L])=>'<div class="oc"><h4><span>📦 '+s+'（'+L.length+' 位）</span><span>代收合計 $'+L.reduce((a,u)=>a+u.sum+FEE[u.ship],0).toLocaleString()+'</span></h4>'+L.map(u=>'<div class="row"><span>'+esc(u.who)+(STORE[u.who]&&STORE[u.who].ok?'<span class="okst">✓ '+esc(STORE[u.who].name)+'</span>':'')+'　'+u.lines.map(l=>l.p.name.slice(0,6)+(l.opt?"("+l.opt+")":"")+'×'+l.q).join("、")+'</span><b>'+(s==="面交"?'面交收':'貨到付款')+' $'+(u.sum+FEE[u.ship])+'</b></div>').join("")+'</div>').join("")+
  '<div class="note"><b>每位客人收到的私訊（以 '+esc(U[0].who)+' 為例）</b>\n🧾 玲玲東京連線團 結單囉！\n'+U[0].lines.map(l=>'・'+l.p.name+(l.opt?'（'+l.opt+'）':'')+' ×'+l.q+'　$'+price(l.p)*l.q).join("\n")+'\n運費 $'+FEE[U[0].ship]+'（'+U[0].ship+'）\n💰 貨到付款 $'+(U[0].sum+FEE[U[0].ship])+'\n👉 點這裡確認取貨門市</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn l" id="push">📣 重新發送通知</button><button class="btn g" id="csv">⬇ 匯出出貨清單（Excel）</button></div></div>':'<div class="empty">有訂單後，這裡會依 7-11／全家／郵局／面交分好出貨清單和代收金額。</div>';
  const pb=$("#push");if(pb)pb.onclick=()=>toast("示意：已私訊 "+U.length+" 位客人");
  const cb=$("#csv");if(cb)cb.onclick=()=>{const rows=[["寄送","客人","品名","款式","數量","售價","小計"]];U.forEach(u=>u.lines.forEach(l=>rows.push([u.ship,u.who,l.p.name,l.opt,l.q,price(l.p),price(l.p)*l.q])));const b=new Blob(["﻿"+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="出貨清單.csv";a.click()};
@@ -220,5 +242,24 @@ const S=[()=>sellerPhoto("吉伊卡哇"),()=>sellerText("吉伊卡哇絨毛吊�
  ()=>sellerPhoto("抹茶生巧克力"),()=>sellerText("抹茶生巧克力20入 ¥1944 限25 12/4結單"),["Tina","抹茶+2"],["小美","+1",  "吉伊卡哇"],["Joyce","+1 謝謝玲玲～"],
  ()=>sellerPhoto("保濕面膜"),()=>sellerText("保濕面膜7片 ¥990 限50 12/5結單"),["Wendy","面膜+3"],["Tina","取消抹茶"],["佩佩","+1"],["阿凱媽咪","我要兩個餅乾 +2"]];
 let run=0;$("#sim").onclick=()=>{if(run)return;if(P.length){location.reload();return}run=1;$("#sim").textContent="播放中…";let i=0;const go=()=>{if(i>=S.length){run=0;$("#sim").textContent="↺ 重新播放";toast("看右邊：商品、訂單都自動整理好了 👉");return}const s=S[i++];if(typeof s==="function")s();else say(s[0],s[1],s[2]);setTimeout(go,typeof s==="function"?900:1100)};go()};
+
+const STORE={};
+function openLiff(){const U=people();if(!U.length){toast("還沒有訂單");return}
+ const u=U.find(x=>x.who==="你")||U[0];let ship=u.ship;
+ const box=document.createElement("div");box.id="liff";
+ const draw=()=>{const fee=FEE[ship],st=STORE[u.who]&&STORE[u.who].ship===ship?STORE[u.who].name:"";
+  box.innerHTML='<div class="lf-h"><div>我的訂單<small>玲玲東京連線團・LINE 內開啟</small></div><button class="x" aria-label="關閉">✕</button></div><div class="lf-b">'+
+  '<div class="lf-c"><h6>👋 '+esc(u.who)+'，這是你這團喊的商品</h6>'+u.lines.map(l=>'<div class="lf-i"><span class="mini" style="background:'+l.p.bg+'">'+l.p.e+'</span><div>'+esc(l.p.name)+'<br><small>'+(l.opt?l.opt+'・':'')+'$'+price(l.p)+' × '+l.q+'</small></div><b>$'+price(l.p)*l.q+'</b></div>').join("")+'</div>'+
+  '<div class="lf-c"><h6>取貨方式</h6><div class="lf-ship">'+Object.keys(FEE).map(k=>'<label><input type="radio" name="sh" value="'+k+'"'+(k===ship?' checked':'')+'>'+k+'<span>'+(FEE[k]?'$'+FEE[k]:'免運')+'</span></label>').join("")+'</div>'+
+  (ship==="面交"?'<p style="font-size:12.5px;color:#666;margin:8px 0 0">📍 面交地點與時間，玲玲會再私訊你</p>':'<button class="lf-store" id="pick">'+(st?'✓ '+esc(st)+'（點我更改）':'🏪 選擇'+(ship==="郵局"?'寄送地址':'取貨門市')+' ›')+'</button>')+'</div>'+
+  '<div class="lf-c"><div class="lf-sum"><span>商品小計</span><span>$'+u.sum+'</span></div><div class="lf-sum"><span>運費（'+ship+'）</span><span>$'+fee+'</span></div><div class="lf-sum tot"><span>'+(ship==="面交"?'面交付款':'貨到付款')+'</span><b>$'+(u.sum+fee)+'</b></div></div>'+
+  '<p style="font-size:11.5px;color:#999;text-align:center;margin:0">有問題直接在群組或私訊玲玲 💕</p></div><div class="lf-f"><button id="ok">確認送出</button></div>';
+  box.querySelector(".x").onclick=()=>box.remove();
+  box.querySelectorAll('[name=sh]').forEach(r=>r.onchange=()=>{ship=r.value;draw()});
+  const pk=box.querySelector("#pick");if(pk)pk.onclick=()=>{STORE[u.who]={ship,name:ship==="郵局"?"台北市大安區○○路 12 號":ship+" 大安和平門市"};draw()};
+  box.querySelector("#ok").onclick=()=>{if(ship!=="面交"&&!(STORE[u.who]&&STORE[u.who].ship===ship)){toast("請先選擇"+(ship==="郵局"?"寄送地址":"取貨門市"));return}
+   SHIP[u.who]=ship;STORE[u.who]=STORE[u.who]&&STORE[u.who].ship===ship?STORE[u.who]:{ship,name:"面交"};STORE[u.who].ok=1;box.remove();render();toast("已送出！玲玲後台馬上看到你選的"+(ship==="面交"?"面交":"門市"))}};
+ draw();$(".scr").appendChild(box)}
+$("#toAdmin").onclick=()=>$(".panel").scrollIntoView({behavior:"smooth"});
 render();
 </script></body></html>
