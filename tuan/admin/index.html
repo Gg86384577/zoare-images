@@ -113,6 +113,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--b);padd
 .lf-f button{width:100%;border:0;border-radius:12px;background:#06c755;color:#fff;font:700 16px var(--b);padding:12px;cursor:pointer}
 .okst{font-size:11px;background:var(--okbg);color:var(--ok);border-radius:99px;padding:1px 7px;margin-left:6px;white-space:nowrap}
 #toAdmin{display:none}@media(max-width:960px){#toAdmin{display:block}}
+.solo .wrap{grid-template-columns:1fr}.solo .wrap>div:first-child{display:none}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#222;color:#fff;padding:8px 16px;border-radius:99px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:9}.toast.on{opacity:1}
 </style></head><body>
 <div class="top"><span class="logo">+1 <em>自動整單</em></span><span class="tag">LINE 群組・連線代購・虛構示意</span>
@@ -261,5 +262,8 @@ function openLiff(){const U=people();if(!U.length){toast("還沒有訂單");retu
    SHIP[u.who]=ship;STORE[u.who]=STORE[u.who]&&STORE[u.who].ship===ship?STORE[u.who]:{ship,name:"面交"};STORE[u.who].ok=1;box.remove();render();toast("已送出！玲玲後台馬上看到你選的"+(ship==="面交"?"面交":"門市"))}};
  draw();$(".scr").appendChild(box)}
 $("#toAdmin").onclick=()=>$(".panel").scrollIntoView({behavior:"smooth"});
+
+if(location.hash==="#admin"){document.body.classList.add("solo");S.forEach(x=>{if(typeof x==="function")x();else say(x[0],x[1],x[2])});
+ $(".tag").textContent="玲玲專屬後台・虛構示意";$(".steps").innerHTML='<span>這是玲玲用 LINE 登入後看到的後台。商品、訂單都是群組貼文和客人 +1 自動進來的。</span><span><a href="./" style="color:var(--ac);font-weight:700">看群組＋後台連動 demo ›</a></span>';toast("已登入：玲玲")}
 render();
 </script></body></html>
