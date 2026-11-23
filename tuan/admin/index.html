@@ -1,82 +1,116 @@
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="連線代購後台示意：客人在 LINE 群組喊 +1 即時入單；網站後台用 LINE 登入，自己改日幣價、匯率、毛利、數量、品名、結單日（虛構示意）。">
-<meta property="og:title" content="+1 整單後台｜日幣×匯率自動算毛利"><meta property="og:image" content="https://gg86384577.github.io/zoare-images/tuan/admin/cover.png">
-<title>+1 整單後台</title>
+<meta name="description" content="連線代購 +1 自動整單示意：連線主在 LINE 群組貼照片就自動上架，客人打 +1、品名+1 或回覆照片 +1 即時入單，結單日自動關單、算好每位客人金額（虛構示意）。">
+<meta property="og:title" content="LINE 群組 +1 自動整單｜貼照片就上架、結單自動算"><meta property="og:image" content="https://gg86384577.github.io/zoare-images/tuan/admin/cover.png">
+<title>+1 自動整單</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&display=swap">
 <style>
-:root{--bg:#fff6f1;--paper:#fff;--ink:#3a2a2a;--mut:#8a7470;--line:#f1ddd5;--ac:#e2574c;--ac2:#f59e7a;--soft:#ffe9e1;--bt:#ffe8a8;--chat:#a9c3dc;--gr:#06c755;--ok:#2f8a57;--okbg:#e3f3e9;--warn:#b26a00;--warnbg:#fff1d6;
+:root{--bg:#fff6f1;--paper:#fff;--ink:#3a2a2a;--mut:#8a7470;--line:#f1ddd5;--ac:#e2574c;--ac2:#f59e7a;--soft:#ffe9e1;--bt:#ffe8a8;--gr:#06c755;--ok:#2f8a57;--okbg:#e3f3e9;--warn:#b26a00;--warnbg:#fff1d6;
 --d:"Noto Serif TC",Georgia,serif;--b:"Noto Sans TC",-apple-system,"PingFang TC",sans-serif}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1f1817;--paper:#2b2221;--ink:#f6ebe7;--mut:#bba49e;--line:#463634;--ac:#ff8a7e;--ac2:#f7b195;--soft:#3e2a27;--bt:#4a3d1f;--chat:#33404d;--okbg:#1f3a2a;--ok:#7fd3a0;--warnbg:#3d3020;--warn:#f0c071;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#1f1817;--paper:#2b2221;--ink:#f6ebe7;--mut:#bba49e;--line:#463634;--ac:#ff8a7e;--ac2:#f7b195;--soft:#3e2a27;--bt:#4a3d1f;--chat:#33404d;--okbg:#1f3a2a;--ok:#7fd3a0;--warnbg:#3d3020;--warn:#f0c071;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1f1817;--paper:#2b2221;--ink:#f6ebe7;--mut:#bba49e;--line:#463634;--ac:#ff8a7e;--ac2:#f7b195;--soft:#3e2a27;--bt:#4a3d1f;--okbg:#1f3a2a;--ok:#7fd3a0;--warnbg:#3d3020;--warn:#f0c071;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1f1817;--paper:#2b2221;--ink:#f6ebe7;--mut:#bba49e;--line:#463634;--ac:#ff8a7e;--ac2:#f7b195;--soft:#3e2a27;--bt:#4a3d1f;--okbg:#1f3a2a;--ok:#7fd3a0;--warnbg:#3d3020;--warn:#f0c071;color-scheme:dark}
 *{box-sizing:border-box}[hidden]{display:none!important}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--b);padding:18px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}
-.top{max-width:1180px;margin:0 auto 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.top{max-width:1220px;margin:0 auto 6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .logo{font-family:var(--d);font-weight:900;font-size:24px}.logo em{font-style:normal;color:var(--ac)}
 .tag{background:var(--soft);color:var(--ac);font-weight:700;font-size:12.5px;padding:3px 10px;border-radius:99px}
 .who{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);border-radius:99px;padding:5px 12px 5px 6px;font-size:13.5px}
-.who i{width:26px;height:26px;border-radius:50%;background:var(--gr);color:#fff;font-style:normal;font-weight:900;display:grid;place-items:center;font-size:11px}
-.wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start}
-@media(max-width:940px){.wrap{grid-template-columns:1fr}}
-/* phone */
-.phone{background:var(--paper);border:1px solid var(--line);border-radius:30px;overflow:hidden;box-shadow:0 20px 50px -24px rgba(160,70,50,.4);position:sticky;top:12px}
-.ph-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);font-weight:700}
-.ph-h small{color:var(--mut);font-weight:400;margin-left:auto}
-.chat{background:var(--chat);height:520px;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:7px}
-.m{display:flex;gap:6px;align-items:flex-end;max-width:94%}.m .av{width:28px;height:28px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:14px;flex:none}
-.m .nm{font-size:11px;color:#22303d;opacity:.75;margin:0 0 2px 2px}
-.bub{background:#fff;color:#222;border-radius:15px;padding:6px 10px;font-size:13.5px}
-.me{align-self:flex-end}.me .bub{background:#a6e38b}
-.q{font-size:11.5px;color:#666;border-left:3px solid var(--ac2);padding-left:6px;margin-bottom:3px}
-.hit{outline:2px solid var(--ac)}.ok{font-size:10.5px;background:var(--ac);color:#fff;border-radius:99px;padding:0 6px;margin-left:4px;white-space:nowrap}
-.pp{background:#fff;border-radius:14px;overflow:hidden;width:200px;color:#222}
-.pic{position:relative;display:grid;place-items:center;font-size:44px;height:110px}
-.num{position:absolute;left:8px;top:2px;font:900 46px/1 var(--d);color:#111;-webkit-text-stroke:2px #fff;paint-order:stroke}
-.pp div.c{padding:6px 10px 8px;font-size:12.5px}.pp b{display:block}
-.bar{display:flex;gap:6px;padding:8px;background:var(--paper);border-top:1px solid var(--line)}
-.bar input{flex:1;min-width:0;border:1px solid var(--line);border-radius:99px;padding:8px 12px;font:inherit;background:var(--bg);color:var(--ink)}
-.btn{border:0;border-radius:99px;padding:8px 14px;font:inherit;font-weight:700;cursor:pointer;background:var(--ac);color:#fff;min-height:38px}
+.who i{width:26px;height:26px;border-radius:50%;background:var(--gr);color:#fff;font-style:normal;font-weight:900;display:grid;place-items:center;font-size:10px}
+.steps{max-width:1220px;margin:0 auto 14px;display:flex;gap:8px;flex-wrap:wrap;font-size:13px}
+.steps span{background:var(--paper);border:1px solid var(--line);border-radius:99px;padding:4px 12px}.steps b{color:var(--ac)}
+.wrap{max-width:1220px;margin:0 auto;display:grid;grid-template-columns:380px 1fr;gap:22px;align-items:start}.wrap>*{min-width:0}
+@media(max-width:960px){.wrap{grid-template-columns:1fr}}
+/* ---------- LINE phone ---------- */
+.phone{border-radius:38px;background:#111;padding:10px;box-shadow:0 24px 60px -26px rgba(120,50,40,.55);position:sticky;top:12px}
+.scr{border-radius:30px;overflow:hidden;background:#fff;display:flex;flex-direction:column;height:720px}
+@media(max-width:960px){.phone{position:static}.scr{height:640px}}
+.sb{display:flex;justify-content:space-between;padding:8px 22px 2px;font:600 13px/1 -apple-system,sans-serif;color:#111;background:#fff}
+.lh{display:flex;align-items:center;gap:10px;padding:8px 12px 10px;background:#fff;color:#111;border-bottom:1px solid #eee}
+.lh .bk{font-size:22px;line-height:1}.lh b{font-size:16px}.lh small{color:#888;font-weight:400;margin-left:2px}.lh .ic{margin-left:auto;display:flex;gap:14px;font-size:17px;color:#333}
+.chat{flex:1;background:#8cabd9;overflow:auto;padding:10px 10px 14px;display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth}
+.day{align-self:center;background:rgba(0,0,0,.18);color:#fff;font-size:11.5px;border-radius:99px;padding:2px 10px}
+.m{display:flex;gap:7px;align-items:flex-start;max-width:88%}
+.m .av{width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:18px;background:#fff}
+.m .nm{font-size:11.5px;color:#fff;margin:0 0 3px 2px;text-shadow:0 1px 1px rgba(0,0,0,.15)}
+.m .rw{display:flex;align-items:flex-end;gap:5px}
+.t{font-size:10px;color:#eef3fb;white-space:nowrap;line-height:1.3}
+.bub{background:#fff;color:#111;border-radius:18px;padding:7px 12px;font-size:14.5px;line-height:1.45;word-break:break-word;position:relative}
+.me{align-self:flex-end;max-width:80%}.me .rw{flex-direction:row-reverse}.me .bub{background:#8de055}.me .t{text-align:right}
+.photo{width:190px;height:190px;border-radius:16px;display:grid;place-items:center;font-size:72px;position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+.photo i{position:absolute;right:8px;bottom:6px;font:700 11px/1 var(--b);color:#fff;font-style:normal;background:rgba(0,0,0,.35);padding:3px 6px;border-radius:6px}
+.qt{display:flex;gap:7px;align-items:center;border-bottom:1px solid #e3e3e3;padding:0 0 6px;margin:0 0 6px}
+.qt .mini{width:34px;height:34px;border-radius:6px;display:grid;place-items:center;font-size:18px;flex:none}
+.qt span{font-size:11.5px;color:#888;line-height:1.3}
+/* demo annotation chips (not part of LINE) */
+.chip{display:inline-block;margin:4px 0 0 2px;font:700 11px/1.5 var(--b);padding:1px 8px;border-radius:99px;background:#fff3c4;color:#7a4b00;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.chip.ok{background:#e2574c;color:#fff}.chip.no{background:#666;color:#fff}.chip.q{background:#fff;color:#b26a00}
+.me .chip{float:right}
+.oa .av{background:#06c755;color:#fff;font:900 11px/1 var(--b)}
+.card{background:#fff;border-radius:18px;overflow:hidden;width:240px;color:#111}
+.card h5{margin:0;background:#e2574c;color:#fff;padding:9px 12px;font-size:14px}
+.card div{padding:9px 12px;font-size:13px;line-height:1.6;white-space:pre-line}
+.card a{display:block;text-align:center;border-top:1px solid #eee;padding:9px;color:#06c755;font-weight:700;text-decoration:none;font-size:13.5px}
+.lin{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-top:1px solid #eee}
+.lin .pl{font-size:22px;color:#555;line-height:1}
+.lin input{flex:1;min-width:0;border:0;background:#f1f2f4;border-radius:99px;padding:9px 14px;font:15px var(--b);color:#111}
+.lin button{border:0;background:#06c755;color:#fff;border-radius:99px;padding:8px 14px;font:700 14px var(--b);cursor:pointer}
+.ctrl{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:10px;margin-top:10px;display:grid;gap:8px}
+.ctrl p{margin:0;font-size:12px;color:var(--mut)}
+.qk{display:flex;flex-wrap:wrap;gap:6px}
+.qk button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 11px;font:13px var(--b);cursor:pointer;min-height:34px}
+.btn{border:0;border-radius:99px;padding:8px 16px;font:inherit;font-weight:700;cursor:pointer;background:var(--ac);color:#fff;min-height:40px}
 .btn.g{background:var(--soft);color:var(--ac)}.btn.l{background:var(--gr)}
-.quick{display:flex;flex-wrap:wrap;gap:6px;padding:0 8px 8px;background:var(--paper)}
-.quick button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer;min-height:32px}
-/* admin */
-.panel{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:16px}
+.big{font-size:15.5px;padding:11px 18px}
+/* ---------- admin ---------- */
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:24px;padding:18px}
 .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
 @media(max-width:600px){.kpi{grid-template-columns:repeat(2,1fr)}}
-.kpi div{background:var(--soft);border-radius:16px;padding:12px}.kpi span{font-size:12px;color:var(--mut)}.kpi b{display:block;font:900 24px/1.2 var(--d);color:var(--ac)}
+.kpi div{background:var(--soft);border-radius:16px;padding:12px}.kpi span{font-size:12px;color:var(--mut)}.kpi b{display:block;font:900 26px/1.2 var(--d);color:var(--ac)}
 .set{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--bg);border:1px dashed var(--ac2);border-radius:16px;padding:12px;margin-bottom:14px}
 .set label{font-size:12px;color:var(--mut);display:grid;gap:3px}
 .set input,.set select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--paper);color:var(--ink);width:120px}
-.set .live{margin-left:auto;font-size:12.5px;color:var(--ok);background:var(--okbg);padding:4px 10px;border-radius:99px}
+.live{margin-left:auto;font-size:12.5px;color:var(--ok);background:var(--okbg);padding:4px 10px;border-radius:99px}
 .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs button{border:1px solid var(--line);background:var(--paper);color:var(--mut);border-radius:99px;padding:7px 14px;font:inherit;font-weight:700;cursor:pointer}
-.tabs button.on{background:var(--ac);border-color:var(--ac);color:#fff}
-.tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
+.tabs button.on{background:var(--ac);border-color:var(--ac);color:#fff}.tabs em{font-style:normal;background:var(--warn);color:#fff;border-radius:99px;padding:0 6px;font-size:11px;margin-left:4px}
+.scroll{overflow-x:auto}
+.tbl{width:100%;border-collapse:separate;border-spacing:0 8px;min-width:780px}
 .tbl th{font-size:12px;color:var(--mut);font-weight:500;text-align:left;padding:0 6px}
 .tbl td{background:var(--bg);padding:8px 6px;vertical-align:middle}.tbl td:first-child{border-radius:14px 0 0 14px}.tbl td:last-child{border-radius:0 14px 14px 0}
-.th{width:56px;height:56px;border-radius:12px;position:relative;display:grid;place-items:center;font-size:26px}
-.th span{position:absolute;left:4px;top:-2px;font:900 22px/1 var(--d);color:#111;-webkit-text-stroke:1.5px #fff;paint-order:stroke}
+.th{width:54px;height:54px;border-radius:12px;display:grid;place-items:center;font-size:28px}
 .tbl input{font:inherit;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:8px;padding:5px 6px;width:100%}
 .tbl input:hover,.tbl input:focus{border-color:var(--line);background:var(--paper);outline:none}
-.tbl .n{width:92px;white-space:nowrap}.tbl .s{width:56px}.tbl td.nm input{min-width:160px}.tbl input[type=date]{width:138px}.wrap>*{min-width:0}.tbl{min-width:820px}
+.tbl td.nm input{min-width:170px}.tbl td.kw input{min-width:90px;font-size:12px;color:var(--mut)}.tbl input[type=date]{width:128px;font-size:13px}.tbl td{white-space:nowrap}.tbl td.nm,.tbl td.kw{white-space:normal}
+.auto{font-size:10.5px;background:var(--okbg);color:var(--ok);border-radius:99px;padding:1px 7px;white-space:nowrap}
 .pr{font-weight:700}.gm{font-size:12px;color:var(--ok)}.gm.low{color:var(--warn)}
-.cnt{font-weight:900;color:var(--ac)}.flash{animation:fl .9s}@keyframes fl{0%{background:var(--bt)}100%{background:var(--bg)}}
-.dl{font-size:12px;padding:2px 8px;border-radius:99px;background:var(--okbg);color:var(--ok);white-space:nowrap}.dl.soon{background:var(--warnbg);color:var(--warn)}
-.scroll{overflow-x:auto}
-.ord{display:grid;gap:10px}.oc{background:var(--bg);border-radius:16px;padding:12px}
-.oc h4{margin:0 0 6px;display:flex;justify-content:space-between;font-size:14.5px}
-.row{display:flex;justify-content:space-between;gap:8px;font-size:13.5px;padding:3px 0;border-top:1px dashed var(--line)}
+.cnt{font-weight:900;color:var(--ac);font-size:16px}.flash{animation:fl 1s}@keyframes fl{0%{background:var(--bt)}100%{background:var(--bg)}}
+.dl{font-size:12px;padding:2px 8px;border-radius:99px;background:var(--okbg);color:var(--ok);white-space:nowrap}.dl.soon{background:var(--warnbg);color:var(--warn)}.dl.end{background:#8883;color:var(--mut)}
+.empty{color:var(--mut);font-size:13.5px;text-align:center;padding:26px 10px;background:var(--bg);border-radius:16px}
+.ord{display:grid;gap:10px}.oc{background:var(--bg);border-radius:16px;padding:12px 14px}
+.oc h4{margin:0 0 6px;display:flex;justify-content:space-between;gap:8px;font-size:14.5px}
+.row{display:flex;justify-content:space-between;gap:8px;font-size:13.5px;padding:4px 0;border-top:1px dashed var(--line)}
 .ship{font-size:11.5px;background:var(--soft);color:var(--ac);border-radius:99px;padding:1px 8px;margin-left:6px}
+.pend{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.pend select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--paper);color:var(--ink)}
 .note{white-space:pre-line;background:#06c75512;border:1px solid #06c75540;border-radius:14px;padding:10px 12px;font-size:13.5px}
 .hint{color:var(--mut);font-size:12.5px;margin:8px 0 0}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#222;color:#fff;padding:8px 16px;border-radius:99px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:9}.toast.on{opacity:1}
 </style></head><body>
-<div class="top"><span class="logo">+1 <em>整單</em>後台</span><span class="tag">連線代購專用・虛構示意</span>
-<span class="who"><i>LINE</i>玲玲（用個人 LINE 登入）</span></div>
+<div class="top"><span class="logo">+1 <em>自動整單</em></span><span class="tag">LINE 群組・連線代購・虛構示意</span>
+<span class="who"><i>LINE</i>玲玲（用個人 LINE 登入後台）</span></div>
+<div class="steps"><span><b>①</b> 群組貼照片＋一行字 → 自動上架</span><span><b>②</b> 客人打 +1／品名+1／回覆照片 +1 → 即時入單</span><span><b>③</b> 結單時間到 → 自動關單、算好每人金額、發通知</span></div>
 <div class="wrap">
-<div class="phone">
-  <div class="ph-h">🇯🇵 東京連線團<small>LINE 群組・128 人</small></div>
-  <div class="chat" id="chat"></div>
-  <div class="quick"><button data-q="3+1">3+1</button><button data-q="5 粉色+2">5 粉色+2</button><button data-q="7+1">7+1</button><button data-q="取消 3">取消 3</button><button id="sim" style="background:var(--soft);color:var(--ac);border-color:transparent;font-weight:700">▶ 模擬喊單</button></div>
-  <form class="bar" id="f"><input id="in" placeholder="以「你」留言，例如 3+1" autocomplete="off"><button class="btn">送出</button></form>
+<div>
+ <div class="phone"><div class="scr">
+  <div class="sb"><span>20:00</span><span>▮▮▮ 📶 100%</span></div>
+  <div class="lh"><span class="bk">‹</span><b>🇯🇵 玲玲東京連線團</b><small>(128)</small><span class="ic">🔍 ☰</span></div>
+  <div class="chat" id="chat"><div class="day">今天</div></div>
+  <form class="lin" id="f"><span class="pl">＋</span><input id="in" placeholder="以客人身分留言，例如 吉伊卡哇+1" autocomplete="off"><button>傳送</button></form>
+ </div></div>
+ <div class="ctrl">
+  <button class="btn big" id="sim">▶ 播放一場直播（約 30 秒）</button>
+  <p>或自己點，扮演客人留言：</p>
+  <div class="qk"><button data-q="+1">+1</button><button data-q="吉伊卡哇 粉色+1">吉伊卡哇 粉色+1</button><button data-q="抹茶+2">抹茶+2</button><button data-q="+1" data-r="1">回覆第一張照片 +1</button><button data-q="取消抹茶">取消抹茶</button></div>
+  <button class="btn g" id="close">⏰ 模擬「結單時間到」</button>
+ </div>
 </div>
 <div class="panel">
   <div class="kpi"><div><span>下單人數</span><b id="k1">0</b></div><div><span>總件數</span><b id="k2">0</b></div><div><span>營業額</span><b id="k3">$0</b></div><div><span>預估毛利</span><b id="k4">$0</b></div></div>
@@ -85,69 +119,106 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--b);padd
     <label>售價算法<select id="mode"><option value="x">成本 × 倍率</option><option value="p">成本 + 固定加價</option></select></label>
     <label id="lx">倍率<input id="mul" type="number" step="0.05" value="1.35"></label>
     <label id="lp" hidden>每件加價（台幣）<input id="add" type="number" step="10" value="120"></label>
-    <span class="live">● 即時同步：群組有人 +1，這裡馬上更新</span>
+    <span class="live">● 即時同步</span>
   </div>
-  <div class="tabs"><button class="on" data-t="p">商品（點欄位直接改）</button><button data-t="o">客人訂單</button><button data-t="c">結單・出貨</button></div>
+  <div class="tabs"><button class="on" data-t="p">商品</button><button data-t="o">客人訂單</button><button data-t="w">待確認<em id="wc" hidden>0</em></button><button data-t="c">結單・出貨</button></div>
   <div id="v-p" class="scroll"></div>
   <div id="v-o" hidden></div>
+  <div id="v-w" hidden></div>
   <div id="v-c" hidden></div>
 </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
 const $=s=>document.querySelector(s);
-const today=new Date();const ds=d=>{const x=new Date(today);x.setDate(x.getDate()+d);return x.toISOString().slice(0,10)};
-let P=[
- {n:3,name:"北海道牛奶夾心餅 12入",jpy:1080,lim:40,dl:ds(2),e:"🍪",bg:"linear-gradient(135deg,#ffe3c2,#ffc7a6)",over:null},
- {n:5,name:"兔兔絨毛吊飾",jpy:1650,lim:20,dl:ds(2),e:"🐰",bg:"linear-gradient(135deg,#ffe0ec,#ffc4d9)",opt:["粉色","白色"],over:null},
- {n:7,name:"保濕面膜 7片",jpy:990,lim:50,dl:ds(5),e:"🧖‍♀️",bg:"linear-gradient(135deg,#dff1ff,#c4ddf7)",over:null},
- {n:12,name:"抹茶生巧克力 20入",jpy:1944,lim:25,dl:ds(1),e:"🍵",bg:"linear-gradient(135deg,#e5f3d6,#c9e6b1)",over:null},
- {n:18,name:"眼藥水 清涼款",jpy:698,lim:60,dl:ds(5),e:"💧",bg:"linear-gradient(135deg,#e6f7ff,#bfe6ff)",over:null}];
+const today=new Date();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),1800)}
+// products are created from the seller's chat posts
+const LIB={
+ "吉伊卡哇":{e:"🐹",bg:"linear-gradient(135deg,#fff0f5,#ffd3e2)",kw:"吉伊卡哇,吉伊,chiikawa,小可愛"},
+ "北海道牛奶夾心餅":{e:"🍪",bg:"linear-gradient(135deg,#fff1dc,#ffd3a8)",kw:"夾心餅,牛奶餅,餅乾"},
+ "抹茶生巧克力":{e:"🍵",bg:"linear-gradient(135deg,#eef7e2,#c9e6b1)",kw:"抹茶,生巧"},
+ "保濕面膜":{e:"🧖‍♀️",bg:"linear-gradient(135deg,#e6f3ff,#c4ddf7)",kw:"面膜"}};
+let P=[],orders={},pending=[],last=null,closed=false,clock=20*60,photoQ=null;
 const SHIP={"小美":"7-11","Joyce":"全家","阿凱媽咪":"郵局","Wendy":"面交","佩佩":"7-11","Tina":"全家","小葉":"7-11","你":"7-11"};
 const FEE={"7-11":60,"全家":60,"郵局":80,"面交":0};
 const AV={"你":"🙋","小美":"👩🏻","Joyce":"👱🏻‍♀️","阿凱媽咪":"👩🏽‍🍼","Wendy":"👩🏻‍🦰","佩佩":"🧕🏻","Tina":"👧🏻","小葉":"🧑🏻"};
-let orders={},last=null,tab="p";
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),1700)}
 const fx=()=>+$("#fx").value||0;
-function cost(p){return Math.round(p.jpy*fx())}
-function price(p){if(p.over!=null)return p.over;const c=cost(p);return $("#mode").value==="x"?Math.ceil(c*(+$("#mul").value||1)/10)*10:c+(+$("#add").value||0)}
-const byN=n=>P.find(p=>p.n==n);
-function qty(n){let q=0;for(const o of Object.values(orders))for(const[k,v]of Object.entries(o))if(k.split("|")[0]==n)q+=v;return q}
-function post(p){const d=document.createElement("div");d.className="m";d.innerHTML='<div class="av" style="background:var(--ac);color:#fff;font-weight:900;font-size:12px">玲</div><div><div class="nm">連線主</div><div class="pp"><div class="pic" style="background:'+p.bg+'"><span class="num">'+p.n+'</span>'+p.e+'</div><div class="c"><b>'+esc(p.name)+'</b>$'+price(p)+(p.opt?'・'+p.opt.join('／'):'')+'</div></div></div>';$("#chat").appendChild(d);last=p.n}
-function parse(t){t=t.replace(/＋/g,"+").replace(/\s+/g," ").trim();let m=t.match(/^(取消|不要了?)\s*(\d{1,3})/);if(m)return[{n:+m[2],cancel:1}];
- const r=[],re=/(\d{1,3})?\s*(?:號)?\s*(粉色|白色)?\s*\+\s*(\d{1,2})\s*(粉色|白色)?/g;while((m=re.exec(t))){const n=m[1]?+m[1]:last;if(byN(n))r.push({n,q:+m[3],opt:m[2]||m[4]||""})}return r}
-function say(who,text,quote){const res=parse(text),d=document.createElement("div");d.className="m"+(who==="你"?" me":"");let tag="";
- res.forEach(x=>{orders[who]=orders[who]||{};if(x.cancel){for(const k in orders[who])if(k.split("|")[0]==x.n)delete orders[who][k];tag+='<span class="ok">已取消 '+x.n+'</span>'}
-  else{const p=byN(x.n);if(qty(x.n)+x.q>p.lim){tag+='<span class="ok" style="background:#999">'+x.n+' 已額滿</span>';return}const k=x.n+"|"+x.opt;orders[who][k]=(orders[who][k]||0)+x.q;tag+='<span class="ok">✓ '+x.n+(x.opt||"")+'×'+x.q+'</span>';flash(x.n)}});
+const cost=p=>Math.round(p.jpy*fx());
+const price=p=>{if(p.over!=null)return p.over;const c=cost(p);return $("#mode").value==="x"?Math.ceil(c*(+$("#mul").value||1)/10)*10:c+(+$("#add").value||0)};
+const byId=id=>P.find(p=>p.id===id);
+function qty(id){let q=0;for(const o of Object.values(orders))for(const[k,v]of Object.entries(o))if(k.split("|")[0]==id)q+=v;return q}
+function tm(){clock+=1+Math.floor(Math.random()*2);return String(Math.floor(clock/60)%24).padStart(2,"0")+":"+String(clock%60).padStart(2,"0")}
+function add(html){const c=$("#chat");c.insertAdjacentHTML("beforeend",html);c.scrollTop=c.scrollHeight}
+// --- seller posts photo, then a text line ---
+function sellerPhoto(key){photoQ=key;const L=LIB[key];
+ add('<div class="m" data-photo="'+key+'"><div class="av" style="background:#e2574c;color:#fff;font:900 13px/1 var(--b)">玲</div><div><div class="nm">玲玲🌷（連線主）</div><div class="rw"><div class="photo" style="background:'+L.bg+'">'+L.e+'<i>📷 現場拍</i></div><span class="t">'+tm()+'</span></div></div></div>')}
+function parseListing(t){const m=t.match(/^(.+?)\s*[¥￥]\s*(\d+)(?:\s*限\s*(\d+))?(?:\s*([^\s\d]+\/[^\s\d]+))?(?:\s*(\d{1,2})\/(\d{1,2})\s*結單)?/);if(!m)return null;
+ const y=today.getFullYear();return{name:m[1].trim(),jpy:+m[2],lim:m[3]?+m[3]:99,opt:m[4]?m[4].split("/"):null,dl:m[5]?y+"-"+String(m[5]).padStart(2,"0")+"-"+String(m[6]).padStart(2,"0"):""}}
+function sellerText(t){const L=parseListing(t);let chip="";
+ if(L&&photoQ){const base=Object.keys(LIB).find(k=>L.name.includes(k))||photoQ,lib=LIB[base];
+  const p={id:"p"+(P.length+1),name:L.name,jpy:L.jpy,lim:L.lim,opt:L.opt,dl:L.dl,e:lib.e,bg:lib.bg,kw:lib.kw,photo:photoQ,over:null,isNew:1};P.push(p);last=p.id;photoQ=null;
+  chip='<div><span class="chip">✓ 已自動上架：'+esc(p.name)+'</span></div>'}
+ add('<div class="m"><div class="av" style="background:#e2574c;color:#fff;font:900 13px/1 var(--b)">玲</div><div><div class="nm">玲玲🌷（連線主）</div><div class="rw"><div class="bub">'+esc(t)+'</div><span class="t">'+tm()+'</span></div>'+chip+'</div></div>');render();if(chip)toast("後台已自動新增商品 👉")}
+// --- customer +1 parsing ---
+function findByText(s){s=s.toLowerCase();for(const p of P){const keys=[p.name,...p.kw.split(",")].map(x=>x.trim().toLowerCase()).filter(Boolean);if(keys.some(k=>s.includes(k)))return p}return null}
+function parse(t,quoted){t=t.replace(/＋/g,"+").replace(/\s+/g," ").trim();
+ let m=t.match(/^(取消|不要了?)\s*(.*)$/);if(m){const p=m[2]?findByText(m[2]):(quoted?byId(quoted):byId(last));return p?[{id:p.id,cancel:1}]:[{unk:t}]}
+ const r=[],re=/([^+]*?)\+\s*(\d{1,2})/g;let seg;
+ while((seg=re.exec(t))){let pre=seg[1].replace(/[，,、。!！~～]/g," ").trim();const q=+seg[2];
+  const opt=(pre.match(/(粉色|白色|粉|白)/)||t.slice(re.lastIndex).match(/^\s*(粉色|白色|粉|白)/)||[])[1];const optN=opt?(opt.length===1?opt+"色":opt):"";
+  const rest=pre.replace(/(粉色|白色|粉|白)/,"").replace(/我要|要|謝謝.*|玲玲/g,"").trim();
+  let p=null;if(rest){p=findByText(rest);if(!p){r.push({unk:t});continue}}else p=quoted?byId(quoted):byId(last);
+  if(p)r.push({id:p.id,q,opt:p.opt?(optN||""):""})}
+ return r}
+function say(who,text,quotedKey){const quoted=quotedKey?(P.find(p=>p.photo===quotedKey)||{}).id:null;const res=parse(text,quoted);let chips="";
+ res.forEach(x=>{if(x.unk){pending.push({who,text});chips+='<span class="chip q">? 看不懂，放進「待確認」</span>';return}
+  const p=byId(x.id);orders[who]=orders[who]||{};
+  if(x.cancel){let had=0;for(const k in orders[who])if(k.split("|")[0]==x.id){delete orders[who][k];had=1}chips+='<span class="chip ok">已取消 '+esc(p.name)+'</span>';return}
+  if(closed||p.closed){chips+='<span class="chip no">已結單，未入單</span>';return}
+  if(qty(x.id)+x.q>p.lim){chips+='<span class="chip no">'+esc(p.name)+' 已額滿</span>';return}
+  const k=x.id+"|"+x.opt;orders[who][k]=(orders[who][k]||0)+x.q;p.fl=1;chips+='<span class="chip ok">✓ 入單 '+esc(p.name)+(x.opt?"（"+x.opt+"）":"")+' ×'+x.q+'</span>'});
  if(orders[who]&&!Object.keys(orders[who]).length)delete orders[who];
- d.innerHTML=(who==="你"?'':'<div class="av">'+(AV[who]||"🙂")+'</div>')+'<div>'+(who==="你"?'':'<div class="nm">'+esc(who)+'</div>')+'<div class="bub'+(res.length?' hit':'')+'">'+(quote?'<div class="q">回覆 '+quote+' 號照片</div>':'')+esc(text)+tag+'</div></div>';
- $("#chat").appendChild(d);$("#chat").scrollTop=1e6;render()}
-let fl=new Set();function flash(n){fl.add(n)}
-function render(){let n=0,items=0,rev=0,gp=0;const people=[];
- for(const[who,o]of Object.entries(orders)){let sum=0,c=0;const lines=[];for(const[k,q]of Object.entries(o)){const[pn,opt]=k.split("|"),p=byN(pn);lines.push({p,opt,q});sum+=price(p)*q;c+=cost(p)*q;items+=q}n++;rev+=sum;gp+=sum-c;people.push({who,lines,sum,ship:SHIP[who]||"7-11"})}
- $("#k1").textContent=n;$("#k2").textContent=items;$("#k3").textContent="$"+rev.toLocaleString();$("#k4").textContent="$"+gp.toLocaleString();
+ const me=who==="你",Lq=quotedKey?LIB[quotedKey]:null;
+ const qhtml=Lq?'<div class="qt"><div class="mini" style="background:'+Lq.bg+'">'+Lq.e+'</div><span>玲玲🌷<br>照片</span></div>':'';
+ add('<div class="m'+(me?' me':'')+'">'+(me?'':'<div class="av">'+(AV[who]||"🙂")+'</div>')+'<div>'+(me?'':'<div class="nm">'+esc(who)+'</div>')+'<div class="rw"><div class="bub">'+qhtml+esc(text)+'</div><span class="t">'+(me?'已讀 12<br>':'')+tm()+'</span></div>'+(chips?'<div>'+chips+'</div>':'')+'</div></div>');
+ render()}
+// --- auto close ---
+function people(){const L=[];for(const[who,o]of Object.entries(orders)){let sum=0,c=0,items=0;const lines=[];for(const[k,q]of Object.entries(o)){const[id,opt]=k.split("|"),p=byId(id);lines.push({p,opt,q});sum+=price(p)*q;c+=cost(p)*q;items+=q}L.push({who,lines,sum,c,items,ship:SHIP[who]||"7-11"})}return L}
+function doClose(){if(closed)return;closed=true;P.forEach(p=>p.closed=1);const U=people(),items=U.reduce((a,u)=>a+u.items,0);
+ add('<div class="m oa"><div class="av">整單</div><div><div class="nm">整單小幫手（玲玲的官方 LINE）</div><div class="rw"><div class="card"><h5>🧾 本團已結單！</h5><div>共 '+U.length+' 位、'+items+' 件，謝謝大家 💕\n個人明細已用 LINE 私訊給每位，\n請點下面確認取貨門市～</div><a>查看我的訂單</a></div><span class="t">'+tm()+'</span></div></div></div>');
+ render();document.querySelector('.tabs [data-t="c"]').click();toast("已自動結單，明細算好了 👉")}
+// --- admin render ---
+function render(){const U=people();let items=0,rev=0,gp=0;U.forEach(u=>{items+=u.items;rev+=u.sum;gp+=u.sum-u.c});
+ $("#k1").textContent=U.length;$("#k2").textContent=items;$("#k3").textContent="$"+rev.toLocaleString();$("#k4").textContent="$"+gp.toLocaleString();
  const ae=document.activeElement&&document.activeElement.closest&&document.activeElement.closest("#v-p")?[document.activeElement.dataset.i,document.activeElement.dataset.f]:null;
- $("#v-p").innerHTML='<table class="tbl"><thead><tr><th></th><th>號碼</th><th>品名</th><th>日幣</th><th>成本</th><th>售價</th><th>已喊／上限</th><th>結單日</th></tr></thead><tbody>'+P.map((p,i)=>{const pr=price(p),c=cost(p),g=pr-c,gr=pr?Math.round(g/pr*100):0,q=qty(p.n),soon=(new Date(p.dl)-today)/864e5<1.5;
-  return '<tr><td><div class="th" style="background:'+p.bg+'"><span>'+p.n+'</span>'+p.e+'</div></td><td class="s"><input data-i="'+i+'" data-f="n" value="'+p.n+'" class="s"></td><td class="nm"><input data-i="'+i+'" data-f="name" value="'+esc(p.name)+'"></td><td class="n"><input data-i="'+i+'" data-f="jpy" type="number" value="'+p.jpy+'" style="width:70px;display:inline">¥</td><td class="n">$'+c+'</td><td class="n"><input data-i="'+i+'" data-f="over" type="number" class="pr" value="'+pr+'"><div class="gm'+(gr<15?' low':'')+'">毛利 $'+g+'（'+gr+'%）</div></td><td class="n'+(fl.has(p.n)?' flash':'')+'"><span class="cnt">'+q+'</span> / <input data-i="'+i+'" data-f="lim" type="number" value="'+p.lim+'" style="width:50px;display:inline"></td><td><input data-i="'+i+'" data-f="dl" type="date" value="'+p.dl+'"><span class="dl'+(soon?' soon':'')+'">'+(soon?'快結單':'接單中')+'</span></td></tr>'}).join("")+'</tbody></table><p class="hint">改日幣或匯率，成本、售價、毛利會自動重算；售價也可以手動改。品名、數量上限、結單日都能直接點來改，存檔後群組裡的商品資訊同步更新。</p>';
- fl.clear();
- if(ae){const el=document.querySelector('#v-p [data-i="'+ae[0]+'"][data-f="'+ae[1]+'"]');if(el){el.focus();const v=el.value;if(el.type!=="date"&&el.type!=="number"){el.value="";el.value=v}}}
- $("#v-o").innerHTML=people.length?'<div class="ord">'+people.map(u=>'<div class="oc"><h4><span>'+esc(u.who)+'<span class="ship">'+u.ship+'</span></span><span style="color:var(--ac)">$'+(u.sum+FEE[u.ship])+'</span></h4>'+u.lines.map(l=>'<div class="row"><span>'+l.p.n+'. '+esc(l.p.name)+(l.opt?'（'+l.opt+'）':'')+'</span><b>×'+l.q+'　$'+price(l.p)*l.q+'</b></div>').join("")+'<div class="row"><span>運費</span><span>$'+FEE[u.ship]+'</span></div></div>').join("")+'</div>':'<p class="hint">還沒有訂單，左邊群組按「模擬喊單」或自己打 3+1。</p>';
- const g={};people.forEach(u=>(g[u.ship]=g[u.ship]||[]).push(u));
- $("#v-c").innerHTML=people.length?'<div style="display:grid;gap:10px">'+Object.entries(g).map(([s,L])=>'<div class="oc"><h4><span>📦 '+s+'（'+L.length+' 位）</span><span>代收合計 $'+L.reduce((a,u)=>a+u.sum+FEE[u.ship],0).toLocaleString()+'</span></h4>'+L.map(u=>'<div class="row"><span>'+esc(u.who)+'　'+u.lines.map(l=>l.p.n+(l.opt||"")+'×'+l.q).join("、")+'</span><b>'+(s==="面交"?'面交收':'貨到付款')+' $'+(u.sum+FEE[u.ship])+'</b></div>').join("")+'</div>').join("")+
- '<div class="note"><b>客人收到的結單通知（示意）</b>\n🧾 東京連線團 結單囉！\n'+people[0].lines.map(l=>l.p.n+'. '+l.p.name+(l.opt?'（'+l.opt+'）':'')+' ×'+l.q+'　$'+price(l.p)*l.q).join("\n")+'\n運費 $'+FEE[people[0].ship]+'（'+people[0].ship+'）\n💰 貨到付款 $'+(people[0].sum+FEE[people[0].ship])+'\n👉 點這裡確認寄送門市</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn l" id="push">📣 傳結單通知給 '+people.length+' 位</button><button class="btn g" id="csv">⬇ 匯出出貨清單（Excel）</button></div></div>':'<p class="hint">有訂單後，這裡會依 7-11／全家／郵局／面交分好出貨清單和代收金額。</p>';
- const pb=$("#push");if(pb)pb.onclick=()=>toast("示意：已傳給 "+people.length+" 位客人");
- const cb=$("#csv");if(cb)cb.onclick=()=>{const rows=[["寄送","客人","號碼","品名","規格","數量","售價","小計"]];people.forEach(u=>u.lines.forEach(l=>rows.push([u.ship,u.who,l.p.n,l.p.name,l.opt,l.q,price(l.p),price(l.p)*l.q])));const b=new Blob(["﻿"+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="出貨清單.csv";a.click()};
+ $("#v-p").innerHTML=P.length?'<table class="tbl"><thead><tr><th></th><th>品名</th><th>客人可打的關鍵字</th><th>日幣</th><th>成本</th><th>售價</th><th>已喊／上限</th><th>結單日</th></tr></thead><tbody>'+P.map((p,i)=>{const pr=price(p),c=cost(p),g=pr-c,gr=pr?Math.round(g/pr*100):0,q=qty(p.id),soon=p.dl&&(new Date(p.dl)-today)/864e5<1.5;
+  return '<tr><td><div class="th" style="background:'+p.bg+'">'+p.e+'</div></td><td class="nm"><input data-i="'+i+'" data-f="name" value="'+esc(p.name)+'">'+(p.isNew?'<span class="auto">群組貼文自動上架</span>':'')+(p.opt?' <span class="auto" style="background:var(--soft);color:var(--ac)">'+p.opt.join("／")+'</span>':'')+'</td><td class="kw"><input data-i="'+i+'" data-f="kw" value="'+esc(p.kw)+'"></td><td><input data-i="'+i+'" data-f="jpy" type="number" value="'+p.jpy+'" style="width:64px;display:inline">¥</td><td>$'+c+'</td><td><input data-i="'+i+'" data-f="over" type="number" class="pr" value="'+pr+'" style="width:80px"><div class="gm'+(gr<15?' low':'')+'">毛利 $'+g+'（'+gr+'%）</div></td><td class="'+(p.fl?'flash':'')+'" style="white-space:nowrap"><span class="cnt">'+q+'</span> / <input data-i="'+i+'" data-f="lim" type="number" value="'+p.lim+'" style="width:52px;display:inline"></td><td><input data-i="'+i+'" data-f="dl" type="date" value="'+p.dl+'"><span class="dl'+(p.closed?' end':soon?' soon':'')+'">'+(p.closed?'已結單':soon?'快結單':'接單中')+'</span></td></tr>'}).join("")+'</tbody></table><p class="hint">商品是玲玲在群組貼照片＋打一行「品名 ¥日幣 限數量 款式 結單日」自動建立的。改日幣或匯率，成本、售價、毛利會自動重算。關鍵字可以自己加，例如「吉伊」「小可愛」，客人打哪個都能入單。</p>':'<div class="empty">還沒有商品。按左邊「▶ 播放一場直播」，看玲玲在群組貼照片後，商品自動出現在這裡。</div>';
+ P.forEach(p=>p.fl=0);
+ if(ae){const el=document.querySelector('#v-p [data-i="'+ae[0]+'"][data-f="'+ae[1]+'"]');if(el)el.focus()}
+ $("#v-o").innerHTML=U.length?'<div class="ord">'+U.map(u=>'<div class="oc"><h4><span>'+esc(u.who)+'<span class="ship">'+u.ship+'</span></span><span style="color:var(--ac)">$'+(u.sum+FEE[u.ship])+'</span></h4>'+u.lines.map(l=>'<div class="row"><span>'+esc(l.p.name)+(l.opt?'（'+l.opt+'）':'')+'</span><b>×'+l.q+'　$'+price(l.p)*l.q+'</b></div>').join("")+'<div class="row"><span>運費</span><span>$'+FEE[u.ship]+'</span></div></div>').join("")+'</div>':'<div class="empty">還沒有訂單。</div>';
+ $("#wc").hidden=!pending.length;$("#wc").textContent=pending.length;
+ $("#v-w").innerHTML=pending.length?'<div class="ord">'+pending.map((w,i)=>'<div class="oc pend"><span><b>'+esc(w.who)+'</b>：「'+esc(w.text)+'」</span><span><select data-w="'+i+'"><option value="">歸到哪個商品？</option>'+P.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join("")+'</select></span></div>').join("")+'</div><p class="hint">打錯字或看不懂的留言不會亂猜，放在這裡讓你選一下就入單。</p>':'<div class="empty">沒有待確認的留言 👍</div>';
+ document.querySelectorAll("[data-w]").forEach(s=>s.onchange=()=>{const w=pending[+s.dataset.w],p=byId(s.value);if(!p)return;const q=+(w.text.match(/\+\s*(\d+)/)||[0,1])[1];orders[w.who]=orders[w.who]||{};const k=p.id+"|";orders[w.who][k]=(orders[w.who][k]||0)+q;pending.splice(+s.dataset.w,1);render();toast("已入單："+w.who+" "+p.name+" ×"+q)});
+ const g={};U.forEach(u=>(g[u.ship]=g[u.ship]||[]).push(u));
+ $("#v-c").innerHTML=U.length?'<div style="display:grid;gap:10px">'+(closed?'<div class="note" style="background:var(--okbg);border-color:transparent"><b>✓ 已自動結單</b>　結單時間到，系統自動關單、在群組發公告，之後的 +1 不會再入單。</div>':'<div class="note" style="background:var(--warnbg);border-color:transparent">接單中。到結單日時間，系統會自動關單並整理下面的清單（可按左邊「模擬結單時間到」）。</div>')+Object.entries(g).map(([s,L])=>'<div class="oc"><h4><span>📦 '+s+'（'+L.length+' 位）</span><span>代收合計 $'+L.reduce((a,u)=>a+u.sum+FEE[u.ship],0).toLocaleString()+'</span></h4>'+L.map(u=>'<div class="row"><span>'+esc(u.who)+'　'+u.lines.map(l=>l.p.name.slice(0,6)+(l.opt?"("+l.opt+")":"")+'×'+l.q).join("、")+'</span><b>'+(s==="面交"?'面交收':'貨到付款')+' $'+(u.sum+FEE[u.ship])+'</b></div>').join("")+'</div>').join("")+
+ '<div class="note"><b>每位客人收到的私訊（以 '+esc(U[0].who)+' 為例）</b>\n🧾 玲玲東京連線團 結單囉！\n'+U[0].lines.map(l=>'・'+l.p.name+(l.opt?'（'+l.opt+'）':'')+' ×'+l.q+'　$'+price(l.p)*l.q).join("\n")+'\n運費 $'+FEE[U[0].ship]+'（'+U[0].ship+'）\n💰 貨到付款 $'+(U[0].sum+FEE[U[0].ship])+'\n👉 點這裡確認取貨門市</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn l" id="push">📣 重新發送通知</button><button class="btn g" id="csv">⬇ 匯出出貨清單（Excel）</button></div></div>':'<div class="empty">有訂單後，這裡會依 7-11／全家／郵局／面交分好出貨清單和代收金額。</div>';
+ const pb=$("#push");if(pb)pb.onclick=()=>toast("示意：已私訊 "+U.length+" 位客人");
+ const cb=$("#csv");if(cb)cb.onclick=()=>{const rows=[["寄送","客人","品名","款式","數量","售價","小計"]];U.forEach(u=>u.lines.forEach(l=>rows.push([u.ship,u.who,l.p.name,l.opt,l.q,price(l.p),price(l.p)*l.q])));const b=new Blob(["﻿"+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n")],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="出貨清單.csv";a.click()};
 }
 $("#v-p").addEventListener("change",e=>{const el=e.target,i=el.dataset.i,f=el.dataset.f;if(i==null)return;const p=P[i],v=el.value;
- if(f==="over"){p.over=+v===price({...p,over:null})?null:+v}else if(f==="jpy"||f==="lim"||f==="n"){p[f]=+v}else p[f]=v;render();toast("已存檔，群組商品資訊同步更新")});
+ if(f==="over"){p.over=+v===price({...p,over:null})?null:+v}else if(f==="jpy"||f==="lim"){p[f]=+v}else p[f]=v;render();toast("已存檔，馬上生效")});
 ["fx","mul","add"].forEach(id=>$("#"+id).addEventListener("input",()=>{P.forEach(p=>p.over=null);render()}));
 $("#mode").onchange=()=>{const x=$("#mode").value==="x";$("#lx").hidden=!x;$("#lp").hidden=x;P.forEach(p=>p.over=null);render()};
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));["p","o","c"].forEach(t=>$("#v-"+t).hidden=t!==b.dataset.t)});
-document.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>say("你",b.dataset.q));
-$("#f").onsubmit=e=>{e.preventDefault();const v=$("#in").value.trim();if(v){$("#in").value="";say("你",v)}};
-P.slice(0,2).forEach(post);
-const S=[["小美","+1"],["Joyce","粉色+1"],["佩佩","5 白色+2"],["阿凱媽咪","3+2",3],()=>post(P[2]),["Wendy","+1"],["Tina","7+3"],["小葉","3+1"],()=>post(P[3]),["小美","12+1"],["Joyce","+1 謝謝玲玲～"],()=>post(P[4]),["Tina","+2"],["小美","取消 3"],["Wendy","18+1"]];
-let run=0;$("#sim").onclick=()=>{if(run)return;run=1;let i=0;const go=()=>{if(i>=S.length){run=0;toast("右邊後台已即時整好單 👉");return}const s=S[i++];if(typeof s==="function")s();else say(s[0],s[1],s[2]);$("#chat").scrollTop=1e6;setTimeout(go,550)};go()};
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));["p","o","w","c"].forEach(t=>$("#v-"+t).hidden=t!==b.dataset.t)});
+document.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{if(!P.length){toast("先按「播放一場直播」讓玲玲上架商品");return}say("你",b.dataset.q,b.dataset.r?P[0].photo:null)});
+$("#f").onsubmit=e=>{e.preventDefault();const v=$("#in").value.trim();if(!v)return;if(!P.length){toast("先按「播放一場直播」讓玲玲上架商品");return}$("#in").value="";say("你",v)};
+$("#close").onclick=()=>{if(!P.length){toast("先播放直播產生訂單");return}doClose()};
+const S=[()=>sellerPhoto("吉伊卡哇"),()=>sellerText("吉伊卡哇絨毛吊飾 ¥1650 限20 粉色/白色 12/5結單"),["小美","+1 粉"],["Joyce","吉伊卡哇 白色+2"],["佩佩","粉色+1"],
+ ()=>sellerPhoto("北海道牛奶夾心餅"),()=>sellerText("北海道牛奶夾心餅12入 ¥1080 限40 12/5結單"),["阿凱媽咪","+2"],["Wendy","夾心餅+1"],["小葉","吉依卡哇+1"],
+ ()=>sellerPhoto("抹茶生巧克力"),()=>sellerText("抹茶生巧克力20入 ¥1944 限25 12/4結單"),["Tina","抹茶+2"],["小美","+1",  "吉伊卡哇"],["Joyce","+1 謝謝玲玲～"],
+ ()=>sellerPhoto("保濕面膜"),()=>sellerText("保濕面膜7片 ¥990 限50 12/5結單"),["Wendy","面膜+3"],["Tina","取消抹茶"],["佩佩","+1"],["阿凱媽咪","我要兩個餅乾 +2"]];
+let run=0;$("#sim").onclick=()=>{if(run)return;if(P.length){location.reload();return}run=1;$("#sim").textContent="播放中…";let i=0;const go=()=>{if(i>=S.length){run=0;$("#sim").textContent="↺ 重新播放";toast("看右邊：商品、訂單都自動整理好了 👉");return}const s=S[i++];if(typeof s==="function")s();else say(s[0],s[1],s[2]);setTimeout(go,typeof s==="function"?900:1100)};go()};
 render();
 </script></body></html>
