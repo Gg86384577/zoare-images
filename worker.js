@@ -2212,6 +2212,8 @@ export default {
         return Response.json({ ok: false, error: "系統暫時出錯，請等 1 分鐘再試一次；一直不行請在 LINE 告訴我們🙏" }, { status: 500 });
       }
     }
+    // 網站首頁：直接進商城（客人在瀏覽器打網址就看得到）
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "")) return Response.redirect(SHOP_BASE_URL + "/shop", 302);
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");
