@@ -319,7 +319,10 @@ export async function handleShop(request, env, ctx, deps) {
   // ---------- 網頁版用 LINE 登入（LINE Login channel：env LINE_LOGIN_ID / LINE_LOGIN_SECRET） ----------
   if (p === "/shop/login") {
     const cid = env.LINE_LOGIN_ID, g = String(url.searchParams.get("g") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
-    if (!cid || !env.LINE_LOGIN_SECRET) return Response.redirect(g ? `${SHOP_BASE}/go?q=${encodeURIComponent("下單 #" + g)}` : `${SHOP_BASE}/go?q=${encodeURIComponent("訂購")}`, 302);
+    if (!cid || !env.LINE_LOGIN_SECRET) {
+      if (g) return Response.redirect(`${SHOP_BASE}/go?q=${encodeURIComponent("下單 #" + g)}`, 302);
+      return new Response(`<meta charset=utf-8><meta name=viewport content="width=device-width"><div style="font:15px/1.8 -apple-system,'PingFang TC',sans-serif;padding:32px 20px;color:#2A2826;text-align:center">LINE 登入還在開通中，再等我們一下🙏<br><br><a href="/shop" style="display:inline-block;padding:10px 22px;border-radius:999px;background:#2A2826;color:#fff;text-decoration:none">先逛逛</a></div>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
     const ts = Date.now().toString(36), st = `${ts}.${g || "-"}.${await sign(env, "ll:" + ts + "." + g)}`;
     const q = new URLSearchParams({ response_type: "code", client_id: cid, redirect_uri: SHOP_BASE + "/shop/callback", state: st, scope: "profile openid", bot_prompt: "aggressive" });
     return Response.redirect("https://access.line.me/oauth2/v2.1/authorize?" + q, 302);
@@ -1334,7 +1337,7 @@ export async function shopOwnerCommand(env, text, deps = {}) {
 }
 
 // ---------- 網頁 ----------
-const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Chiron+Sung+HK:wght@500;700&family=M+PLUS+Rounded+1c:wght@700;800&display=swap">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ZOARÉ 批發商城</title>
 <style>
@@ -1477,19 +1480,216 @@ header{background:var(--hd);color:var(--ink);padding:12px 14px 8px}
 .vps{position:absolute;left:12px;bottom:10px;display:flex;gap:6px}.vps button{position:relative;width:44px;height:44px;border-radius:10px;border:2px solid #fff;padding:0;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.18)}.vps button.on{border-color:var(--acc)}.vps img{width:100%;height:100%;object-fit:cover;max-width:none;max-height:none;border-radius:0;mix-blend-mode:normal}.vps i{position:absolute;left:0;right:0;bottom:0;font-style:normal;font-size:9px;color:#fff;background:rgba(0,0,0,.5);line-height:1.5}
 .cat.hasai .ci img{object-fit:cover}
 details.leg{display:inline}details.leg summary{display:inline;cursor:pointer;color:var(--acc);font-size:12px;margin-left:6px;list-style:none}details.leg summary::-webkit-details-marker{display:none}details.leg[open]{display:block}details.leg[open] summary{margin-left:0}
+/* ===== 新版外觀＋動態（2026-11 學 janm_ux）：手機優先、LINE 內建瀏覽器也順；系統設定「減少動態」時全部關掉 ===== */
+.logo img{height:16px;display:block}
+.add,.go,.bar button:not(.ghost),.chip.on,.chip.news.on,.selb,.tier.vip,.hcart b,.vti b,.pay input:checked+span{color:#fff!important}
+.add,.go,.bar button,.chip,.cat,.hcart,.vt,.oc,.more,.qty button{transition:transform .22s cubic-bezier(.3,1.6,.5,1),background-color .2s,border-color .2s}
+.add:active,.go:active,.bar button:active,.chip:active,.cat:active,.hcart:active,.vt:active,.oc:active,.more:active,.qty button:active{transform:scale(.93)}
+.card{transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s}
+.card.rv{opacity:0;transform:translateY(26px)}.card.rv .ph img{transform:scale(.82) rotate(-5deg)}.card .ph img{transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.card.rv.in .ph img{transform:none}.card.rv.in{opacity:1;transform:none;transition:opacity .5s ease,transform .6s cubic-bezier(.2,.8,.2,1)}
+.sk{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(120,80,60,.07)}
+.sk i,.sk b{display:block;background:linear-gradient(100deg,#F7EEE9 30%,#FFF9F4 50%,#F7EEE9 70%);background-size:300% 100%;animation:shim 1.3s linear infinite}
+.sk i{aspect-ratio:1}.sk b{height:12px;margin:10px;border-radius:6px}.sk b+b{width:45%;height:16px}
+@keyframes shim{from{background-position:100% 0}to{background-position:0 0}}
+.sheet.on{animation:fadeIn .22s ease}.sheet.on .panel{animation:sheetUp .42s cubic-bezier(.2,.9,.25,1)}
+@keyframes fadeIn{from{opacity:0}}@keyframes sheetUp{from{transform:translateY(40px);opacity:.4}}
+body.intro .pb i,body.intro .pb2 i,.panel.fresh .pb i,.panel.fresh .pb2 i{animation:grow 1.1s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{width:0}}
+.hcart.bump{animation:bump .5s cubic-bezier(.3,1.8,.5,1)}#sum b.bump{display:inline-block;animation:bump .45s cubic-bezier(.3,1.8,.5,1)}
+@keyframes bump{30%{transform:scale(1.25)}}
+.fly{position:fixed;z-index:80;border-radius:50%;object-fit:cover;background:#fff;box-shadow:0 4px 14px rgba(120,80,60,.25);pointer-events:none}
+@media(hover:hover) and (pointer:fine){.nc{transform-style:preserve-3d;will-change:transform}.nc:hover{box-shadow:0 10px 24px rgba(120,80,60,.14)}.nc .ph::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--mx,50%) var(--my,0%),rgba(255,255,255,.45),transparent 55%);opacity:0;transition:opacity .3s}.nc:hover .ph::after{opacity:1}}
+/* ===== 中性低彩度主題：介面退後，讓商品本身的顏色跳出來 ===== */
+:root{--bg:#F6F4F1;--card:#fff;--ink:#2A2826;--sub:#6B6F75;--line:#E7E3DE;--red:#2A2826;--acc:#2A2826;--acc2:#2A2826;--accbg:#F1EEEA;--accsoft:#ECE8E3;--hd:rgba(246,244,241,.86);--p1:#F2F0ED;--p2:#F0EFEC;--p3:#EFF0EE;--p4:#F1EFEE;--p5:#EEF0F1;--gold:#B8955A}
+body{background:var(--bg)}
+header{background:var(--hd)!important;-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid rgba(42,40,38,.06)}
+.search input{background:#fff;border:1px solid var(--line)}.hcart{background:#fff;border:1px solid var(--line)}
+.chip{background:#fff;color:var(--ink)}.chip.news{background:#fff;color:var(--ink);border-color:var(--line)}
+.nc .pr b,.vpr,.oc.on .o2{color:var(--ink)!important}.tgs span{color:var(--sub);border-color:var(--line)}.qi,.mg,.oh,.tag,.cd,.info a{color:var(--ink)!important}
+.pb i,.pb2 i,.bar i{background:var(--ink)!important}.pb2,.pb{background:#E7E3DE}
+.vt.on,.oc.on{border-color:var(--ink);background:#fff}.vt.on .vtn{color:var(--ink)}
+.tier{background:#fff;border:1px solid var(--line)}.tier.vip{background:var(--gold);border-color:var(--gold)}
+.bar{background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}.bar .ghost{background:var(--accbg);color:var(--ink)}
+.cat .ci{background:#fff!important;border-color:#fff}.cat.on .ci{border-color:var(--ink)}.cat.on .cn{color:var(--ink)}
+.nc .ph,.grid>.nc .ph{background:#fff!important}
+/* 首頁大標：往下滑時字橫向滑過、商品轉動放大 */
+.hero{position:relative;height:150vh;margin-top:-1px}
+.hero[hidden]{display:none}
+.hs{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding:22px 0 90px}
+.hk{font-size:11px;letter-spacing:4px;color:var(--sub);text-align:center}
+.ht{font-size:clamp(32px,10vw,92px);font-weight:900;line-height:1.02;letter-spacing:-1px;white-space:nowrap;will-change:transform}
+.ht.l1{transform:translateX(calc(6vw - var(--p,0) * 70vw))}.ht.l2{transform:translateX(calc(-30vw + var(--p,0) * 50vw));color:transparent;-webkit-text-stroke:1.5px var(--ink)}
+.hstage{position:relative;height:min(30vh,260px);margin:4px 0}
+.hp{position:absolute;left:50%;top:50%;width:min(38vw,200px);aspect-ratio:1;background:#fff;border-radius:18px;box-shadow:0 18px 40px rgba(42,40,38,.12);display:flex;align-items:center;justify-content:center;overflow:hidden;will-change:transform}
+.hp img{width:86%;height:86%;object-fit:contain}
+.hp.a{transform:translate(-50%,-50%) translateX(calc(-30vw * (1 - var(--p,0) * 1.4))) rotate(calc(-14deg + var(--p,0) * 40deg)) scale(calc(.78 + var(--p,0) * .1));z-index:1}
+.hp.b{transform:translate(-50%,-50%) rotate(calc(var(--p,0) * -12deg)) scale(calc(1 + var(--p,0) * .32));z-index:3}
+.hp.c{transform:translate(-50%,-50%) translateX(calc(30vw * (1 - var(--p,0) * 1.4))) rotate(calc(14deg - var(--p,0) * 40deg)) scale(calc(.78 + var(--p,0) * .1));z-index:2}
+.hcta{padding:8px 16px 0;text-align:center;opacity:calc(1 - var(--p,0) * 2.2)}
+.hcta p{font-size:13px;line-height:1.6;margin-bottom:10px}
+.hline{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 26px;border-radius:999px;background:#06C755;color:#fff;font-weight:700;font-size:15px;text-decoration:none}
+.hcta small{display:block;font-size:12px;color:var(--sub);margin-top:6px}
+.hscroll{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);font-size:11px;color:var(--sub);letter-spacing:2px;animation:hb 1.6s ease-in-out infinite}
+@keyframes hb{50%{transform:translate(-50%,6px)}}
+/* 分類大小格 */
+.bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:84px;gap:8px;padding:8px 10px 4px}
+.bento[hidden]{display:none}
+.bt{position:relative;border:0;border-radius:16px;background:#fff;overflow:hidden;text-align:left;font:inherit;color:var(--ink);padding:10px;box-shadow:0 1px 4px rgba(42,40,38,.06)}
+.bt img{position:absolute;right:-6%;bottom:-6%;width:72%;height:86%;object-fit:contain;transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.bt b{position:relative;z-index:1;font-size:14px;font-weight:800}.bt small{position:relative;z-index:1;display:block;font-size:11px;color:var(--sub);margin-top:2px}
+.bt.x{grid-column:span 2;grid-row:span 2}.bt.x b{font-size:20px}.bt.w{grid-column:span 2}.bt.w img{width:50%}
+.bt.in img{animation:bfl 5s ease-in-out infinite}.bt:nth-child(2n).in img{animation-delay:-2.5s}
+@keyframes bfl{50%{transform:translateY(-6px) rotate(-3deg)}}
+.bt:active img{transform:scale(1.08)}
+.sh2{display:flex;justify-content:space-between;align-items:baseline;padding:18px 14px 4px}.sh2 b{font-size:20px;font-weight:900;letter-spacing:-.3px}.sh2 small{font-size:11px;letter-spacing:3px;color:var(--sub)}
+/* 下單三步驟：卡片一張疊一張 */
+.steps{padding:4px 12px 10px}.steps[hidden]{display:none}
+.stp{position:sticky;top:76px;background:#fff;border-radius:18px;padding:18px 16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(42,40,38,.08);min-height:120px;display:flex;gap:14px;align-items:center}
+.stp:nth-child(2){top:88px}.stp:nth-child(3){top:100px}
+.stp i{font-style:normal;font-size:34px;font-weight:900;color:var(--gold);min-width:48px}
+.stp b{font-size:16px}.stp p{font-size:13px;line-height:1.6;color:var(--sub);margin-top:2px}
+@media(min-width:760px){.bento{grid-template-columns:repeat(6,1fr);grid-auto-rows:110px}.ht{font-size:110px}}
+/* ===== v3：照 ChatGPT UI 建議微調（日系編輯風、商品是主角） ===== */
+:root{--bg:#F7F6F2;--ink:#242424;--sub:#77736D;--line:#EAE8E2;--gold:#A68B59;--blk:#EAE8E2;--acc:#242424;--acc2:#242424;--red:#242424}
+header{padding:10px 20px 10px;transition:padding .25s}
+header .brand{order:-1;margin:0 0 8px;display:flex;align-items:center;gap:8px;max-height:40px;transition:max-height .25s,opacity .2s,margin .25s;overflow:hidden}
+header{display:flex;flex-direction:column}
+header.mini .brand{max-height:0;opacity:0;margin:0}
+.brand .who{flex:1;font-size:12px;color:var(--ink);max-width:none;text-align:right}.who .tier{font-size:11px}
+.brand .hcart,.brand .hord{width:36px;height:36px;font-size:16px}
+.search input{height:44px;border-radius:12px;font-size:15px}
+.hero{height:140vh}
+.hs{padding:18px 0 92px}
+.hk{font-size:10px;letter-spacing:3px;text-align:left;padding:0 20px}
+.ht.l1{font-size:clamp(34px,10vw,40px);font-weight:800;line-height:1.2;letter-spacing:0;padding:0 20px;white-space:normal;transform:none;margin-top:6px}
+.hstage{margin:8px 0 0;height:min(24vh,200px)}
+.hp{border-radius:6px;padding:8px 8px 26px;box-shadow:0 12px 30px rgba(36,36,36,.12)}
+.hp img{width:100%;height:100%;object-fit:cover;border-radius:2px}
+.hp.a{transform:translate(-50%,-50%) translateX(calc(-26vw - var(--p,0) * 8vw)) rotate(calc(-8deg + var(--p,0) * 6deg))}
+.hp.b{transform:translate(-50%,-50%) scale(calc(1 + var(--p,0) * .06))}
+.hp.c{transform:translate(-50%,-50%) translateX(calc(26vw + var(--p,0) * 8vw)) rotate(calc(8deg - var(--p,0) * 6deg))}
+.ht.l2{font-size:46px;-webkit-text-stroke:1px var(--ink);margin:10px 0 4px;transform:translateX(calc(-10vw - var(--p,0) * 70vw))}
+.hcta{text-align:left;padding:8px 20px 0}
+.sh2{padding:22px 20px 8px}.sh2 b{font-size:20px}
+.bento{grid-template-columns:repeat(2,1fr);grid-auto-rows:132px;gap:8px;padding:0 20px}
+.bt{border-radius:16px;padding:12px}.bt b{font-size:17px}.bt small{color:#77736D}
+.bt img{width:60%;height:70%;right:0;bottom:0}
+.bt.x{grid-column:span 2;grid-row:span 1}.bt.x b{font-size:20px}.bt.x img{width:55%;height:100%;right:4%;bottom:0}
+.bt.w{grid-column:span 1}.bt.w img{width:60%}
+.bt:active{transform:scale(.98)}
+.steps{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 20px 6px;scrollbar-width:none}.steps::-webkit-scrollbar{display:none}
+.stp{position:relative;top:auto!important;flex:0 0 72%;scroll-snap-align:start;min-height:108px;margin:0;padding:14px;box-shadow:0 1px 4px rgba(36,36,36,.06);flex-direction:column;align-items:flex-start;gap:4px}
+.stp i{font-size:30px;line-height:1}.stp b{font-size:15px}.stp p{font-size:12px}
+.grid{gap:10px;padding:8px 20px}
+.card{border-radius:14px}
+.nc .ph,.grid>.nc .ph{background:#F3F2EE!important}.nc .ph img{mix-blend-mode:multiply}
+.nc .nm{font-size:13px}.nc .pr b{font-size:18px;font-weight:700;color:#242424!important}.tgs span{font-size:11px;color:#9A958E;border:0;padding:0}
+.pz.now{background:#E6EEE8!important;color:#486B58!important}.pz.pre{background:#ECE9F3!important;color:#5D5277!important}
+.card.rv .ph img{transform:none}.card.rv{transform:translateY(12px)}
+.pb i,.pb2 i{background:var(--gold)!important}
+.bar{min-height:64px;padding:10px 20px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #EAE8E2}
+.bar .ghost{display:none}.bar button{height:44px;padding:0 22px}
+.bar .sum{font-size:13px;color:var(--ink)}
+/* ===== v4：採用 ChatGPT 模擬圖的做法：襯線大標、置中排版、斜體跑馬燈、特色列、三步驟並排 ===== */
+.hk{text-align:center;padding:0 20px}
+.ht.l1{font-family:"Noto Serif TC","Songti TC","PMingLiU",Georgia,serif;font-weight:900;text-align:center;font-size:clamp(32px,9.4vw,40px);letter-spacing:1px;margin-top:8px}
+.hsub{display:flex;align-items:center;justify-content:center;gap:10px;font-size:13px;color:var(--ink);margin-top:6px}.hsub:before,.hsub:after{content:"";width:22px;height:1px;background:var(--gold)}
+.ht.l2{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;font-size:34px;color:#BDB4A6;-webkit-text-stroke:0;letter-spacing:2px;margin:6px 0 2px}
+.hcta{text-align:center;padding:6px 20px 0}.hcta p{display:none}
+.hfeat{display:grid;grid-template-columns:repeat(4,1fr);margin:10px 20px 0;padding-top:10px;border-top:1px solid var(--line)}
+.hfeat span{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--ink);border-left:1px solid var(--line)}.hfeat span:first-child{border-left:0}
+.hfeat svg{width:20px;height:20px;stroke:var(--ink);fill:none;stroke-width:1.5}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;overflow:visible}
+.stp{flex:none;min-height:0;padding:12px 10px}.stp i{font-family:Georgia,serif;font-style:italic;font-weight:400;font-size:28px}.stp b{font-size:14px}.stp p{font-size:11px;line-height:1.5}
+.sh2 b{font-family:"Noto Serif TC","Songti TC",Georgia,serif;font-weight:900}
+/* 封面：熱賣商品實拍，不用拍立得貼紙框 */
+.hp{padding:0!important;border-radius:16px!important;background:#fff;cursor:pointer;box-shadow:0 14px 34px rgba(36,36,36,.12)!important}.hp img{object-fit:contain!important;width:88%!important;height:88%!important;border-radius:0!important}
+.hp em{position:absolute;left:8px;top:8px;font-style:normal;font-family:Georgia,serif;font-size:11px;letter-spacing:1px;color:#fff;background:#242424;border-radius:999px;padding:2px 8px}
+.hp.c em{left:auto;right:8px}.hsub2{text-align:center;font-size:11px;letter-spacing:3px;color:var(--sub);margin-top:14px}
+/* ===== v5：照 janm_ux 影片裡的網站 UI：白底、無襯線粗緊大標、巨型跑馬字在 3D 商品卡後面、黑色膠囊按鈕、紫色只當光暈點綴 ===== */
+:root{--bg:#FAFAFA;--ink:#111;--sub:#6B6B70;--line:#E8E8EC;--vio:#6E56CF}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","PingFang TC","Noto Sans TC",sans-serif;letter-spacing:-.1px}
+.hs{padding:16px 0 92px;justify-content:flex-start}
+.hs:before{content:"";position:absolute;left:50%;top:46%;width:120vw;height:46vh;transform:translate(-50%,-50%);background:radial-gradient(closest-side,rgba(110,86,207,.20),rgba(110,86,207,.06) 60%,transparent);pointer-events:none;filter:blur(10px)}
+.hk{align-self:center;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:10px;letter-spacing:1.5px;color:var(--ink)}.hk:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--vio)}
+.ht.l1{font-family:inherit;font-weight:800;letter-spacing:-1.5px;line-height:1.05;font-size:clamp(36px,11vw,52px);text-align:center;margin-top:14px}
+.hsub{font-size:14px;color:var(--sub);margin-top:8px}.hsub:before,.hsub:after{display:none}
+.hsub2{margin-top:16px;font-size:10px;letter-spacing:3px;color:var(--sub)}
+.hstage{position:relative;height:min(34vh,290px);margin:6px 0 0;perspective:900px;overflow:visible}
+.ht.l2{position:absolute;left:0;top:26%;z-index:0;margin:0;font-family:inherit;font-style:normal;font-weight:800;font-size:clamp(90px,34vw,220px);letter-spacing:-6px;line-height:1;color:var(--ink);-webkit-text-stroke:0;white-space:nowrap;transform:translate(calc(4vw - var(--p,0) * 160vw),-50%)}
+.hp{width:min(29vw,160px)!important;aspect-ratio:3/4!important;border-radius:20px!important;background:linear-gradient(165deg,#fff 0%,#F1EFF8 100%)!important;box-shadow:0 24px 50px rgba(30,20,70,.18),0 0 0 1px rgba(255,255,255,.7) inset!important;transform-style:preserve-3d}
+.hp img{width:86%!important;height:70%!important;margin-top:-10%}
+.hp em{left:12px!important;right:auto!important;top:auto!important;bottom:12px;background:none!important;color:var(--ink)!important;font-family:inherit!important;font-weight:800;font-size:15px!important;letter-spacing:-.3px!important;padding:0!important}
+.hp.a{z-index:1;transform:translate(-50%,-50%) translateX(calc(-36vw + var(--p,0) * 14vw)) rotateY(calc(42deg - var(--p,0) * 30deg)) scale(.86)!important}
+.hp.b{z-index:3;transform:translate(-50%,-50%) rotateY(calc(var(--p,0) * -24deg)) translateZ(calc(var(--p,0) * 60px))!important}
+.hp.c{z-index:2;transform:translate(-50%,-50%) translateX(calc(36vw - var(--p,0) * 14vw)) rotateY(calc(-42deg + var(--p,0) * 30deg)) scale(.86)!important}
+.hcta{padding:14px 20px 0}
+.hline{height:52px;padding:0 28px;font-size:15px;box-shadow:0 10px 24px rgba(6,199,85,.25)}
+.hcta small{font-size:11px}
+.hfeat{border-top:0;margin-top:14px;gap:6px;padding:0 16px}.hfeat span{border:1px solid var(--line)!important;background:#fff;border-radius:14px;padding:8px 0;font-size:10px}
+.sh2{padding:26px 20px 10px}.sh2 b{font-family:inherit;font-weight:800;font-size:24px;letter-spacing:-.8px}.sh2 small{border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:9px;letter-spacing:2px}
+.bt{border-radius:22px!important;background:#fff;box-shadow:0 1px 0 var(--line),0 10px 24px rgba(17,17,17,.05)!important}.bt b{font-weight:800;letter-spacing:-.4px}
+.steps{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:6px 20px 10px;perspective:800px}
+.stp{flex:0 0 62%!important;scroll-snap-align:center;min-height:150px!important;border-radius:22px!important;padding:16px!important;justify-content:space-between;color:#fff;background:radial-gradient(120% 90% at 20% 0%,#8B74F0 0%,#5B43C4 45%,#2A1E66 100%)!important;box-shadow:0 18px 40px rgba(60,40,150,.25)!important}
+.stp:nth-child(2){background:radial-gradient(120% 90% at 80% 0%,#A08CF5 0%,#6650D4 45%,#2E2270 100%)!important}.stp:nth-child(3){background:radial-gradient(120% 90% at 50% 0%,#7E6BEA 0%,#4C37B5 50%,#1F1650 100%)!important}
+.stp i{font-family:inherit!important;font-style:normal!important;font-weight:800!important;font-size:13px!important;color:rgba(255,255,255,.7)!important;letter-spacing:1px}
+.stp b{font-size:20px!important;font-weight:800;letter-spacing:-.5px;color:#fff}.stp p{font-size:12px!important;color:rgba(255,255,255,.78)!important}
+.card{border-radius:20px!important;border:1px solid var(--line)}.nc .ph,.grid>.nc .ph{background:#F4F4F6!important}
+.nc .pr b{font-weight:800;letter-spacing:-.4px}
+.bar button,.add,.go{border-radius:999px!important}.bar button{background:#111;color:#fff}
+.pb i,.pb2 i{background:var(--vio)!important}
+.search input{border-radius:999px;background:#fff;border:1px solid var(--line)}
+@media(min-width:760px){.ht.l1{font-size:72px}.hp{width:220px!important}}
+/* ===== v6：封面 logo、新品 3D 滾輪、字體照 janm_ux（Inter Tight 緊排）、品牌色黑灰＋香檳金 ===== */
+:root{--bg:#F6F5F2;--ink:#151515;--sub:#76726B;--line:#E7E4DE;--vio:#A68B59;--gold:#A68B59}
+body,button,input,select,textarea{font-family:"Instrument Serif","Chiron Sung HK","Songti TC","Noto Serif TC",serif!important}
+.ht.l1,.sh2 b,.bt b,.stp b,.hsub2{font-family:"Instrument Serif","Chiron Sung HK","Songti TC",serif!important;font-weight:700!important;letter-spacing:.01em!important}
+.ht.l1{font-size:clamp(32px,10vw,46px)!important;line-height:1.12!important}
+.ht.l2{font-family:"Instrument Serif",Georgia,serif!important;font-style:italic;font-weight:400!important;letter-spacing:-.02em!important}
+.sh2 small,.hk{font-family:"Instrument Serif",Georgia,serif;font-style:italic;letter-spacing:1px!important;font-size:13px!important;text-transform:none}
+.stp i{font-family:"Instrument Serif",Georgia,serif!important;font-weight:400!important;letter-spacing:0!important}
+/* 金額一律圓體（老闆 11/23） */
+.pr b,.pr b *,.nc .pr b,#vpr,#vpr *,#sum b,#vsum,#vsum b,.bar .sum b,.price,.amt{font-family:"M PLUS Rounded 1c","Arial Rounded MT Bold","Hiragino Maru Gothic ProN",sans-serif!important;font-weight:800!important;letter-spacing:0!important}
+.nc .pr b{font-size:20px!important}.stp i{font-style:italic!important;font-size:22px!important}
+.hs:before{background:radial-gradient(closest-side,rgba(166,139,89,.18),rgba(166,139,89,.05) 60%,transparent)}
+.hlogo{display:flex;justify-content:center;margin-top:6px}.hlogo img{width:min(62vw,300px);height:auto;display:block}
+.hk{border:0;background:none;padding:0;margin-top:8px;font-size:10px;letter-spacing:4px;color:var(--sub)}.hk:before{display:none}
+.ht.l1{font-weight:600;letter-spacing:-.04em;font-size:clamp(30px,9.2vw,44px);line-height:1.08;margin-top:12px}
+.hsub{font-weight:400;font-size:13px}
+.hsub2{margin-top:12px;font-weight:600;letter-spacing:3px;color:var(--gold)}
+.ht.l2{font-weight:600;letter-spacing:-.05em;top:50%;color:#E6E2DA}
+.hstage{height:min(27vh,230px);perspective:1100px;margin-top:0}
+.wheel{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(-6deg)}
+.wr{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d;transform:rotateY(calc(var(--p,0) * -220deg));animation:wspin 40s linear infinite}
+@keyframes wspin{to{rotate:y -360deg}}
+.wc{--w:min(26vw,128px);position:absolute;left:calc(var(--w) / -2);top:calc(var(--w) * -.62);width:var(--w);aspect-ratio:4/5;border:0;padding:0;border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(21,21,21,.12);overflow:hidden;cursor:pointer;transform:rotateY(calc(var(--i) * 360deg / var(--n))) translateZ(calc(var(--w) * var(--n) / 6.1));-webkit-backface-visibility:visible}
+.wc img{width:100%;height:100%;object-fit:contain;padding:8%;box-sizing:border-box;background:#fff}
+.hline{box-shadow:0 10px 24px rgba(6,199,85,.22)}
+.sh2 b{font-weight:700;letter-spacing:-.03em}
+.bt b{font-weight:700;letter-spacing:-.02em}
+.stp{color:var(--ink)!important;background:#fff!important;border:1px solid var(--line);box-shadow:0 10px 24px rgba(21,21,21,.06)!important}
+.stp:nth-child(2),.stp:nth-child(3){background:#fff!important}
+.stp i{color:var(--gold)!important}.stp b{color:var(--ink)!important}.stp p{color:var(--sub)!important}
+.stp:first-child{background:#151515!important;border-color:#151515}.stp:first-child b{color:#fff!important}.stp:first-child p{color:rgba(255,255,255,.7)!important}
+.nc .pr b{font-weight:700}
+@media(min-width:760px){.wc{--w:170px}}
+@media(prefers-reduced-motion:reduce){.wr{animation:none}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.card.rv{opacity:1;transform:none}.card.rv .ph img{transform:none}.hero{height:auto}.hs{position:relative;height:auto}}
 </style></head><body>
-<header><div class="search"><input id="q" type="search" placeholder="🔍 搜尋商品、角色、JAN 碼" enterkeyhint="search"><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div>
-<div class="brand"><div class="logo">ZOARÉ</div><div class="who" id="who">載入中…</div></div></header>
+<header><div class="search"><input id="q" type="search" placeholder="搜尋角色、商品、JAN 碼" enterkeyhint="search"></div>
+<div class="brand"><div class="logo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="who" id="who">載入中…</div><button id="hord" class="hcart hord" aria-label="訂單查詢">📦</button><button id="hcart" class="hcart" aria-label="購物車">🛒<b id="hcn" hidden></b></button></div></header>
+<section class="hero" id="hero"><div class="hs"><div class="hlogo"><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"></div><div class="hk">JAPAN CHARACTER WHOLESALE</div><div class="ht l1">日本角色商品批發</div><div class="hsub">少量也能批・24 小時都能下單</div><div class="hsub2">NEW IN ・ 這週新到</div><div class="hstage"><div class="ht l2">Sanrio · Chiikawa · Pokémon · Snoopy · Sanrio · Chiikawa</div><div class="wheel"><div class="wr" id="wr"></div></div></div><div class="hcta" id="hcta"><p>給小賣家、團購主的批發商城<br>少量也能批，24 小時都能下單</p><a class="hline" href="/shop/login"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>用你的 LINE 登入</a><small>用你自己的 LINE 帳號授權登入，不用另外註冊</small></div><div class="hfeat"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg>多款混搭</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0"/></svg>少量拿貨</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3z"/></svg>每週新品</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2"/></svg>24 小時下單</span></div><div class="hscroll">往下滑 ↓</div></div></section><div class="sh2" id="bentoh"><b>逛分類</b><small>CATEGORY</small></div><section class="bento" id="bento"></section><section class="steps" id="steps"><div class="stp"><i>01</i><div><b>選商品</b><p>每款都標好價格</p></div></div><div class="stp"><i>02</i><div><b>廠商湊單</b><p>同廠商湊滿約 NT$30,000 就叫貨</p></div></div><div class="stp"><i>03</i><div><b>寄到台灣</b><p>湊滿後約 2–3 週到，7-11 取貨</p></div></div></section><div class="sh2"><b>這週新到</b><small>NEW ARRIVALS</small></div>
 <div class="cats" id="cats"></div>
 <div class="chips" id="chips"></div>
 <div class="info" id="info"></div>
-<div class="grid" id="grid"></div>
+<div class="grid" id="grid"><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div><div class="sk"><i></i><b></b><b></b></div></div>
 <button class="more" id="more" hidden>載入更多</button>
 <div class="bar"><button id="openOrders" class="ghost">訂單查詢</button><div class="sum" id="sum">購物車是空的</div><button id="openCart">查看購物車</button></div>
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
 <div class="lb" id="lb"><button class="lbc" id="lbc">×</button><img id="lbi" alt=""><div class="lbt" id="lbt"></div><div class="lbb"><button id="lbp">‹</button><button class="lbs" id="lbs">⬇️ 儲存照片</button><button id="lbn">›</button></div><small>儲存沒反應的話，長按圖片也可以存到手機</small></div>
 <script>
-const T=(()=>{const u=new URLSearchParams(location.search).get("t")||"";try{if(u){localStorage.setItem("zo_t",u);return u}return localStorage.getItem("zo_t")||""}catch(e){return u}})();
+const T=(()=>{const u=new URLSearchParams(location.search).get("t")||"";try{if(u){localStorage.setItem("zo_t",u);try{const q=new URLSearchParams(location.search);q.delete("t");history.replaceState(null,"",location.pathname+(q.toString()?"?"+q:"")+location.hash)}catch(_){};return u}return localStorage.getItem("zo_t")||""}catch(e){return u}})();
 function logout(){try{localStorage.removeItem("zo_t")}catch(e){};location.href="/shop"}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1719,7 +1919,7 @@ async function openNews(){$("#panel").classList.remove("vmode");VK=null;
 }
 const STC={"待付款":"s1","已回報匯款":"s2","待確認":"s1","已付款":"s2","已出貨":"s3","已取消":"s4"};
 async function openOrders(){$("#panel").classList.remove("vmode");VK=null;
-  if(ME&&ME.guest){$("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">訪客看不到訂單喔<br>在 ZOARÉ 的 LINE 傳「訂購」就會收到你的專屬連結，可以查訂單</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
+  if(ME&&ME.guest){$("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">登入後才看得到你的訂單<br><a href="/shop/login" style="display:inline-block;margin-top:10px;background:#06c755;color:#fff;padding:8px 18px;border-radius:999px;text-decoration:none;font-weight:700">用 LINE 登入</a></div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");return}
   $("#panel").innerHTML='<h2>訂單查詢<button class="x" id="ox">×</button></h2><div class="empty">載入中…</div>';$("#sheet").classList.add("on");$("#ox").onclick=()=>$("#sheet").classList.remove("on");
   try{const r=await fetch("/shop/orders?t="+encodeURIComponent(T)).then(r=>r.json());if(!r.ok)throw 0;
     const body=r.orders.length?r.orders.map(o=>'<div class="ord"><div class="hd"><span>'+esc(o.id)+'</span><span class="st '+(STC[o.status]||"")+'">'+esc(o.status)+'</span></div>'+
@@ -1790,7 +1990,61 @@ async function submit(e){
     '<p style="margin-top:12px;color:#6b6f75;font-size:13px">訂單明細也已經傳到你的 LINE 囉</p><button class="go" style="width:100%;margin-top:14px" onclick="sheet.classList.remove(\\'on\\')">繼續逛</button></div>';
   }catch(err){btn.disabled=false;btn.textContent="送出訂單";alert(err.message)}
 }
-init();
+// ===== 動態層（學 janm_ux）：卡片浮現、圖片飛進商品頁、加入購物車飛進去、數字跳動、桌機 3D 傾斜 =====
+const RM=(()=>{try{return matchMedia("(prefers-reduced-motion: reduce)").matches}catch(e){return false}})();
+document.body.classList.add("intro");setTimeout(()=>document.body.classList.remove("intro"),4000);
+if(!RM&&"IntersectionObserver" in window){
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const el=e.target;el.style.transitionDelay=(el._d||0)+"ms";el.classList.add("in");io.unobserve(el);setTimeout(()=>{el.style.transitionDelay="";el.classList.remove("rv","in")},900+(el._d||0))}})},{rootMargin:"0px 0px -5% 0px"});
+  let n=0,t=null;
+  new MutationObserver(ms=>{ms.forEach(m=>m.addedNodes.forEach(el=>{if(el.nodeType!==1||!el.classList.contains("card")||el._w)return;el._w=1;el.classList.add("rv");el._d=Math.min(n++,7)*60;clearTimeout(t);t=setTimeout(()=>{n=0},150);io.observe(el)}))}).observe($("#grid"),{childList:true});
+}
+// 商品圖從列表直接放大接到商品頁
+let FLIP=null;
+document.addEventListener("click",e=>{if(RM||e.target.closest("[data-k]"))return;const g=e.target.closest("#grid [data-g]");const im=g&&g.querySelector(".ph img");if(im)FLIP={r:im.getBoundingClientRect(),at:Date.now()}},true);
+new MutationObserver(()=>{const p=$("#panel");if(!FLIP||Date.now()-FLIP.at>800)return;const im=p.querySelector(".vhero img");if(!im)return;const f=FLIP;FLIP=null;
+  requestAnimationFrame(()=>{const r=im.getBoundingClientRect();if(!r.width||!im.animate)return;const s=f.r.width/r.width;
+    im.animate([{transform:"translate("+(f.r.left+f.r.width/2-r.left-r.width/2)+"px,"+(f.r.top+f.r.height/2-r.top-r.height/2)+"px) scale("+s+")"},{transform:"none"}],{duration:480,easing:"cubic-bezier(.2,.9,.25,1)"})})}).observe($("#panel"),{childList:true});
+// 打開面板時讓進度條長一次
+new MutationObserver(()=>{const s=$("#sheet");if(s.classList.contains("on")&&!s._on){s._on=1;const p=$("#panel");p.classList.add("fresh");setTimeout(()=>p.classList.remove("fresh"),1500)}else if(!s.classList.contains("on"))s._on=0}).observe($("#sheet"),{attributes:true,attributeFilter:["class"]});
+// 加入購物車：商品縮成小圓點飛進購物車
+document.addEventListener("click",e=>{const a=e.target.dataset&&e.target.dataset.a;if(RM||(a!=="add"&&a!=="+"))return;
+  const c=e.target.closest(".card,.vrow,.op,#panel");const im=(c&&c.querySelector("img"))||$("#panel .vhero img");const to=$("#sheet").classList.contains("on")?$(".vbar")||$("#hcart"):(document.querySelector("header").classList.contains("mini")?$("#openCart"):$("#hcart"));
+  if(!im||!to||!document.body.animate)return;const a0=im.getBoundingClientRect(),b0=to.getBoundingClientRect();if(!a0.width)return;
+  const f=document.createElement("img");f.src=im.currentSrc||im.src;f.className="fly";const z=Math.min(64,a0.width);
+  f.style.cssText="width:"+z+"px;height:"+z+"px;left:"+(a0.left+a0.width/2-z/2)+"px;top:"+(a0.top+a0.height/2-z/2)+"px";document.body.appendChild(f);
+  const dx=b0.left+b0.width/2-(a0.left+a0.width/2),dy=b0.top+b0.height/2-(a0.top+a0.height/2);
+  f.animate([{transform:"translate(0,0) scale(1)",opacity:1},{transform:"translate("+dx*.5+"px,"+(dy*.5-60)+"px) scale(.6)",opacity:1,offset:.5},{transform:"translate("+dx+"px,"+dy+"px) scale(.2)",opacity:.3}],{duration:650,easing:"cubic-bezier(.5,0,.6,1)"}).onfinish=()=>{f.remove();const h=$("#hcart");h.classList.remove("bump");void h.offsetWidth;h.classList.add("bump")}},true);
+// 合計金額數字滾動
+{const _bar=bar;let last=0;bar=function(){_bar();const b=$("#sum b");if(!b)return;const to=Number(b.textContent.replace(/[^0-9]/g,""))||0,fr=last;last=to;if(RM||fr===to)return;
+  b.classList.remove("bump");void b.offsetWidth;b.classList.add("bump");const t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/450),v=Math.round(fr+(to-fr)*(1-Math.pow(1-k,3)));b.textContent=fmt(v);if(k<1)requestAnimationFrame(step)};requestAnimationFrame(step)}}
+// 商品卡 3D 傾斜＋光澤（桌機跟著滑鼠，手機手指按住時跟著手指）
+if(!RM){
+  $("#grid").addEventListener("pointermove",e=>{const c=e.target.closest(".nc");if(!c)return;const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+    c.style.transform="perspective(700px) rotateX("+((.5-y)*8).toFixed(2)+"deg) rotateY("+((x-.5)*10).toFixed(2)+"deg) translateY(-3px)";c.style.setProperty("--mx",(x*100).toFixed(0)+"%");c.style.setProperty("--my",(y*100).toFixed(0)+"%")});
+  $("#grid").addEventListener("pointerout",e=>{const c=e.target.closest(".nc");if(c&&!c.contains(e.relatedTarget))c.style.transform=""});["pointerup","pointercancel"].forEach(t=>$("#grid").addEventListener(t,e=>{const c=e.target.closest(".nc");if(c&&e.pointerType!=="mouse")c.style.transform=""}));
+}
+// 首頁大標：捲動進度 --p（0～1）帶動大字橫移、商品轉動放大
+const HERO=$("#hero");let HP=-1;
+function heroTick(){if(!HERO||HERO.hidden)return;const r=HERO.getBoundingClientRect(),span=Math.max(1,r.height-innerHeight),p=Math.min(1,Math.max(0,-r.top/span));if(Math.abs(p-HP)>.002){HP=p;HERO.style.setProperty("--p",p.toFixed(3))}}
+if(!RM){let tk=false;addEventListener("scroll",()=>{if(!tk){tk=true;requestAnimationFrame(()=>{tk=false;heroTick()})}},{passive:true});addEventListener("resize",heroTick)}
+async function fillHero(){if(!HERO)return;
+  const seen={},pick=[];for(const x of NEWV){if(!x.img||x.mem||x.hid)continue;const f=x._f||x.k;if(!seen[f]){seen[f]=1;pick.push(x)}if(pick.length>=14)break}
+  const wr=$("#wr"),N=pick.length;if(wr&&N){const st=360/N;wr.style.setProperty("--n",N);wr.innerHTML=pick.map((x,i)=>'<button class="wc" style="--i:'+i+'" data-k="'+esc(x.k)+'" aria-label="'+esc(x.n||"")+'"><img src="'+esc(x.img)+'" alt="" loading="lazy"></button>').join("");wr.onclick=e=>{const t=e.target.closest(".wc");if(t){const x=byK(t.dataset.k);if(x)openItem(x)}}}
+  const c=$("#hcta");if(ME&&!ME.guest)c.innerHTML='<p style="display:block">嗨 <b>'+esc(ME.name)+'</b>，'+(ME.tier==="vip"?"已經套用 VIP 價":ME.tier==="member"?"已經套用一般會員價":"歡迎回來")+'<br>往下滑看這週新到</p>';heroTick()}
+// 分類大小格（點了直接切到那個分類）
+function fillBento(){const B=$("#bento");if(!B)return;const cs=[...document.querySelectorAll("#cats .cat")].slice(0,7);if(!cs.length){B.hidden=true;return}
+  const cnt={};ALL.forEach(x=>{if(!x.hid)(x.c||[]).forEach(c=>{cnt[c]=(cnt[c]||0)+1})});const sz=["x","","","w","","",""];
+  B.innerHTML=cs.map((el,i)=>{const b=el.dataset.b,im=el.querySelector("img");return '<button class="bt '+sz[i]+'" data-bb="'+esc(b)+'"><b>'+esc(b)+'</b><small>'+(cnt[b]||0)+' 款</small>'+(im?'<img loading="lazy" src="'+esc(im.getAttribute("src"))+'" alt="">':'')+'</button>'}).join("");
+  B.onclick=e=>{const t=e.target.closest("[data-bb]");if(!t)return;const c=document.querySelector('#cats .cat[data-b="'+CSS.escape(t.dataset.bb)+'"]');if(c){c.click();const g=$("#chips");scrollTo({top:g.getBoundingClientRect().top+scrollY-70,behavior:RM?"auto":"smooth"})}};
+  if("IntersectionObserver" in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}));B.querySelectorAll(".bt").forEach(b=>io.observe(b))}}
+// 只有在首頁（新品上架、沒有搜尋）時顯示大標、分類格、步驟
+{const _f=filter;filter=function(){_f();const home=brand==="新品上架"&&!$("#q").value.trim();["#hero","#bento","#steps","#bentoh"].forEach(s=>{const el=$(s);if(el)el.hidden=!home});if(home)heroTick()}}
+// v3：訂單查詢移到上方、往下滑時收起上排、購物車空的時候顯示件數
+$("#hord").onclick=()=>$("#openOrders").click();
+{let ly=0;addEventListener("scroll",()=>{const y=scrollY,h=document.querySelector("header");if(y>160&&y>ly+4)h.classList.add("mini");else if(y<ly-4||y<120)h.classList.remove("mini");ly=y},{passive:true})}
+{const _b2=bar;bar=function(){_b2();const s=$("#sum");if(s&&s.textContent==="購物車是空的")s.textContent="購物車 0 件"}}
+function homeInit(){fillBento();fillHero();filter()}
+init().then(()=>{try{homeInit()}catch(e){console.log(e)}});
 </script></body></html>`;
 
 // ---------- LINE 商品目錄：先選系列 → 再選角色 → 傳商品圖片卡 ----------
