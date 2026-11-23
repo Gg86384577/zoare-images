@@ -16,7 +16,9 @@ const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const BUILD_TAG = "promo-3";
+const BUILD_TAG = "kw-only-1";
+// AI 自由聊天回覆開關：false＝只回關鍵字/選單/指令/付款截圖/品番對到的照片，其他交給真人
+const AI_CHAT = false;
 const CATALOG_VERSION = "20261123-0940";
 const CATALOG_SHA = "5fa37fdd153653072e1ba10d20e1b0f9c39f6e03"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
@@ -980,6 +982,8 @@ async function handleEvent(env, ev) {
   if (uid && env.SESSIONS && /^(韓國|日本|中國)批發$/.test(text)) await env.SESSIONS.put("org:" + uid, text, { expirationTtl: 1800 });
   if (MENU[text]) return reply(env, ev.replyToken, [{ type: "text", text: MENU[text].replaceAll("{name}", name).replaceAll("{shop}", uid ? await shopLink(env, uid) : "") }]);
 
+  // AI 自由回覆已關閉（老闆 2026-11-23：常常答非所問）：關鍵字以外的文字不自動回，由真人在 LINE 後台親自回
+  if (!AI_CHAT && msg.type === "text") return;
   if (uid) lineApi(env, "/v2/bot/chat/loading/start", { chatId: uid, loadingSeconds: 20 }).catch(() => {});
 
   try {
@@ -1030,7 +1034,9 @@ async function handleEvent(env, ev) {
       : prompt;
 
     const messages = [...session.history, { role: "user", content: userContent }];
-    const out = parseJson(await claude(env, RULES.replaceAll("{客人名稱}", name), messages));
+    // AI 關閉時：照片只有「品番/JAN 直接對到目錄」才自動跳商品卡，其他都留給真人回
+    if (!AI_CHAT && !hits.length) return;
+    const out = AI_CHAT ? parseJson(await claude(env, RULES.replaceAll("{客人名稱}", name), messages)) : { reply: "", show: [] };
     // 保險：模型寫成「給老闆的分析」（第三人稱講客人、內部用語）就不要傳給客人，改轉真人
     if (out.reply && /客人(問的|想要|要的|說的|是在問)|這要分清楚|應該先(確認|問)|我看不出|候選商品|老闆可以|建議老闆|回覆客人/.test(out.reply)) out.handoff = true;
 
