@@ -16,7 +16,7 @@ const VIP = "{會員連結}";
 const GENERAL = "{會員連結}";
 const DEFAULT_MODEL = "claude-haiku-5-5";
 const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小字品番）用比較強的模型
-const BUILD_TAG = "kw-only-1";
+const BUILD_TAG = "pack-vip-1";
 // AI 自由聊天回覆開關：false＝只回關鍵字/選單/指令/付款截圖/品番對到的照片，其他交給真人
 const AI_CHAT = false;
 const CATALOG_VERSION = "20261123-0940";
@@ -1292,7 +1292,7 @@ async function activeMembers(env) {
 function packVideoMsgs() {
   return [
     { type: "video", originalContentUrl: `${SHOP_BASE_URL}/m/pack.mp4?v=${PACK_V}`, previewImageUrl: `${SHOP_BASE_URL}/m/pack.jpg?v=${PACK_V}` },
-    { type: "text", text: "🎁 給我們一般會員跟 VIP 的專屬福利\n\n團購主資源包上線了！\n・每個系列一張有標價的宣傳圖\n・開團、結單倒數、到貨通知文案範本\n・點了直接到商城下單，自動套會員價\n\n每週更新，直接傳「資源包」三個字給我就能領👇",
+    { type: "text", text: "🎁 VIP 專屬福利：團購主資源包上線了！\n・每個系列一張有標價的宣傳圖\n・開團、結單倒數、到貨通知文案範本\n・點了直接到商城下單，自動套會員價\n\nVIP 每週免費領，直接傳「資源包」三個字給我就能領；不是 VIP 也可以單買開團素材包（單週 NT$149／包月 NT$399）👇",
       quickReply: { items: [{ type: "action", action: { type: "message", label: "📦 領資源包", text: "資源包" } }] } },
   ];
 }
@@ -1770,10 +1770,11 @@ async function threadsTest(env, q) {
   const le = await env.SESSIONS.get("lasterr"); if (le) out.push("📮 LINE 最近錯誤：" + le.slice(0, 120));
   return out.join("\n");
 }
-// ── 團購主資源包：一般會員／VIP 專屬，每個系列一張宣傳圖＋開團文案＋直接到商城下單 ──
+// ── 團購主資源包：VIP 專屬（其他人單買開團素材包），每個系列一張宣傳圖＋開團文案＋直接到商城下單 ──
 async function resourcePack(env, uid) {
   const info = await memberInfo(env, uid);
-  if (info.tier === "none") return [{ type: "text", text: "團購主資源包是一般會員和 VIP 會員專屬的🙏\n裡面有每週更新的系列宣傳圖、開團文案，點一下就能到商城下單\n\n加入會員就能馬上領👇" }, ...(await membershipCards(env, uid))];
+  // 老闆 2026-11-24：商城不開放下載，圖和文案只放在資源包，VIP 免費送，其他人單買開團素材包
+  if (info.tier !== "vip") return [{ type: "text", text: "團購主資源包是 VIP 會員的專屬福利🙏\n裡面有每週更新的系列宣傳圖、開團文案，點一下就能到商城下單\n\n不是 VIP 的話也可以單買開團素材包👇\n\n" + (await packReply(env, uid)) }, ...(await membershipCards(env, uid))];
   const bank = await promoBank(), link = await shopLink(env, uid);
   const keys = Object.keys(bank).filter((k) => k.startsWith("series:")).slice(0, 10);
   if (!keys.length) return [{ type: "text", text: "這週的資源包還在準備中，明天早上再來看看喔🙏" }];
@@ -1794,7 +1795,7 @@ async function resourcePack(env, uid) {
         { type: "button", style: "secondary", height: "sm", action: { type: "clipboard", label: "📋 複製開團文案", clipboardText: copy.slice(0, 1000) } },
       ] } };
   });
-  return [{ type: "text", text: `📦 團購主資源包（${info.tier === "vip" ? "VIP" : "一般會員"}專屬，每週更新）\n・每個系列一張宣傳圖，點圖片可以看大圖、存圖\n・「複製開團文案」是給你開團用的，沒有寫價格，記得填上你自己的售價\n・「到商城下單」會直接打開你的專屬商城，價格自動套用會員價` }, { type: "flex", altText: "團購主資源包", contents: { type: "carousel", contents: bubbles } }];
+  return [{ type: "text", text: `📦 團購主資源包（VIP 專屬，每週更新）\n・每個系列一張宣傳圖，點圖片可以看大圖、存圖\n・「複製開團文案」是給你開團用的，沒有寫價格，記得填上你自己的售價\n・「到商城下單」會直接打開你的專屬商城，價格自動套用會員價` }, { type: "flex", altText: "團購主資源包", contents: { type: "carousel", contents: bubbles } }];
 }
 // ── 自動宣傳：新品／結單倒數 3 天・1 天・1 小時／定期宣傳 → Claude 寫文案、ChatGPT 做圖 → 推播或「宣傳素材」查看 ──
 const PROMO_SERIES = ["三麗鷗", "吉伊卡哇", "史努比", "寶可夢", "盒玩", "角落生物", "mofusand", "拉拉熊", "哆啦A夢", "動漫"];
