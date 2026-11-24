@@ -1966,7 +1966,7 @@ const THR_KW = ["求貨源", "找貨源", "三麗鷗 批發", "日本 批發", "
 const THR_INTENT = /求|找|徵|哪裡|哪邊|推薦|有沒有|有人|請問|貨源|盤商|廠商|批發|開團|進貨|拿貨|代理/;
 const THR_SKIP = /代購.{0,6}(收單|開單|連線)|現貨販售|出清|徵才|求職/;
 // 一次性：發 Threads 影片貼文（批發系統升級介紹）。KV 記狀態，發完就不再動。
-const VID_POST = { id: "upgrade1124", path: "promo/upgrade-2026-11-24.mp4", text: "ZOARÉ 批發系統升級了 🎉\n\n❌ 以前：要從 LINE 點連結才能看商品\n✅ 現在：網站直接逛，用你自己的 LINE 一鍵登入，價格、起批數、湊單進度一次看\n\n❌ 以前：只能整箱叫貨\n✅ 現在：多一個「少量」選擇，不用整箱也能拿，每款自己湊單\n\n❌ 以前：款式有限\n✅ 現在：新增合作廠商，日本角色款式更多\n\n📌 新規則\n非會員：每款照起批數，整單滿 NT$3,000\n一般會員：NT$100／月，混批滿 21 件\nVIP：NT$1,000／月，不限件數，每月送 NT$1,000 購物金\n\n30 秒影片帶你看一遍 👇\n加 LINE 傳「批發商城」就能開始逛\n\nLINE ID：@ 475fizio" };
+const VID_POST = { id: "upgrade1124b", path: "promo/upgrade-2026-11-24-v2.mp4", text: "ZOARÉ 批發系統升級了 🎉\n\n❌ 以前：要從 LINE 點連結才能看商品\n✅ 現在：網站直接逛，用你自己的 LINE 一鍵登入，價格、起批數、湊單進度一次看\n\n❌ 以前：只能整箱叫貨\n✅ 現在：多一個「少量」選擇，不用整箱也能拿，每款自己湊單\n\n❌ 以前：款式有限\n✅ 現在：新增合作廠商，日本角色款式更多\n\n📌 新規則\n非會員：每款照起批數，整單滿 NT$3,000\n一般會員：NT$100／月，混批滿 21 件\nVIP：NT$1,000／月，不限件數，每月送 NT$1,000 購物金\n\n影片帶你看一遍（有聲音） 👇\n加 LINE 傳「批發商城」就能開始逛\n\nLINE ID：@ 475fizio" };
 async function thrVideoOnce(env) {
   const k = "thr:vid:" + VID_POST.id;
   const s = JSON.parse((await env.SESSIONS.get(k)) || "{}");
