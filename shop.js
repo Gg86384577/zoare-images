@@ -799,7 +799,7 @@ export const POOL_NT = 20000; // 對客人顯示的台幣門檻；人民幣 4,00
 export const poolNeed = (rate) => Math.max(POOL_NT, Math.ceil(POOL_MIN * (rate || 0)));
 const MFR = [[/^309 /, "三麗鷗 309"], [/^CRUX/, "CRUX"], [/^Nakajima/, "Nakajima"], [/^T's Factory/, "T's Factory"], [/^Kamio/, "Kamio"], [/^J's Planning/, "J's Planning"],
   [/^萬代/, "萬代南夢宮"], [/^角色雜貨・背包|^企鵝家族/, "Unic"], [/^OST/, "OST"], [/^A Planning/, "A Planning"], [/^Sun Arrow/, "Sun Arrow"], [/^Hatakeyama|^(三麗鷗|拉拉熊|小矮人圖鑑|角落生物) 生活雜貨$|^日本角色雜貨$/, "畠山"], [/^三英貿易|^(寶可夢 |日本)絨毛娃娃$/, "三英貿易"],
-  [/^森本/, "森本產業"], [/^日本現貨/, "中央煽賣"], [/^RE-MENT/, "RE-MENT"], [/^三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列)|^幽遊白書/, "K-company"], [/^Marimo/, "Marimo Craft"],
+  [/^森本/, "森本產業"], [/^日本現貨/, "中央煽賣"], [/^RE-MENT/, "RE-MENT"], [/^三麗鷗 韓國現貨/, "韓國三麗鷗"], [/^三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列)|^幽遊白書/, "K-company"], [/^Marimo/, "Marimo Craft"],
   [/^San-X/, "San-X"], [/^Ensky/, "Ensky"], [/^GPS/, "GPS"], [/^PARADE/, "PARADE"], [/^NIC/, "NIC"], [/^Smiski/, "Dreams"], [/^Tomantoys/, "Tomantoys"], [/^景品 FuRyu/, "FuRyu 景品"], [/^景品 SEGA/, "SEGA 景品"], [/^景品 Eikoh/, "Eikoh 景品"]];
 export function mfrOf(b) { b = String(b || ""); for (const [r, n] of MFR) if (r.test(b)) return n; return b.split(" ")[0] || "其他"; }
 async function jpyRate(env) { try { const r = JSON.parse((await env.SESSIONS.get("rates")) || "null"); if (r && r.JPY) return r.JPY; } catch (e) {} return 0.21; }
