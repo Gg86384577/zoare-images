@@ -204,7 +204,7 @@ export function dlLabel(it) {
 export const SG_RATE = 1.05; // 少量價＝整箱價 × 1.05（無條件進位）
 export const SG_SHOW = "約 NT$10,000"; // 對客人說的門檻
 export const SG_PRE = "少量・";
-const SG_MFR = /^(309 |Nakajima|Kamio|CRUX|T's Factory|J's Planning|NIC|森本|Hatakeyama|A Planning|OST|三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列))/;
+const SG_MFR = /^(309 |Nakajima|Kamio|CRUX|T's Factory|J's Planning|NIC|森本|Hatakeyama|(三麗鷗|拉拉熊|小矮人圖鑑|角落生物) 生活雜貨$|日本角色雜貨$|A Planning|OST|三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列))/;
 export const isSg = (m) => String(m || "").startsWith(SG_PRE);
 function sgUnit(it) {
   if (!it || !it.g || it.mem || it.alt || it.hid || it.org || !it.pb || it.pb.c !== "JPY" || !SG_MFR.test(it.b || "")) return 0;
@@ -798,7 +798,7 @@ export const POOL_SHOW = "約 NT$30,000"; // 對客人說的門檻（實際叫�
 export const POOL_NT = 20000; // 對客人顯示的台幣門檻；人民幣 4,000 × 當天匯率超過 2 萬就跟著調高
 export const poolNeed = (rate) => Math.max(POOL_NT, Math.ceil(POOL_MIN * (rate || 0)));
 const MFR = [[/^309 /, "三麗鷗 309"], [/^CRUX/, "CRUX"], [/^Nakajima/, "Nakajima"], [/^T's Factory/, "T's Factory"], [/^Kamio/, "Kamio"], [/^J's Planning/, "J's Planning"],
-  [/^萬代/, "萬代南夢宮"], [/^角色雜貨・背包|^企鵝家族/, "Unic"], [/^OST/, "OST"], [/^A Planning/, "A Planning"], [/^Sun Arrow/, "Sun Arrow"], [/^Hatakeyama/, "畠山"],
+  [/^萬代/, "萬代南夢宮"], [/^角色雜貨・背包|^企鵝家族/, "Unic"], [/^OST/, "OST"], [/^A Planning/, "A Planning"], [/^Sun Arrow/, "Sun Arrow"], [/^Hatakeyama|^(三麗鷗|拉拉熊|小矮人圖鑑|角落生物) 生活雜貨$|^日本角色雜貨$/, "畠山"], [/^三英貿易|^(寶可夢 |日本)絨毛娃娃$/, "三英貿易"],
   [/^森本/, "森本產業"], [/^日本現貨/, "中央煽賣"], [/^RE-MENT/, "RE-MENT"], [/^三麗鷗 (出門毛茸茸風|黑色螢光系列|黑白單色系列)|^幽遊白書/, "K-company"], [/^Marimo/, "Marimo Craft"],
   [/^San-X/, "San-X"], [/^Ensky/, "Ensky"], [/^GPS/, "GPS"], [/^PARADE/, "PARADE"], [/^NIC/, "NIC"], [/^Smiski/, "Dreams"], [/^Tomantoys/, "Tomantoys"], [/^景品 FuRyu/, "FuRyu 景品"], [/^景品 SEGA/, "SEGA 景品"], [/^景品 Eikoh/, "Eikoh 景品"]];
 export function mfrOf(b) { b = String(b || ""); for (const [r, n] of MFR) if (r.test(b)) return n; return b.split(" ")[0] || "其他"; }
