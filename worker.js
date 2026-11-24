@@ -1359,6 +1359,7 @@ async function fetchBcPost() {
 }
 function bcPostMsgs(post) {
   const m = [];
+  if (post.video) m.push({ type: "video", originalContentUrl: post.video, previewImageUrl: post.preview || post.video });
   for (const u of (post.images || (post.image ? [post.image] : [])).slice(0, 3)) m.push({ type: "image", originalContentUrl: u, previewImageUrl: (u === post.image && post.preview) || u });
   if (post.text) m.push({ type: "text", text: post.text, quickReply: { items: [{ type: "action", action: { type: "message", label: "🛍 看全部新品", text: post.kw || "新品" } }] } });
   if (post.tail) m.push({ type: "text", text: post.tail });
@@ -2195,6 +2196,7 @@ export default {
       });
     }
     if (url.pathname === "/threads/login" || url.pathname === "/threads/callback") return threadsAuth(request, env, url);
+    if (/^\/m\/[\w.-]+\.mp4$/.test(url.pathname)) { const h = {}; const rg = request.headers.get("range"); if (rg) h.range = rg; const up = await fetch("https://raw.githubusercontent.com/Gg86384577/zoare-images/main/promo/" + url.pathname.slice(3), { headers: h }); const hd = new Headers(up.headers); hd.set("content-type", "video/mp4"); hd.delete("x-content-type-options"); return new Response(up.body, { status: up.status, headers: hd }); }
     if (url.pathname === "/threads/vid-status") { const s = JSON.parse((await env.SESSIONS.get("thr:vid:" + VID_POST.id)) || "{}"); return Response.json({ done: !!s.done, postId: s.postId || "", tries: s.tries || 0, err: s.err || "", pending: !!s.cid }); }
     if (url.pathname === "/privacy" || url.pathname === "/data-deletion") return legalPage(url.pathname);
     { const pm = url.pathname.match(/^\/promo\/([a-z0-9]{6,20})\.jpg$/); if (pm) { const b = env.SESSIONS && (await env.SESSIONS.get("promo:img:" + pm[1])); if (!b) return new Response("Not found", { status: 404 }); const bin = Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0)); return new Response(bin, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=2592000" } }); } }
