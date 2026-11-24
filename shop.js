@@ -11,7 +11,9 @@ export function communityCard() {
       { type: "text", text: "新品、開團、結單倒數第一時間看到，還有社群限定消息", wrap: true, size: "sm", color: "#6E655B" } ] },
     footer: { type: "box", layout: "vertical", contents: [{ type: "button", style: "primary", color: "#2A2826", height: "sm", action: { type: "uri", label: "掃碼或點這裡加入", uri: COMMUNITY_URL } }] } } };
 }
-export const SHOP_BASE = "https://shiny-mud-319f.ojason90816-a70.workers.dev";
+export const SHOP_BASE = "https://shiny-mud-319f.ojason90816-a70.workers.dev"
+// LIFF 登入入口（LINE Developers → 佐阿雷 LINE登入 channel → LIFF「ZOARE 批發商城登入」）；channel ID 是前面那段數字
+const LIFF_ID = (env) => env.LIFF_ID || "2011841725-ejQRrbeQ";;
 const TIER_NAME = { vip: "VIP 會員", member: "一般會員", none: "非會員" };
 
 // ---------- 個人連結簽章（用 LINE Channel Secret 簽，別人猜不到） ----------
@@ -320,12 +322,36 @@ export async function handleShop(request, env, ctx, deps) {
   if (p === "/shop/login") {
     const cid = env.LINE_LOGIN_ID, g = String(url.searchParams.get("g") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
     if (!cid || !env.LINE_LOGIN_SECRET) {
-      if (g) return Response.redirect(`${SHOP_BASE}/go?q=${encodeURIComponent("下單 #" + g)}`, 302);
-      return Response.redirect(`${SHOP_BASE}/go?q=${encodeURIComponent("批發商城")}`, 302); // 還沒設 LINE Login 金鑰：先跳官方 LINE，傳「批發商城」拿專屬登入連結
+      // 沒設 LINE Login 密鑰：改走 LIFF 登入（只用 ID Token 驗證，不需要 channel secret）
+      return Response.redirect(`https://liff.line.me/${LIFF_ID(env)}${g ? "?g=" + g : ""}`, 302);
     }
     const ts = Date.now().toString(36), st = `${ts}.${g || "-"}.${await sign(env, "ll:" + ts + "." + g)}`;
     const q = new URLSearchParams({ response_type: "code", client_id: cid, redirect_uri: SHOP_BASE + "/shop/callback", state: st, scope: "profile openid", bot_prompt: "aggressive" });
     return Response.redirect("https://access.line.me/oauth2/v2.1/authorize?" + q, 302);
+  }
+  // ---------- LIFF 登入：LINE 內直接授權，外部瀏覽器會先跳 LINE 登入 ----------
+  if (p === "/shop/liff") {
+    const lid = LIFF_ID(env);
+    return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZOARÉ 登入中…</title><style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#F6F5F2;color:#151515;font:15px/1.7 "Songti TC","Noto Serif TC",serif;text-align:center;padding:24px;box-sizing:border-box}img{width:180px;margin-bottom:18px}a{color:#151515}</style></head><body><img src="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/logo_dark.png" alt="ZOARÉ"><div id="m">正在用 LINE 登入…</div>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script><script>
+(async()=>{const m=document.getElementById("m");const fail=t=>{m.innerHTML=t+'<br><br><a href="/shop/login">再試一次</a>'};
+try{await liff.init({liffId:${JSON.stringify(lid)}});
+if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return}
+const g=(new URLSearchParams(location.search).get("g")||"");
+const r=await fetch("/shop/liff-auth",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:liff.getIDToken(),g})}).then(r=>r.json());
+if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+r.error:""))}catch(e){fail("登入失敗："+(e&&e.message||e))}})();
+</script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  }
+  if (p === "/shop/liff-auth" && request.method === "POST") {
+    const b = await request.json().catch(() => ({}));
+    const g = String(b.g || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    const cid = String(LIFF_ID(env)).split("-")[0];
+    const vr = await fetch("https://api.line.me/oauth2/v2.1/verify", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ id_token: String(b.id || ""), client_id: cid }) }).catch(() => ({ ok: false, json: async () => ({}) }));
+    const id = await vr.json().catch(() => ({}));
+    const uid = id.sub;
+    if (!vr.ok || String(id.aud) !== cid || !uid || !/^U[0-9a-f]{32}$/.test(uid)) return Response.json({ ok: false, error: "LINE 身分驗證沒通過" }, { status: 401 });
+    if (env.SESSIONS && id.name) await env.SESSIONS.put("wn:" + uid, String(id.name).slice(0, 40), { expirationTtl: 400 * 86400 }).catch(() => {});
+    return Response.json({ ok: true, url: `${SHOP_BASE}/shop?t=${uid}.${await sign(env, uid)}${g ? "&cart=" + g : ""}` });
   }
   if (p === "/shop/callback") {
     const bad = (m) => new Response(`<meta charset=utf-8><meta name=viewport content="width=device-width"><div style="font:16px sans-serif;padding:24px;line-height:1.7">${m}<br><br><a href="/shop/login">重新用 LINE 登入</a>｜<a href="/shop">先逛逛</a></div>`, { status: 400, headers: { "content-type": "text/html; charset=utf-8" } });
