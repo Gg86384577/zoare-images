@@ -338,7 +338,7 @@ export async function handleShop(request, env, ctx, deps) {
 try{await liff.init({liffId:${JSON.stringify(lid)}});
 if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return}
 const g=(new URLSearchParams(location.search).get("g")||"");
-const r=await fetch("/shop/liff-auth",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:liff.getIDToken(),g})}).then(r=>r.json());
+const r=await fetch("/shop/liff-auth",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:liff.getIDToken(),at:liff.getAccessToken(),g})}).then(r=>r.json());
 if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+r.error:""))}catch(e){fail("登入失敗："+(e&&e.message||e))}})();
 </script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   }
@@ -346,10 +346,23 @@ if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+
     const b = await request.json().catch(() => ({}));
     const g = String(b.g || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
     const cid = String(LIFF_ID(env)).split("-")[0];
-    const vr = await fetch("https://api.line.me/oauth2/v2.1/verify", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ id_token: String(b.id || ""), client_id: cid }) }).catch(() => ({ ok: false, json: async () => ({}) }));
-    const id = await vr.json().catch(() => ({}));
-    const uid = id.sub;
-    if (!vr.ok || String(id.aud) !== cid || !uid || !/^U[0-9a-f]{32}$/.test(uid)) return Response.json({ ok: false, error: "LINE 身分驗證沒通過" }, { status: 401 });
+    const J = (r) => r && r.json ? r.json().catch(() => ({})) : {};
+    let uid = "", name = "", why = "";
+    // 1) Access token：確認是這個登入頻道發的，再拿 userId（最穩，LINE App 內外都有）
+    if (b.at) {
+      const v = await J(await fetch("https://api.line.me/oauth2/v2.1/verify?access_token=" + encodeURIComponent(String(b.at))).catch(() => null));
+      if (String(v.client_id) === cid) {
+        const pr = await J(await fetch("https://api.line.me/v2/profile", { headers: { authorization: "Bearer " + b.at } }).catch(() => null));
+        if (pr.userId) { uid = pr.userId; name = pr.displayName || ""; } else why = "profile " + (pr.message || "");
+      } else why = "at " + (v.error_description || v.error || v.client_id || "");
+    }
+    // 2) 退而求其次：ID Token
+    if (!uid && b.id) {
+      const v = await J(await fetch("https://api.line.me/oauth2/v2.1/verify", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ id_token: String(b.id), client_id: cid }) }).catch(() => null));
+      if (String(v.aud) === cid && v.sub) { uid = v.sub; name = v.name || ""; } else why += " / id " + (v.error_description || v.error || "");
+    }
+    if (!uid || !/^U[0-9a-f]{32}$/.test(uid)) { console.log("liff-auth fail", why); return Response.json({ ok: false, error: "LINE 身分驗證沒通過（" + why.trim().slice(0, 80) + "）" }, { status: 401 }); }
+    const id = { name };
     if (env.SESSIONS && id.name) await env.SESSIONS.put("wn:" + uid, String(id.name).slice(0, 40), { expirationTtl: 400 * 86400 }).catch(() => {});
     return Response.json({ ok: true, url: `${SHOP_BASE}/shop?t=${uid}.${await sign(env, uid)}${g ? "&cart=" + g : ""}` });
   }
