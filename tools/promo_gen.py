@@ -364,7 +364,7 @@ def daily():
         if x.get('ad') == today: fresh.setdefault(x.get('b') or '新品', []).append(x)
     for b, L in sorted(fresh.items(), key=lambda kv: -len(kv[1]))[:3]:
         P = choose(L, 4)
-        if P: save(f'new:{today}:{b}', P=P, html=tpl_new(re.sub(r'^(309|Kamio|CRUX|Nakajima|T\'s Factory|J\'s Planning|A Planning|OST|森本|Marimo Craft|RE-MENT|萬代南夢宮|萬代|Bushiroad|F-toys|GPS|Ensky|Sun Arrow)\s*', '', b) or '新品', P, min(x['g'] for x in L), len(L), today))
+        if P: save(f'new:{today}:{b}', P=P, html=tpl_new(re.sub(r'^(309|Kamio|CRUX|Nakajima|T\'s Factory|J\'s Planning|A Planning|OST|森本|Marimo Craft|RE-MENT|萬代南夢宮|萬代|Bushiroad|F-toys|GPS|Ensky|Sun Arrow|Hatakeyama 畠山|Hatakeyama|畠山|畑山|三英貿易)\s*', '', b) or '新品', P, min(x['g'] for x in L), len(L), today))
     # 3) 結單倒數：4 天內結單的每一組，3 天／1 天／1 小時三張都先做好
     groups = {}
     for x in LIVE:
