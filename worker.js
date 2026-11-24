@@ -19,8 +19,8 @@ const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小
 const BUILD_TAG = "pack-vip-1";
 // AI 自由聊天回覆開關：false＝只回關鍵字/選單/指令/付款截圖/品番對到的照片，其他交給真人
 const AI_CHAT = false;
-const CATALOG_VERSION = "20261123-0940";
-const CATALOG_SHA = "5fa37fdd153653072e1ba10d20e1b0f9c39f6e03"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
+const CATALOG_VERSION = "20261124-1240";
+const CATALOG_SHA = "025651fcea5564ddb7a468b4d6fef46df5c3e521"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
@@ -1966,6 +1966,34 @@ async function promoOwnerCmd(env, text) {
 const THR_KW = ["求貨源", "找貨源", "三麗鷗 批發", "日本 批發", "批發 盤商", "想開團", "團購 廠商", "盒玩 批發", "扭蛋 批發", "吉伊卡哇 批發", "周邊 批發"];
 const THR_INTENT = /求|找|徵|哪裡|哪邊|推薦|有沒有|有人|請問|貨源|盤商|廠商|批發|開團|進貨|拿貨|代理/;
 const THR_SKIP = /代購.{0,6}(收單|開單|連線)|現貨販售|出清|徵才|求職/;
+// 一次性：發 Threads 影片貼文（批發系統升級介紹）。KV 記狀態，發完就不再動。
+const VID_POST = { id: "upgrade1124d", path: "promo/upgrade-2026-11-24-v4.mp4", text: "ZOARÉ 批發系統升級了 🎉\n\n❌ 以前：要從 LINE 點連結才能看商品\n✅ 現在：網站直接逛，用你自己的 LINE 一鍵登入，價格、起批數、湊單進度一次看\n\n❌ 以前：只能整箱叫貨\n✅ 現在：多一個「少量」選擇，不用整箱也能拿，每款自己湊單\n\n❌ 以前：款式有限\n✅ 現在：新增合作廠商，日本角色款式更多\n\n📌 新規則\n非會員：每款照起批數，整單滿 NT$3,000\n一般會員：NT$100／月，混批滿 21 件，每月送 5 張國內運費券\nVIP：NT$1,000／月，不限件數，每月送 NT$1,000 購物金＋10 張國內、10 張國際運費券\n\n影片帶你看一遍（有聲音） 👇\n加 LINE 傳「批發商城」拿網址，打開後先按「用你的 LINE 登入」，就能看全部商品和價格\n\nLINE ID：@ 475fizio" };
+async function thrVideoOnce(env) {
+  const k = "thr:vid:" + VID_POST.id;
+  const s = JSON.parse((await env.SESSIONS.get(k)) || "{}");
+  if (s.done || (s.tries || 0) >= 4) return s;
+  const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
+  if (!t) return s;
+  if (!s.cid) {
+    const a = await thrPost(env, "me/threads", { media_type: "VIDEO", video_url: "https://raw.githubusercontent.com/Gg86384577/zoare-images/" + (env.VID_SHA || "main") + "/" + VID_POST.path, text: VID_POST.text });
+    const n = { tries: (s.tries || 0) + 1, cid: a.id || "", err: a.error ? a.error.message : "" , at: Date.now() };
+    await env.SESSIONS.put(k, JSON.stringify(n), { expirationTtl: 30 * 86400 });
+    return n;
+  }
+  const st = await (await fetch("https://graph.threads.net/v1.0/" + s.cid + "?fields=status,error_message&access_token=" + t.tok)).json().catch(() => ({}));
+  if (st.status === "FINISHED") {
+    const b = await thrPost(env, "me/threads_publish", { creation_id: s.cid });
+    const n = b.id ? { ...s, done: Date.now(), postId: b.id } : { ...s, err: (b.error && b.error.message) || "publish 失敗" };
+    await env.SESSIONS.put(k, JSON.stringify(n), { expirationTtl: 30 * 86400 });
+    return n;
+  }
+  if (st.status === "ERROR" || st.status === "EXPIRED" || Date.now() - (s.at || 0) > 3600e3) {
+    const n = { tries: s.tries || 1, cid: "", err: st.error_message || st.status || "逾時" };
+    await env.SESSIONS.put(k, JSON.stringify(n), { expirationTtl: 30 * 86400 });
+    return n;
+  }
+  return { ...s, status: st.status };
+}
 async function thrPost(env, path, params) {
   const t = JSON.parse((await env.SESSIONS.get("thr:tok")) || "null");
   if (!t) return { error: { message: "還沒連接 Threads" } };
@@ -2131,6 +2159,7 @@ export default {
       { try { const p = await fetchBcPost(); if (p && p.to === "all" && p.go === p.id && !(await env.SESSIONS.get("bc:post:" + p.id + ":all"))) { await env.SESSIONS.put("bc:post", p.id, { expirationTtl: 14 * 86400 }); const r = await sendBcPost(env, p); const ow = await env.SESSIONS.get("owner"); if (ow) await lineApi(env, "/v2/bot/message/push", { to: ow, messages: [{ type: "text", text: r.err ? `📣 全部好友群發「${p.title}」沒有成功（LINE 回應 ${r.err}${r.err === "429" ? "，本月推播額度不夠" : ""}），額度恢復後會自動補發` : `📣 已把「${p.title}」群發給全部好友${r.ok ? `（約 ${r.ok} 位）` : ""}` }] }); } } catch (e) { console.log("bc go", e); } }
       if (Math.floor(hm / 5) % 12 === 9 && (await env.SESSIONS.get("bc:post"))) { try { const p = await fetchBcPost(); if (p && p.id === (await env.SESSIONS.get("bc:post"))) await sendBcPost(env, p); } catch (e) { console.log("bcpost", e); } }
       try { await runGroupPost(env); } catch (e) { console.log("grouppost", e); }
+      try { await thrVideoOnce(env); } catch (e) { console.log("thrvid", e); }
       const man = await env.SESSIONS.get("thr:manual");
       if (man) { await env.SESSIONS.delete("thr:manual"); try { await threadsPatrol(env, { demo: man === "demo" }); } catch (e) { console.log("patrol manual", e); } }
       for (const [slot, at] of [["am", 9 * 60], ["pm", 20 * 60]]) {
@@ -2166,6 +2195,7 @@ export default {
       });
     }
     if (url.pathname === "/threads/login" || url.pathname === "/threads/callback") return threadsAuth(request, env, url);
+    if (url.pathname === "/threads/vid-status") { const s = JSON.parse((await env.SESSIONS.get("thr:vid:" + VID_POST.id)) || "{}"); return Response.json({ done: !!s.done, postId: s.postId || "", tries: s.tries || 0, err: s.err || "", pending: !!s.cid }); }
     if (url.pathname === "/privacy" || url.pathname === "/data-deletion") return legalPage(url.pathname);
     { const pm = url.pathname.match(/^\/promo\/([a-z0-9]{6,20})\.jpg$/); if (pm) { const b = env.SESSIONS && (await env.SESSIONS.get("promo:img:" + pm[1])); if (!b) return new Response("Not found", { status: 404 }); const bin = Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0)); return new Response(bin, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=2592000" } }); } }
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return handleAdmin(request, env, ctx, { lineApi, loadCatalog, isExpired, claude });
@@ -2213,6 +2243,8 @@ export default {
         return Response.json({ ok: false, error: "系統暫時出錯，請等 1 分鐘再試一次；一直不行請在 LINE 告訴我們🙏" }, { status: 500 });
       }
     }
+    // 網站首頁：直接進商城（客人在瀏覽器打網址就看得到）
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "")) return Response.redirect(SHOP_BASE_URL + "/shop", 302);
     if (request.method !== "POST") return new Response("ZOARÉ LINE bot is running.");
     const body = await request.text();
     const ok = await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get("x-line-signature") || "");
