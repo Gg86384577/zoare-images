@@ -1,0 +1,4 @@
+<!doctype html><meta charset="utf-8"><body>sending...<script>
+(async()=>{const f=new URLSearchParams(location.search).get('f');const r=await fetch(f);const b=await r.arrayBuffer();
+window.opener.postMessage({kind:'pdfsend',name:f,buf:b},'https://pda.104.com.tw',[b]);document.body.textContent='sent '+f+' '+b.byteLength;setTimeout(()=>window.close(),1500)})();
+</script>
