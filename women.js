@@ -49,8 +49,9 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .bar img{height:20px;display:block}
 .wm{display:flex;align-items:center;gap:10px}
 .metal{display:block;height:22px;aspect-ratio:3076/764;-webkit-mask:url(${LOGO}) center/contain no-repeat;mask:url(${LOGO}) center/contain no-repeat;background:linear-gradient(180deg,#A3A8B0 0%,#3D4047 45%,#B9BDC4 62%,#5A5E66 100%)}
-.wm small{font:400 10px/1 var(--serif);letter-spacing:.3em;color:#4A4E55}
-@media(max-width:380px){.wm small{display:none}}
+.wm small{font:400 11px/1 var(--serif);letter-spacing:.42em;color:#5E6268}
+.gl{display:block;width:16px;height:1px;background:var(--gold)}
+@media(max-width:340px){.wm small,.gl{display:none}}
 .bar .k{font-size:12px;letter-spacing:.18em;color:var(--mu)}
 .ask{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 16px;border-radius:99px;background:var(--btn);color:#fff;font-size:14px;font-weight:700}
 .ask b{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:#fff;color:var(--btn);font:800 12px/1 -apple-system,"PingFang TC",sans-serif}
@@ -168,7 +169,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 @media(prefers-reduced-motion:reduce){*,*:after{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
 </style></head>
 <body oncontextmenu="return false">
-<header class="top" id="top"><div class="wrap bar"><span class="wm" role="img" aria-label="ZOARÉ 女裝"><span class="metal"></span><small>WOMENSWEAR</small></span><button class="ask" id="askTop" type="button">詢價清單 <b id="nTop">0</b></button></div></header>
+<header class="top" id="top"><div class="wrap bar"><span class="wm" role="img" aria-label="ZOARÉ WOMEN"><img src="${LOGO}" alt=""><i class="gl"></i><small>WOMEN</small></span><button class="ask" id="askTop" type="button">詢價清單 <b id="nTop">0</b></button></div></header>
 
 <section class="hero"><div class="wrap">
   <div>
@@ -193,7 +194,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 <main class="wrap" id="main"></main>
 
 <footer class="wrap foot">
-  <span class="metal" style="height:28px;margin:0 auto 6px" role="img" aria-label="ZOARÉ"></span><div style="font-size:11px;letter-spacing:.42em;color:#4A4E55;margin-bottom:12px">KOREAN WOMENSWEAR</div>
+  <img src="${LOGO}" alt="ZOARÉ" style="height:26px;margin-bottom:8px"><div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px;font-size:12px;letter-spacing:.5em;color:#5E6268;padding-left:.5em"><i class="gl" style="width:28px"></i>WOMEN<i class="gl" style="width:28px"></i></div>
   官方 LINE：${LINE_ID}<br>
   也有日本角色商品批發：<a href="/shop">逛批發商城</a>
 </footer>
