@@ -10,6 +10,7 @@
 // 可選：綁定一個 KV namespace，名稱叫 SESSIONS（記住對話與「真人客服」狀態）
 
 import { handleAdmin, adminLink } from "./admin.js";
+import { handleWomen } from "./women.js";
 import { SHOP_BASE, COMMUNITY_URL, getPools, mfrOf, mfrLink, runPoolReminders, introVideoMsg, earlyShipReply, customerShipReply, computePools, runCartReminders, couponText, linkAlts, newPicks, hotPicks, handleShop, shopLink, shopOwnerCommand, handlePayment, customerOrders, customerOrderDetail, newsReply, catalogMenu, verifyPaymentImage, productCards, keywordBrowse, membershipCards, packReply, packId, welcomeMessages, memExpiry, catsOf, allOrders, CAT_NAMES, setMembership, memberInfo, parsePeriod, fmtDay, shipLabel, dlLabel } from "./shop.js";
 const SHOP = "{訂購連結}"; // 已不使用樂賣，回覆時自動換成客人的專屬訂購網址
 const VIP = "{會員連結}";
@@ -2236,6 +2237,8 @@ export default {
       const q = (url.searchParams.get("q") || decodeURIComponent(url.pathname.slice(4)) || "商品目錄").slice(0, 50);
       return Response.redirect(`https://line.me/R/oaMessage/${encodeURIComponent(id)}/?${encodeURIComponent(q)}`, 302);
     }
+    // 韓系女裝官網（價格私訊報價，詢價清單傳官方 LINE）
+    if (url.pathname === "/women" || url.pathname === "/women/" || url.pathname === "/women/items.json") return handleWomen(request);
     if (url.pathname === "/shop" || url.pathname.startsWith("/shop/")) {
       try { return await handleShop(request, env, ctx, { loadCatalog, isExpired, displayName, lineApi, ver: CATALOG_VERSION, catStamp }); }
       catch (e) {
