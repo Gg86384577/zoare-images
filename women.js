@@ -25,9 +25,9 @@ export function handleWomen(request) {
 
 const PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ZOARÉ 韓系女裝批發</title>
-<meta name="description" content="韓系女裝批發：羽絨外套、羊羔毛外套、上衣裙褲。每款 2 件起，可混色，LINE 私訊報價。">
-<meta property="og:title" content="ZOARÉ 韓系女裝批發">
+<title>ZOARÉ 高品質韓系女裝批發</title>
+<meta name="description" content="高品質韓系女裝批發：羽絨外套、羊羔毛外套、上衣裙褲。每款 2 件起，可混色，LINE 私訊報價。">
+<meta property="og:title" content="ZOARÉ 高品質韓系女裝批發">
 <meta property="og:description" content="2026 冬季新款｜羽絨・羊羔毛・上衣裙褲｜每款 2 件起，LINE 私訊報價">
 <meta property="og:image" content="${IMG}d02.jpg">
 <meta name="theme-color" content="#F3F4F5">
@@ -47,6 +47,10 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .top.on{border-color:var(--line)}
 .bar{display:flex;align-items:center;justify-content:space-between;height:56px}
 .bar img{height:20px;display:block}
+.wm{display:flex;align-items:center;gap:10px}
+.metal{display:block;height:22px;aspect-ratio:3076/764;-webkit-mask:url(${LOGO}) center/contain no-repeat;mask:url(${LOGO}) center/contain no-repeat;background:linear-gradient(180deg,#A3A8B0 0%,#3D4047 45%,#B9BDC4 62%,#5A5E66 100%)}
+.wm small{font:400 10px/1 var(--serif);letter-spacing:.3em;color:#4A4E55}
+@media(max-width:380px){.wm small{display:none}}
 .bar .k{font-size:12px;letter-spacing:.18em;color:var(--mu)}
 .ask{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 16px;border-radius:99px;background:var(--btn);color:#fff;font-size:14px;font-weight:700}
 .ask b{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:#fff;color:var(--btn);font:800 12px/1 -apple-system,"PingFang TC",sans-serif}
@@ -164,15 +168,15 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 @media(prefers-reduced-motion:reduce){*,*:after{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
 </style></head>
 <body oncontextmenu="return false">
-<header class="top" id="top"><div class="wrap bar"><img src="${LOGO}" alt="ZOARÉ"><button class="ask" id="askTop" type="button">詢價清單 <b id="nTop">0</b></button></div></header>
+<header class="top" id="top"><div class="wrap bar"><span class="wm" role="img" aria-label="ZOARÉ 女裝"><span class="metal"></span><small>WOMENSWEAR</small></span><button class="ask" id="askTop" type="button">詢價清單 <b id="nTop">0</b></button></div></header>
 
 <section class="hero"><div class="wrap">
   <div>
     <div class="eyebrow">2026 WINTER COLLECTION</div>
     <h1>Korean<br><i>Womenswear</i></h1>
-    <p class="zh">韓系女裝批發</p>
+    <p class="zh">高品質韓系女裝批發</p>
     <div class="rule"></div>
-    <ul class="facts"><li>羽絨・羊羔毛・上衣裙褲</li><li>每款 2 件起，可混色</li><li>VIP 會員另有優惠價</li></ul>
+    <ul class="facts"><li>高品質面料與做工</li><li>羽絨・羊羔毛・上衣裙褲</li><li>每款 2 件起，可混色</li><li>VIP 會員另有優惠價</li></ul>
   </div>
   <div class="strip" aria-hidden="true"><div class="rail" id="rail"></div></div>
 </div></section>
@@ -189,7 +193,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 <main class="wrap" id="main"></main>
 
 <footer class="wrap foot">
-  <img src="${LOGO}" alt="ZOARÉ"><br>
+  <span class="metal" style="height:28px;margin:0 auto 6px" role="img" aria-label="ZOARÉ"></span><div style="font-size:11px;letter-spacing:.42em;color:#4A4E55;margin-bottom:12px">KOREAN WOMENSWEAR</div>
   官方 LINE：${LINE_ID}<br>
   也有日本角色商品批發：<a href="/shop">逛批發商城</a>
 </footer>
@@ -203,7 +207,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 const IMG=${JSON.stringify(IMG)},LINE_ID=${JSON.stringify(LINE_ID)};
 const CATS=${JSON.stringify(CATS)};
 const ITEMS=${JSON.stringify(ITEMS)};
-const SUB={new:"2026 新款，冬天主力",down:"短版、中長版都有，毛領款很多",fleece:"毛毛外套、背心、雙面穿",top:"上衣、針織、短褲、裙子、長褲"};
+const SUB={new:"高品質 2026 新款，冬天主力",down:"高品質羽絨，短版、中長版都有",fleece:"高品質羊羔毛外套、背心、雙面穿",top:"高品質上衣、針織、裙褲"};
 const $=s=>document.querySelector(s),esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const nt=n=>"NT$"+Number(n).toLocaleString("en-US");
 const byId=Object.fromEntries(ITEMS.map(x=>[x.id,x]));
@@ -217,7 +221,7 @@ let cat="all";try{const h=location.hash.slice(1);if(CATS.some(c=>c.k===h))cat=h}
 
 function tabs(){$("#tabs").innerHTML=CATS.map(c=>{const n=c.k==="all"?ITEMS.length:ITEMS.filter(x=>x.c===c.k).length;return '<button class="tab" role="tab" data-k="'+c.k+'" aria-selected="'+(c.k===cat)+'">'+c.t+'<small>'+n+'</small></button>'}).join("")}
 function card(x){const inq=cart.filter(l=>l.id===x.id).reduce((a,l)=>a+l.q,0);
-return '<button class="card reveal" type="button" data-id="'+x.id+'"><div class="ph"><img src="'+IMG+x.img+'" alt="'+esc(x.n)+'" loading="lazy"><span class="no">'+x.id+'</span>'+(inq?'<span class="in">已選 '+inq+'</span>':'')+'</div><div class="meta"><h3>'+esc(x.n)+'</h3><p>'+esc(x.co)+'</p>'+(x.p?'<div class="pr">'+nt(x.p)+'</div><div class="vip"><span class="tagv">VIP</span><span class="num">'+nt(x.v)+'</span></div><div class="q">每款 2 件起｜運費另計</div>':'<div class="q">每款 2 件起｜私訊報價</div>')+'</div></button>'}
+return '<button class="card reveal" type="button" data-id="'+x.id+'"><div class="ph"><img src="'+IMG+x.img+'" alt="'+esc(x.n)+'" loading="lazy"><span class="no">'+x.id+'</span>'+(inq?'<span class="in">已選 '+inq+'</span>':'')+'</div><div class="meta"><h3>'+esc(x.n)+'</h3><p>'+esc(x.co)+'</p>'+(x.p?'<div class="pr">'+nt(x.p)+'</div><div class="vip"><span class="tagv">VIP</span><span class="num">'+nt(x.v)+'</span></div><div class="q">高品質｜2 件起｜運費另計</div>':'<div class="q">高品質｜2 件起｜私訊報價</div>')+'</div></button>'}
 function render(){
   const groups=cat==="all"?CATS.slice(1):CATS.filter(c=>c.k===cat);
   $("#main").innerHTML=groups.map(g=>{const xs=ITEMS.filter(x=>x.c===g.k);return '<div class="sec"><h2>'+g.t+'</h2><span>'+xs.length+' 款・'+SUB[g.k]+'</span></div><div class="grid">'+xs.map(card).join("")+'</div>'}).join("");
@@ -237,7 +241,7 @@ $("#mask").onclick=close;$("#x").onclick=close;document.addEventListener("keydow
 let cur=null;
 function detail(id){const x=byId[id],cs=colors(x);cur={id,c:cs.length===1?cs[0]:"",q:2};
  open('<div class="dt"><div class="big"><img src="'+IMG+x.img+'" alt="'+esc(x.n)+'"></div><div>'+
- '<div class="sub">No. '+x.id+'・'+esc((CATS.find(c=>c.k===x.c)||{}).t)+'</div><h3>'+esc(x.n)+'</h3>'+
+ '<div class="sub">高品質・No. '+x.id+'・'+esc((CATS.find(c=>c.k===x.c)||{}).t)+'</div><h3>'+esc(x.n)+'</h3>'+
  '<ul class="rows"><li><span>顏色</span>'+esc(x.co)+'</li><li><span>尺寸</span>'+esc(x.sz||"F 均碼")+'</li>'+(x.m?'<li><span>材質</span>'+esc(x.m)+'</li>':'')+'</ul>'+
  '<div class="lbl">選顏色</div><div class="chips" id="cs">'+cs.map(c=>'<button class="chip" type="button" aria-pressed="'+(c===cur.c)+'" data-c="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div>'+
  '<div class="lbl">件數（每款 2 件起，可混色）</div><div class="qty"><button type="button" data-d="-1" aria-label="少一件">−</button><output id="q">2</output><button type="button" data-d="1" aria-label="多一件">+</button></div>'+
