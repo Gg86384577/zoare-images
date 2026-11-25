@@ -167,9 +167,15 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*,*:after{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+.plans{display:grid;gap:12px;margin:8px auto 34px;scroll-margin-top:120px}.plans h2{font-size:22px;margin:0}.plans>p{margin:0 0 4px;color:#5E6268;font-size:13px}
+.pl{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px 18px 16px}.pl.vip{background:#161616;color:#fff;border-color:#161616}.pl .k{font-size:11px;letter-spacing:.2em;color:var(--gold);font-weight:700}
+.pl h3{margin:4px 0 2px;font-size:19px}.pl .pr{font:800 22px/1.3 "M PLUS Rounded 1c",-apple-system,sans-serif}.pl .pr small{font-size:12px;font-weight:700;opacity:.7}.pl ul{margin:10px 0 0;padding-left:18px;font-size:13.5px;line-height:1.8}
+.pl .go{margin-top:14px}.pl.vip .go{background:#fff;color:#161616}.pl .row{display:flex;gap:8px}.pl .row .ghost{margin-top:14px;height:48px}
+@media(min-width:760px){.plans .cols{grid-template-columns:1fr 1fr}}.plans .cols{display:grid;gap:12px}
+.note2{font-size:12px;color:#5E6268;margin:8px 0 0;line-height:1.6}
 </style></head>
 <body oncontextmenu="return false">
-<header class="top" id="top"><div class="wrap bar"><span class="wm" role="img" aria-label="ZOARÉ WOMEN"><img src="${LOGO}" alt=""><i class="gl"></i><small>WOMEN</small></span><button class="ask" id="askTop" type="button">詢價清單 <b id="nTop">0</b></button></div></header>
+<header class="top" id="top"><div class="wrap bar"><span class="wm" role="img" aria-label="ZOARÉ WOMEN"><img src="${LOGO}" alt=""><i class="gl"></i><small>WOMEN</small></span><button class="ask" id="askTop" type="button">我的清單 <b id="nTop">0</b></button></div></header>
 
 <section class="hero"><div class="wrap">
   <div>
@@ -184,14 +190,27 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 
 <div class="wrap">
   <div class="how">
-    <div><em>01</em><b>挑款</b><span>點商品選顏色、件數，加進詢價清單</span></div>
-    <div><em>02</em><b>LINE 傳給我們</b><span>清單一鍵帶進官方 LINE</span></div>
-    <div><em>03</em><b>報價後下單</b><span>確認價格和數量再付款</span></div>
+    <div><em>01</em><b>挑款</b><span>點商品選顏色、件數，加進清單</span></div>
+    <div><em>02</em><b>直接下單</b><span>有標價的款用 LINE 登入直接下單</span></div>
+    <div><em>03</em><b>沒標價的問報價</b><span>清單一鍵帶進官方 LINE 報價</span></div>
   </div>
 </div>
 
 <nav class="tabs" aria-label="分類"><div class="wrap" id="tabs" role="tablist"></div></nav>
 <main class="wrap" id="main"></main>
+
+<section class="wrap plans" id="plans">
+  <h2>VIP 會員・開團素材包</h2><p>女裝和日本角色商品共用同一個會員，一次加入兩邊都適用</p>
+  <div class="cols">
+  <div class="pl vip"><div class="k">VIP MEMBER</div><h3>VIP 會員</h3><div class="pr">NT$1,000<small> / 月</small></div>
+   <ul><li>羽絨新款直接用 VIP 價，每件省 <span class="num">NT$190～310</span></li><li>每月送 <span class="num">NT$1,000</span> 購物金（5 張 <span class="num">$200</span>，每筆滿 <span class="num">$3,000</span> 用 1 張）</li><li>每月 10 張國內＋10 張國際運費券</li><li>不限總件數，開團素材包免費</li></ul>
+   <button class="go" type="button" data-buy="MEMBER|VIP">加入 VIP</button></div>
+  <div class="pl"><div class="k">STARTER PACK</div><h3>開團素材包</h3><div class="pr">NT$149<small> / 單週</small>・NT$399<small> / 包月</small></div>
+   <ul><li>每週 10 款新品宣傳圖</li><li>FB、IG、Threads 文案寫好，直接貼就能開團</li><li>VIP 會員免費</li></ul>
+   <div class="row"><button class="go" type="button" data-buy="PACK|WEEK">買單週</button><button class="ghost" type="button" data-buy="PACK|MONTH">買包月</button></div></div>
+  </div>
+  <p class="note2">一般會員 <span class="num">NT$100</span>／月：混批 21 件、每月 5 張國內運費券。<a href="#" data-buy="MEMBER|GEN" style="text-decoration:underline;color:var(--ink)">加入一般會員</a></p>
+</section>
 
 <footer class="wrap foot">
   <img src="${LOGO}" alt="ZOARÉ" style="height:26px;margin-bottom:8px"><div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px;font-size:12px;letter-spacing:.5em;color:#5E6268;padding-left:.5em"><i class="gl" style="width:28px"></i>WOMEN<i class="gl" style="width:28px"></i></div>
@@ -199,7 +218,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   也有日本角色商品批發：<a href="/shop">逛批發商城</a>
 </footer>
 
-<button class="fab" id="fab" type="button">傳詢價清單給我們 <b id="nFab">0</b></button>
+<button class="fab" id="fab" type="button">看我的清單 <b id="nFab">0</b></button>
 <div class="mask" id="mask"></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><button class="x" id="x" type="button" aria-label="關閉">×</button><div id="sb"></div></section>
 <div class="toast" id="toast" role="status"></div>
@@ -212,6 +231,8 @@ const SUB={new:"高品質 2026 新款，冬天主力",down:"高品質羽絨，�
 const $=s=>document.querySelector(s),esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const nt=n=>"NT$"+Number(n).toLocaleString("en-US");
 const byId=Object.fromEntries(ITEMS.map(x=>[x.id,x]));
+const ORDK={"D01|軍綠": "韓系女裝 大連|ZW-D01-1", "D01|本白": "韓系女裝 大連|ZW-D01-2", "D02|米白": "韓系女裝 大連|ZW-D02-1", "D02|軍綠": "韓系女裝 大連|ZW-D02-2", "D03|中灰": "韓系女裝 大連|ZW-D03-1", "D03|米杏": "韓系女裝 大連|ZW-D03-2", "D04|米白": "韓系女裝 大連|ZW-D04-1", "D04|深灰": "韓系女裝 大連|ZW-D04-2", "D05|巧克力色": "韓系女裝 大連|ZW-D05-1", "D06|藏青": "韓系女裝 大連|ZW-D06-1", "D06|卡其": "韓系女裝 大連|ZW-D06-2", "D07|軍綠": "韓系女裝 大連|ZW-D07-1", "D07|米白": "韓系女裝 大連|ZW-D07-2", "D08|卡其": "韓系女裝 大連|ZW-D08-1", "D08|黑": "韓系女裝 大連|ZW-D08-2", "D09|藏青": "韓系女裝 大連|ZW-D09-1", "D09|軍綠": "韓系女裝 大連|ZW-D09-2", "D10|黑": "韓系女裝 大連|ZW-D10-1", "D11|藍": "韓系女裝 大連|ZW-D11-1", "D11|灰": "韓系女裝 大連|ZW-D11-2", "D12|黑": "韓系女裝 大連|ZW-D12-1", "D12|白": "韓系女裝 大連|ZW-D12-2", "D13|黑": "韓系女裝 大連|ZW-D13-1", "D13|銀灰": "韓系女裝 大連|ZW-D13-2", "D14|藏青": "韓系女裝 大連|ZW-D14-1", "D15|銀灰": "韓系女裝 大連|ZW-D15-1", "D15|黑": "韓系女裝 大連|ZW-D15-2", "D16|淡藍": "韓系女裝 大連|ZW-D16-1", "D16|灰": "韓系女裝 大連|ZW-D16-2", "D16|黑": "韓系女裝 大連|ZW-D16-3", "D17|卡其": "韓系女裝 大連|ZW-D17-1", "D17|深棕": "韓系女裝 大連|ZW-D17-2"};
+const okey=l=>ORDK[l.id+"|"+l.c];
 const colors=x=>String(x.co||"").split(/[、／\\/]/).map(s=>s.trim()).filter(Boolean);
 let cart=[];try{cart=JSON.parse(localStorage.getItem("zw_cart")||"[]").filter(l=>byId[l.id])}catch(e){}
 const save=()=>{try{localStorage.setItem("zw_cart",JSON.stringify(cart))}catch(e){}};
@@ -246,29 +267,39 @@ function detail(id){const x=byId[id],cs=colors(x);cur={id,c:cs.length===1?cs[0]:
  '<ul class="rows"><li><span>顏色</span>'+esc(x.co)+'</li><li><span>尺寸</span>'+esc(x.sz||"F 均碼")+'</li>'+(x.m?'<li><span>材質</span>'+esc(x.m)+'</li>':'')+'</ul>'+
  '<div class="lbl">選顏色</div><div class="chips" id="cs">'+cs.map(c=>'<button class="chip" type="button" aria-pressed="'+(c===cur.c)+'" data-c="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div>'+
  '<div class="lbl">件數（每款 2 件起，可混色）</div><div class="qty"><button type="button" data-d="-1" aria-label="少一件">−</button><output id="q">2</output><button type="button" data-d="1" aria-label="多一件">+</button></div>'+
- (x.p?'<div class="price"><span class="pbig">'+nt(x.p)+' <small style="font-size:13px">/ 件</small></span><div style="display:flex;align-items:center;gap:6px;margin:0 0 8px"><span class="tagv">VIP</span><span class="num" style="font-size:18px">'+nt(x.v)+'</span><small>/ 件</small></div>怎麼加入 VIP 請問 LINE。運費另計，加進清單後用 LINE 傳給我們確認數量和運費。</div>':'<div class="price"><b>批發價｜私訊報價</b><br>加進清單後用 LINE 傳給我們，我們會回你價格。</div>')+
- '<button class="go" id="add" type="button"'+(cur.c?'':' disabled')+'>'+(cur.c?'加進詢價清單':'先選顏色')+'</button><button class="ghost" id="later" type="button">再看看</button></div></div>');
- $("#cs").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;cur.c=b.dataset.c;document.querySelectorAll("#cs .chip").forEach(c=>c.setAttribute("aria-pressed",c===b));$("#add").disabled=false;$("#add").textContent="加進詢價清單"};
+ (x.p?'<div class="price"><span class="pbig">'+nt(x.p)+' <small style="font-size:13px">/ 件</small></span><div style="display:flex;align-items:center;gap:6px;margin:0 0 8px"><span class="tagv">VIP</span><span class="num" style="font-size:18px">'+nt(x.v)+'</span><small>/ 件</small></div>可以直接下單，用 LINE 登入後付款。VIP 會員自動套用 VIP 價，運費另計。</div>':'<div class="price"><b>批發價｜私訊報價</b><br>加進清單後用 LINE 傳給我們，我們會回你價格。</div>')+
+ '<button class="go" id="add" type="button"'+(cur.c?'':' disabled')+'>'+(cur.c?(x.p?'加入清單':'加進詢價清單'):'先選顏色')+'</button><button class="ghost" id="later" type="button">再看看</button></div></div>');
+ $("#cs").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;cur.c=b.dataset.c;document.querySelectorAll("#cs .chip").forEach(c=>c.setAttribute("aria-pressed",c===b));$("#add").disabled=false;$("#add").textContent=byId[cur.id].p?"加入清單":"加進詢價清單"};
  $("#sb .qty").onclick=e=>{const b=e.target.closest("button");if(!b)return;cur.q=Math.max(1,Math.min(99,cur.q+ +b.dataset.d));$("#q").textContent=cur.q};
  $("#later").onclick=close;
- $("#add").onclick=()=>{const l=cart.find(l=>l.id===cur.id&&l.c===cur.c);if(l)l.q+=cur.q;else cart.push({id:cur.id,c:cur.c,q:cur.q});save();count();render();close();toast("已加進詢價清單");const f=$("#fab");f.classList.remove("bump");void f.offsetWidth;f.classList.add("bump")};
+ $("#add").onclick=()=>{const l=cart.find(l=>l.id===cur.id&&l.c===cur.c);if(l)l.q+=cur.q;else cart.push({id:cur.id,c:cur.c,q:cur.q});save();count();render();close();toast("已加進清單");const f=$("#fab");f.classList.remove("bump");void f.offsetWidth;f.classList.add("bump")};
 }
 function totals(){const t={};cart.forEach(l=>t[l.id]=(t[l.id]||0)+l.q);return t}
 function list(){
- if(!cart.length){open('<div class="sh"><h3>詢價清單</h3></div><div class="empty">還沒有挑款，點商品就能加進來。</div><div style="padding:0 16px"><button class="ghost" id="later" type="button">去逛逛</button></div>');$("#later").onclick=close;return}
+ if(!cart.length){open('<div class="sh"><h3>我的清單</h3></div><div class="empty">還沒有挑款，點商品就能加進來。</div><div style="padding:0 16px"><button class="ghost" id="later" type="button">去逛逛</button></div>');$("#later").onclick=close;return}
  const t=totals();
- open('<div class="sh"><h3>詢價清單</h3><p>共 '+Object.keys(t).length+' 款，每款合計 2 件起（可混色）'+(cart.some(l=>byId[l.id].p)?'<br>有標價的小計 <span class="num" style="color:var(--ink);font-size:16px">'+nt(cart.reduce((a,l)=>a+(byId[l.id].p||0)*l.q,0))+'</span>・VIP <span class="num" style="color:var(--ink);font-size:16px">'+nt(cart.reduce((a,l)=>a+(byId[l.id].v||0)*l.q,0))+'</span>（運費另計）':'')+'</p></div><ul class="lst">'+cart.map((l,i)=>{const x=byId[l.id];return '<li><img src="'+IMG+x.img+'" alt=""><div class="t">'+esc(x.n)+'<small>No. '+x.id+'・'+esc(l.c)+(x.p?'・<span class="num">'+nt(x.p*l.q)+'</span>（VIP <span class="num">'+nt(x.v*l.q)+'</span>）':'')+'</small>'+(t[l.id]<2?'<small class="warn">這款還差 '+(2-t[l.id])+' 件</small>':'')+'</div><div class="qty" data-i="'+i+'"><button type="button" data-d="-1" aria-label="少一件">−</button><output>'+l.q+'</output><button type="button" data-d="1" aria-label="多一件">+</button></div><button class="del" type="button" data-i="'+i+'">刪除</button></li>'}).join("")+'</ul><div style="padding:0 16px"><button class="go" id="send" type="button">用 LINE 傳給我們</button><button class="ghost" id="later" type="button">繼續挑款</button></div>');
+ open('<div class="sh"><h3>我的清單</h3><p>共 '+Object.keys(t).length+' 款，每款合計 2 件起（可混色）'+(cart.some(l=>byId[l.id].p)?'<br>有標價的小計 <span class="num" style="color:var(--ink);font-size:16px">'+nt(cart.reduce((a,l)=>a+(byId[l.id].p||0)*l.q,0))+'</span>・VIP <span class="num" style="color:var(--ink);font-size:16px">'+nt(cart.reduce((a,l)=>a+(byId[l.id].v||0)*l.q,0))+'</span>（運費另計）':'')+'</p></div><ul class="lst">'+cart.map((l,i)=>{const x=byId[l.id];return '<li><img src="'+IMG+x.img+'" alt=""><div class="t">'+esc(x.n)+'<small>No. '+x.id+'・'+esc(l.c)+(x.p?'・<span class="num">'+nt(x.p*l.q)+'</span>（VIP <span class="num">'+nt(x.v*l.q)+'</span>）':'')+'</small>'+(t[l.id]<2?'<small class="warn">這款還差 '+(2-t[l.id])+' 件</small>':'')+'</div><div class="qty" data-i="'+i+'"><button type="button" data-d="-1" aria-label="少一件">−</button><output>'+l.q+'</output><button type="button" data-d="1" aria-label="多一件">+</button></div><button class="del" type="button" data-i="'+i+'">刪除</button></li>'}).join("")+'</ul><div style="padding:0 16px">'+(cart.some(l=>byId[l.id].p)?'<button class="go" id="buy" type="button">有標價的 '+cart.filter(l=>byId[l.id].p).length+' 項直接下單</button>':'')+(cart.some(l=>!byId[l.id].p)?'<button class="'+(cart.some(l=>byId[l.id].p)?'ghost':'go')+'" id="send" type="button">沒標價的用 LINE 問報價</button>':'')+'<button class="ghost" id="later" type="button">繼續挑款</button><p class="note2">直接下單會用 LINE 登入，VIP 會員自動套用 VIP 價。</p></div>');
  $("#later").onclick=close;
  $("#sb .lst").onclick=e=>{const d=e.target.closest(".del");if(d){cart.splice(+d.dataset.i,1)}else{const b=e.target.closest(".qty button");if(!b)return;const l=cart[+b.closest(".qty").dataset.i];l.q=Math.max(1,Math.min(99,l.q+ +b.dataset.d))}save();count();render();list()};
- $("#send").onclick=send;
+ if($("#send"))$("#send").onclick=send;if($("#buy"))$("#buy").onclick=buy;
 }
-function send(){const t=totals(),short=Object.keys(t).filter(k=>t[k]<2);
+function send(){const t=totals(),short=Object.keys(t).filter(k=>t[k]<2&&!byId[k].p);
  if(short.length){toast("有 "+short.length+" 款不到 2 件，再加一件就好");return}
- const lines=cart.map((l,i)=>{const x=byId[l.id];return (i+1)+". "+l.id+" "+x.n+"｜"+l.c+" × "+l.q+(x.p?"（一般 "+nt(x.p)+"／VIP "+nt(x.v)+"）":"（請報價）")});
- const sum=cart.reduce((a,l)=>a+(byId[l.id].p||0)*l.q,0),vsum=cart.reduce((a,l)=>a+(byId[l.id].v||0)*l.q,0);
+ const lines=cart.filter(l=>!byId[l.id].p).map((l,i)=>{const x=byId[l.id];return (i+1)+". "+l.id+" "+x.n+"｜"+l.c+" × "+l.q+(x.p?"（一般 "+nt(x.p)+"／VIP "+nt(x.v)+"）":"（請報價）")});
+ const sum=0,vsum=0;
  const msg="女裝詢價（官網）\\n"+lines.join("\\n")+(sum?"\\n\\n有標價的小計：一般 "+nt(sum)+"／VIP "+nt(vsum)+"（運費另計）":"")+"\\n\\n麻煩幫我確認，謝謝！";
  location.href="https://line.me/R/oaMessage/"+encodeURIComponent(LINE_ID)+"/?"+encodeURIComponent(msg);
 }
+// 直接下單：放進批發商城的購物車（同一個會員、同一套結帳）
+async function toShop(c){let T="";try{T=localStorage.getItem("zo_t")||""}catch(e){}
+ if(T){let z={};try{z=JSON.parse(localStorage.getItem("zo_cart")||"{}")}catch(e){}for(const k in c)z[k]=(z[k]||0)+c[k];try{localStorage.setItem("zo_cart",JSON.stringify(z))}catch(e){}location.href="/shop?v=cart";return true}
+ try{const r=await fetch("/shop/guestcart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cart:c})}).then(r=>r.json());if(!r.ok)throw 0;location.href="/shop/login?g="+encodeURIComponent(r.id);return true}catch(e){toast("暫時無法處理，請稍後再試");return false}}
+async function buy(){const t=totals(),short=Object.keys(t).filter(k=>t[k]<2&&byId[k].p);
+ if(short.length){toast("有 "+short.length+" 款不到 2 件，再加一件就好");return}
+ const c={};cart.filter(l=>byId[l.id].p).forEach(l=>{const k=okey(l);if(k)c[k]=(c[k]||0)+l.q});if(!Object.keys(c).length)return;
+ const b=$("#buy");b.disabled=true;b.textContent="處理中…";
+ if(await toShop(c)){cart=cart.filter(l=>!byId[l.id].p);save()}else{b.disabled=false;b.textContent="直接下單"}}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-buy]");if(!b)return;e.preventDefault();toShop({[b.dataset.buy]:1})});
 $("#askTop").onclick=list;$("#fab").onclick=list;
 $("#tabs").onclick=e=>{const b=e.target.closest(".tab");if(!b)return;cat=b.dataset.k;try{history.replaceState(null,"","#"+cat)}catch(_){}tabs();render();const y=$("#tabs").getBoundingClientRect().top+scrollY-56;if(scrollY>y)scrollTo({top:y})};
 $("#main").onclick=e=>{const c=e.target.closest(".card");if(c)detail(c.dataset.id)};
