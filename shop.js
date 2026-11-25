@@ -1791,7 +1791,7 @@ async function init(){
   const CID=new URLSearchParams(location.search).get("cart");
   if(CID&&T){try{const r=await fetch("/shop/guestcart?id="+encodeURIComponent(CID)).then(r=>r.json());if(r.ok&&r.cart){for(const k in r.cart)if(ALL.find(x=>x.k===k))cart[k]=r.cart[k];save();bar();renderCart();$("#sheet").classList.add("on")}}catch(e){}}
   const MF0=new URLSearchParams(location.search).get("mf");if(MF0)goMf(MF0);
-  const V=new URLSearchParams(location.search).get("v");if(V==="orders")openOrders();if(V==="news")openNews();
+  const V=new URLSearchParams(location.search).get("v");if(V==="orders")openOrders();if(V==="news")openNews();if(V==="cart"&&Object.keys(cart).length){renderCart();$("#sheet").classList.add("on")}
 }
 const norm=s=>String(s).toLowerCase().replace(/[\\s・·、，,。．.()（）「」\\-_/|｜]/g,"");
 let tmr;$("#q").oninput=()=>{clearTimeout(tmr);tmr=setTimeout(filter,250)};
