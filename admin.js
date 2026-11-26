@@ -1,5 +1,5 @@
 // ZOARÉ 商家後台：老闆在 LINE 傳「後台」取得專屬連結（只有綁定的老闆帳號能開）
-import { costFactors, lineCostReal, canMerge, fillLineImgs, listBatches, arrivalState, orderMfrs, computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay } from "./shop.js";
+import { costFactors, lineCostReal, canMerge, fillLineImgs, listBatches, arrivalState, orderMfrs, computePools, mfrOf, mfrStatusSync, cartList, TIER_NAME, sign, allOrders, lineCost, situation, OPEN, payDiff, shopOwnerCommand, SHOP_BASE, setMembership, fmtDay, platOf } from "./shop.js";
 
 export async function adminLink(env, uid) {
   return `${SHOP_BASE}/admin?t=${uid}.${await sign(env, "admin:" + uid)}`;
@@ -89,7 +89,7 @@ async function buildData(env, deps = {}) {
     carts, pools, stats: st, daily, counts,
     members: { ...mem, active: { vip: custList.filter((c) => c.tier === "vip").length, member: custList.filter((c) => c.tier === "member").length } },
     top: Object.values(items).sort((a, b) => b.q - a.q).slice(0, 20),
-    orders: orders.map((o) => ({ id: o.id, uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
+    orders: orders.map((o) => ({ id: o.id, plat: platOf(o), uid: o.uid, name: o.lineName, at: o.at, status: o.status, situation: situation(o), memo: o.memo || "",
       total: o.total, qty: o.qty, pay: o.form.pay || "轉帳", paid5: o.paid5 || "", track: o.track || "", tier: TIER_NAME[o.tier], diff: payDiff(o).trim(), memOnly: (o.lines || []).length > 0 && o.lines.every((l) => l.mem), mst: mfrStatusSync(o, (pools && pools.P) || {}, pools && pools.need), shipDue: o.shipDue || 0, intlPend: Object.values(o.sh || {}).some((v) => v.fee && v.fee.intl === null),
       mergeWith: canMerge(o) && (mgroups[o.uid] || []).length > 1 ? mgroups[o.uid] : [], lines: o.lines.map((l) => ({ n: l.n, q: l.q, price: l.price, sub: l.sub, jan: l.jan, img: l.img || "", sh: !!(o.sh && o.sh[l.m || mfrOf(l.b)]) })), form: o.form, notes: o.notes || [] })),
     customers: custList,
@@ -162,7 +162,9 @@ const T=new URLSearchParams(location.search).get("t")||"";
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=n=>"NT$"+Number(n||0).toLocaleString();
-let D=null,V="home",OF="進行中",OQ="",SP="month";
+let D=null,V="home",OF="進行中",OQ="",SP="month",PF="all";
+const PN={all:"全部平台",jp:"🗾 日本批發",women:"👗 女裝"};
+function platCard(k){const L=D.orders.filter(o=>o.plat===k&&o.status!=="已取消"),mo=new Date(Date.now()+8*36e5).toISOString().slice(0,7),M=L.filter(o=>String(o.at).startsWith(mo)),op=L.filter(o=>["待付款","已回報匯款","待確認","已付款"].includes(o.status));return '<div class="row" onclick="PF=\''+k+'\';goOrders(\'進行中\')"><span><b>'+PN[k]+'</b><br><small class="meta">本月 '+M.length+' 筆・'+fmt(M.reduce((a,o)=>a+o.total,0))+'</small></span><b>進行中 '+op.length+' 筆 ›</b></div>'}
 async function api(p,body){const r=await fetch(p,{method:body?"POST":"GET",headers:{"x-admin":T,"content-type":"application/json"},body:body?JSON.stringify(body):undefined});return r.json()}
 function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
 async function load(){const r=await api("/admin/api/data");if(!r.ok){$("#m").innerHTML='<div class="err">'+esc(r.error)+'</div>';$("#nav").hidden=true;return}D=r;render()}
@@ -196,19 +198,20 @@ function carts(){const L=D.carts||[];
 function kc(t,v,s){return '<div class="kc"><small>'+t+'</small><b>'+v+'</b>'+(s?'<i>'+s+'</i>':'')+'</div>'}
 function home(){const s=D.stats,c=D.counts;const max=Math.max(1,...Object.values(D.daily));
   $("#m").innerHTML='<div class="k">'+kc("今日銷售額",fmt(s.today.rev),"淨利 "+fmt(s.today.profit))+kc("本月銷售額",fmt(s.month.rev),"淨利 "+fmt(s.month.profit))+kc("本月訂單",s.month.n+" 筆",s.month.pcs+" 件")+kc("待處理",(c["待付款"]+c["已回報匯款"]+c["待確認"]+c["已付款"])+" 筆","待出貨 "+c["已付款"]+" 筆")+'</div>'+
-  '<div class="card"><h3>近 14 天銷售額</h3><div class="bars">'+Object.entries(D.daily).map(([d,v])=>'<div class="bar" title="'+d+' '+fmt(v)+'"><div style="height:'+Math.round(v/max*100)+'%"></div><span>'+d.slice(8)+'</span></div>').join("")+'</div></div>'+
+  '<div class="card"><h3>兩個平台</h3>'+platCard("jp")+platCard("women")+'</div>'+'<div class="card"><h3>近 14 天銷售額</h3><div class="bars">'+Object.entries(D.daily).map(([d,v])=>'<div class="bar" title="'+d+' '+fmt(v)+'"><div style="height:'+Math.round(v/max*100)+'%"></div><span>'+d.slice(8)+'</span></div>').join("")+'</div></div>'+
   '<div class="card"><h3>需要處理</h3>'+[["待確認","付款截圖對不上，要人工確認"],["已付款","已付款，等出貨"],["待付款","等客人付款"],["已回報匯款","客人回報後五碼，等截圖"]].map(([k,t])=>'<div class="row" onclick="goOrders(\''+k+'\')"><span>'+t+'</span><b>'+(c[k]||0)+' 筆 ›</b></div>').join("")+'</div>'}
 window.goOrders=f=>{OF=f;V="orders";document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x.dataset.v==="orders"));render()};
 const FILTERS=["進行中","待付款","待確認","已付款","已出貨","已取消","全部"];
 function orders(){
-  const list=D.orders.filter(o=>(OF==="全部"||(OF==="進行中"?["待付款","已回報匯款","待確認","已付款"].includes(o.status):o.status===OF))&&(!OQ||(o.id+o.name+o.form.name+o.form.phone+o.lines.map(l=>l.n).join("")).toLowerCase().includes(OQ.toLowerCase())));
-  $("#m").innerHTML='<input class="f" id="oq" placeholder="搜尋客人、訂單編號、商品" value="'+esc(OQ)+'"><div class="chips" style="margin-top:8px">'+FILTERS.map(f=>'<button class="chip'+(f===OF?" on":"")+'" data-f="'+f+'">'+f+'</button>').join("")+'</div>'+
+  const list=D.orders.filter(o=>(PF==="all"||o.plat===PF)&&(OF==="全部"||(OF==="進行中"?["待付款","已回報匯款","待確認","已付款"].includes(o.status):o.status===OF))&&(!OQ||(o.id+o.name+o.form.name+o.form.phone+o.lines.map(l=>l.n).join("")).toLowerCase().includes(OQ.toLowerCase())));
+  $("#m").innerHTML='<input class="f" id="oq" placeholder="搜尋客人、訂單編號、商品" value="'+esc(OQ)+'"><div class="chips" style="margin-top:8px">'+Object.keys(PN).map(k=>'<button class="chip'+(k===PF?" on":"")+'" data-p="'+k+'">'+PN[k]+'</button>').join("")+'</div><div class="chips" style="margin-top:6px">'+FILTERS.map(f=>'<button class="chip'+(f===OF?" on":"")+'" data-f="'+f+'">'+f+'</button>').join("")+'</div>'+
   '<div class="meta" style="margin-top:8px">共 '+list.length+' 筆　'+fmt(list.reduce((a,o)=>a+o.total,0))+'</div>'+(list.map(ocard).join("")||'<div class="err">沒有訂單</div>');
   $("#oq").oninput=e=>{OQ=e.target.value;clearTimeout(window._t);window._t=setTimeout(()=>{orders();const i=$("#oq");i.focus();i.setSelectionRange(i.value.length,i.value.length)},400)};
   document.querySelectorAll(".chip[data-f]").forEach(b=>b.onclick=()=>{OF=b.dataset.f;orders()});
+  document.querySelectorAll(".chip[data-p]").forEach(b=>b.onclick=()=>{PF=b.dataset.p;orders()});
 }
 function ocard(o){return '<div class="o" data-id="'+o.id+'"><div class="hd"><b>'+esc(o.name)+'</b><span class="st s-'+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
-  '<div class="meta">'+o.id+'｜'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.pay)+'｜'+esc(o.tier)+'價</div><div style="font-size:18px;font-weight:700;margin-top:4px">'+fmt(o.total)+'</div>'+
+  '<div class="meta">'+(o.plat==="women"?'<b style="color:#8a5a2b">👗 女裝</b>｜':'')+o.id+'｜'+esc(o.at)+'｜'+o.qty+' 件｜'+esc(o.pay)+'｜'+esc(o.tier)+'價</div><div style="font-size:18px;font-weight:700;margin-top:4px">'+fmt(o.total)+'</div>'+
   ((o.mergeWith||[]).length>1?'<div style="margin-top:8px;background:#fff6db;border:1px solid #f0d58a;border-radius:10px;padding:8px 10px;font-size:13px;display:flex;align-items:center;gap:8px"><span style="flex:1">🔗 這位客人有 <b>'+o.mergeWith.length+' 張</b>還沒出貨的訂單（'+o.mergeWith.map(esc).join("、")+'），要合併嗎？</span><button class="btn" style="background:#161616;color:#fff;padding:6px 10px" onclick="mergeO(\''+o.mergeWith.join(" ")+'\')">合併</button></div>':'')+
   '<div class="sit">狀況：'+esc(o.situation.split("\n")[0])+'</div>'+((o.mst||[]).length&&o.status!=="已取消"?'<div style="margin-top:6px">'+o.mst.map(z=>'<div class="meta" style="display:flex;gap:6px;align-items:center;padding:3px 0"><span style="flex:1">🏭 <b>'+esc(z.m)+'</b>：'+esc(z.s)+'</span>'+(z.k!=="sh"&&o.status==="已付款"?'<button class="btn" style="padding:5px 9px;font-size:12px" onclick="shipM(\''+o.id+'\',\''+esc(z.m).replace(/'/g,"")+'\')">🚚 這家已出貨</button>':'')+'</div>').join("")+'</div>':'')+(o.shipDue||o.intlPend?'<div class="memo">🚚 已出貨運費要收 NT$'+o.shipDue.toLocaleString()+(o.intlPend?'　<b style="color:#9e1b1b">國際運費待填</b> <button class="btn" style="padding:4px 8px;font-size:12px" onclick="intlFee(\''+o.id+'\')">填國際運費</button>':'')+'</div>':'')+(o.memo?'<div class="memo">📝 '+esc(o.memo)+'</div>':'')+(o.diff?'<div class="diff" style="display:flex;gap:8px;align-items:center"><span style="flex:1">'+esc(o.diff)+'</span><button class="btn" style="padding:5px 9px;font-size:12px" onclick="cmd(\''+o.id+' 差額已處理\')">✅ 已處理</button></div>':'')+
   '<details><summary>品項・收件資料・修改</summary>'+o.lines.map((l,i)=>'<div class="it">'+(l.img?'<img src="'+esc(l.img)+'" loading="lazy" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none">':'')+'<span class="n"'+(l.sh?' style="color:#999"':'')+'>'+(l.sh?'✅ <s>'+esc(l.n)+'</s> 已出貨':esc(l.n))+'<br><small style="color:#888">'+fmt(l.price)+' × '+l.q+' = '+fmt(l.sub)+'</small></span><input type="number" min="0" value="'+l.q+'" data-i="'+i+'"><button class="btn" onclick="setQ(\''+o.id+'\','+i+',this)">改</button></div>').join("")+

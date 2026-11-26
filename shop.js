@@ -98,6 +98,9 @@ function packN(it) {
 }
 let SLIM = null, SLIM_SRC = null, SLIM_TXT = null, SLIM_TXT_KEY = "";
 function hashStr(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + s.length.toString(36); }
+// 女裝官網（/women）的商品：品牌「韓系女裝 …」，跟日本批發分開下單（老闆 2026-11-26）
+export const isWomenLine = (l) => /^韓系女裝/.test((l && l.b) || "");
+export const platOf = (o) => o.plat || ((o.lines || []).some(isWomenLine) ? "women" : "jp");
 const MEMBER_ITEMS = [
   { k: "MEMBER|VIP", n: "VIP 會員（月費）每月 10 張國內＋10 張國際運費券・VIP 專屬價", b: "ZOARÉ 會員方案", s: "", g: 1000, v: 1000, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/member_vip.jpg?v=2", moq: 0, box: 0, pk: "", st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "vip" },
   { k: "PACK|WEEK", n: "開團素材包・單週（10 款新品宣傳圖＋FB/IG/Threads 文案）VIP 免費，傳「素材包」領", b: "ZOARÉ 開團素材包", s: "", g: 149, v: 149, img: "https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/pack_cover.jpg", moq: 0, box: 0, pk: "", pd: 7, st: "", sh: "", dl: "", jan: "", ad: "", c: ["會員方案"], mem: "pack" },
@@ -364,6 +367,7 @@ if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+
     if (!uid || !/^U[0-9a-f]{32}$/.test(uid)) { console.log("liff-auth fail", why); return Response.json({ ok: false, error: "LINE 身分驗證沒通過（" + why.trim().slice(0, 80) + "）" }, { status: 401 }); }
     const id = { name };
     if (env.SESSIONS && id.name) await env.SESSIONS.put("wn:" + uid, String(id.name).slice(0, 40), { expirationTtl: 400 * 86400 }).catch(() => {});
+    if (g.startsWith("WM")) return Response.json({ ok: true, url: `${SHOP_BASE}/women?t=${uid}.${await sign(env, uid)}${g.length > 2 ? "&cart=" + g.slice(2) : ""}` });
     return Response.json({ ok: true, url: `${SHOP_BASE}/shop?t=${uid}.${await sign(env, uid)}${g ? "&cart=" + g : ""}` });
   }
   if (p === "/shop/callback") {
@@ -380,6 +384,7 @@ if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+
     const uid = id.sub;
     if (!uid || !/^U[0-9a-f]{32}$/.test(uid)) return bad("LINE 登入失敗，請再試一次");
     if (env.SESSIONS && id.name) await env.SESSIONS.put("wn:" + uid, String(id.name).slice(0, 40), { expirationTtl: 400 * 86400 }).catch(() => {});
+    if (g.startsWith("WM")) return Response.redirect(`${SHOP_BASE}/women?t=${uid}.${await sign(env, uid)}${g.length > 2 ? "&cart=" + g.slice(2) : ""}`, 302);
     return Response.redirect(`${SHOP_BASE}/shop?t=${uid}.${await sign(env, uid)}${g ? "&cart=" + g : ""}`, 302);
   }
   if (p === "/shop/catalog") {
@@ -497,8 +502,12 @@ if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+
       lines.push({ k: it.k, n: it.sg ? it.n + "（少量）" : it.n, b: it.b, jan: it.jan, img: it.img || "", q, price, cost: it.mem ? 0 : c0, ...(it.sg ? { sg: 1 } : {}), ...(rp && rp.cd && rp.d && !it.mem ? { rc: Math.round((c0 * rp.cd) / rp.d) } : {}), sub: price * q, box: it.box, moq: it.moq, mem: it.mem || "", ...(it.pd ? { pd: it.pd } : {}), cs: caseN(it), c: it.c || [], m: it.m || mfrOf(it.b) });
     }
     if (!lines.length) return Response.json({ ok: false, error: "購物車是空的，或商品已下架" }, { status: 400 });
-    if (tier === "member") { const pcs = lines.filter((l) => !l.mem).reduce((x, l) => x + l.q, 0); if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `一般會員整張訂單混批合計要 21 件以上（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上\n\n加入 VIP 會員就沒有總件數限制，可以真正少量叫貨` }, { status: 400 }); }
-    if (tier === "none") { const amt = lines.filter((l) => !l.mem).reduce((x, l) => x + l.price * l.q, 0); if (amt > 0 && amt < NON_MIN) return Response.json({ ok: false, error: `非會員整張訂單要滿 NT$${NON_MIN.toLocaleString()}（目前 NT$${amt.toLocaleString()}），請再加 NT$${(NON_MIN - amt).toLocaleString()} 以上\n\n加入會員就沒有金額門檻：一般會員 NT$100／月混批 21 件，VIP 不限總件數` }, { status: 400 }); }
+    const plat = body.plat === "women" ? "women" : "jp";
+    if (plat === "women" && lines.some((l) => !l.mem && !isWomenLine(l))) return Response.json({ ok: false, error: "女裝官網只能下女裝商品，日本角色商品請到批發商城下單" }, { status: 400 });
+    if (plat === "jp" && lines.some(isWomenLine)) return Response.json({ ok: false, error: "女裝請到女裝官網下單（和日本批發分開結帳）" }, { status: 400 });
+    if (plat === "women") { const st = {}; for (const l of lines) if (!l.mem) { const k = String(l.jan || l.k).split("-")[1] || l.k; st[k] = (st[k] || 0) + l.q; } const sh = Object.keys(st).filter((k) => st[k] < 2); if (sh.length) return Response.json({ ok: false, error: `女裝每款要 2 件起（可混色），這幾款還不夠：${sh.join("、")}` }, { status: 400 }); }
+    if (tier === "member" && plat === "jp") { const pcs = lines.filter((l) => !l.mem).reduce((x, l) => x + l.q, 0); if (pcs > 0 && pcs < 21) return Response.json({ ok: false, error: `一般會員整張訂單混批合計要 21 件以上（目前 ${pcs} 件），請再加 ${21 - pcs} 件以上\n\n加入 VIP 會員就沒有總件數限制，可以真正少量叫貨` }, { status: 400 }); }
+    if (tier === "none" && plat === "jp") { const amt = lines.filter((l) => !l.mem).reduce((x, l) => x + l.price * l.q, 0); if (amt > 0 && amt < NON_MIN) return Response.json({ ok: false, error: `非會員整張訂單要滿 NT$${NON_MIN.toLocaleString()}（目前 NT$${amt.toLocaleString()}），請再加 NT$${(NON_MIN - amt).toLocaleString()} 以上\n\n加入會員就沒有金額門檻：一般會員 NT$100／月混批 21 件，VIP 不限總件數` }, { status: 400 }); }
     const badQ = lines.filter((l) => !l.mem && fixQty(l, tier, l.q) !== l.q);
     if (badQ.length) return Response.json({ ok: false, error: "下列商品數量需為起批數或起批數的倍數，請調整後再送出：\n" + badQ.slice(0, 8).map((l) => `・${l.n}：${l.q} 件 → 請改成 ${fixQty(l, tier, l.q)} 件`).join("\n") }, { status: 400 });
     const f = body.form || {};
@@ -509,7 +518,7 @@ if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+
     const sumAll = lines.reduce((a, l) => a + l.sub, 0);
     const qty = lines.reduce((a, l) => a + l.q, 0);
     const d = new Date(Date.now() + 8 * 3600e3);
-    const id = "ZO" + d.toISOString().slice(2, 10).replace(/-/g, "") + Math.random().toString(36).slice(2, 6).toUpperCase();
+    const id = (plat === "women" ? "ZW" : "ZO") + d.toISOString().slice(2, 10).replace(/-/g, "") + Math.random().toString(36).slice(2, 6).toUpperCase();
     // 使用折抵券
     let total = sumAll, coupon = null, cps = null;
     if (body.coupon) {
@@ -521,9 +530,9 @@ if(r&&r.url){location.replace(r.url)}else fail("登入失敗"+(r&&r.error?"："+
     }
     // 活動送折抵券（付款後生效）
     const camp = activeCampaign(), earn = campaignEarn(lines, camp);
-    const notes = ruleNotes(lines, tier);
+    const notes = plat === "women" ? ["女裝每款 2 件起（可混色），付款後我們會跟你確認出貨時間"] : ruleNotes(lines, tier);
     const lineName = await deps.displayName(env, uid);
-    const order = { id, uid, lineName, tier, lines, total, qty, form, notes, status: "待付款", at: d.toISOString().slice(0, 16).replace("T", " ") };
+    const order = { id, uid, lineName, tier, lines, total, qty, form, notes, plat, status: "待付款", at: d.toISOString().slice(0, 16).replace("T", " ") };
     if (coupon) { order.coupon = coupon; order.subtotal = sumAll; }
     if (earn.amt) {
       cps = cps || (await getCoupons(env, uid));
@@ -812,7 +821,7 @@ export async function computePools(env, deps = {}) {
   for (const o of orders) {
     if (o.status !== "已付款") continue;
     for (const l of o.lines || []) {
-      if (l.mem) continue;
+      if (l.mem || isWomenLine(l)) continue;
       const m = l.m || mfrOf(l.b);
       if ((o.po && o.po[m]) || (o.sh && o.sh[m]) || (o.defer && o.defer[m])) continue;
       const p = (pools[m] = pools[m] || { nt: 0, orders: [], since: o.paidAt || o.at });
@@ -912,6 +921,7 @@ export function mfrStatusSync(o, P, need, RT) {
     if (sh) out.push({ m, s: "已出貨（" + mmdd(sh.at) + "）" + (sh.track ? "・物流單號 " + sh.track : ""), k: "sh" });
     else if (o.status === "已出貨") out.push({ m, s: "已出貨", k: "sh" });
     else if (o.status === "已取消") out.push({ m, s: "已取消", k: "x" });
+    else if (/^韓系女裝/.test(m)) out.push({ m, s: o.status === "已付款" ? "女裝現貨，準備出貨" : "付款後安排出貨", k: o.status === "已付款" ? "pool" : "wait" });
     else if (o.arr && o.arr[m]) { const w = orderMfrs(o).filter((x) => !(o.sh && o.sh[x]) && !(o.arr && o.arr[x])); out.push({ m, s: "已到貨（" + mmdd(o.arr[m].at) + "）" + (!w.length || o.early === "先寄" ? "，準備出貨" : o.early === "等齊" ? "，幫您留著等其他商品一起寄" : "，等您回覆要不要先寄"), k: "arr" }); }
     else if (o.po && o.po[m]) out.push({ m, s: "已向日本叫貨（" + mmdd(o.po[m].at) + "），約 2～3 週到貨，到貨就先寄這家的商品", k: "po" });
     else if (o.status === "已付款" && o.defer && o.defer[m]) out.push({ m, s: "已順延到下一批（下一批湊滿會再問您）", k: "defer" });
@@ -934,7 +944,7 @@ export async function customerOrders(env, uid, link) {
   if (!list.length) return `目前沒有線上訂購網站的訂單紀錄喔${lemai}\n\n🛒 線上訂購：${link}`;
   const mst = await Promise.all(list.map((o) => orderMfrStatus(env, o)));
   const rows = list.map((o, i) => `📦 ${o.id}（${o.at.slice(0, 10)}）\n${o.qty} 件　NT$${o.total.toLocaleString()}　${o.form.pay || "轉帳"}　狀態：${o.status}${o.track ? "\n物流單號：" + o.track : ""}${mst[i].length > 1 && o.status !== "已取消" || (mst[i].length && !["已出貨", "已取消"].includes(o.status)) ? "\n" + mst[i].map((x) => `　・${x.m}：${x.s}`).join("\n") : ""}`);
-  return `您最近的訂單：\n\n${rows.join("\n\n")}\n\n要看完整明細，請點：\n${link}&v=orders\n（或傳訂單編號給我）${lemai}`;
+  return `您最近的訂單：\n\n${rows.map((r, i) => (platOf(list[i]) === "women" ? "👗 女裝 " : "") + r).join("\n\n")}\n\n要看完整明細，請點：\n${link}&v=orders\n（或傳訂單編號給我）${lemai}`;
 }
 const strike = (t) => [...String(t)].map((c) => c + "\u0336").join("");
 function shippedMark(o, l) { const m = l.m || mfrOf(l.b); return o.sh && o.sh[m] ? "✅已出貨 " : ""; }
@@ -980,12 +990,12 @@ async function notifyOrder(env, deps, o, bank) {
     if (owner) {
       const oc = orderCards(o, "新訂單商品");
       await deps.lineApi(env, "/v2/bot/message/push", { to: owner, messages: [...(oc ? [oc] : []), { type: "text", text:
-        `🛒 新訂單！\n客人：${o.lineName}（${TIER_NAME[o.tier]}${o.memGranted && o.prevTier !== o.tier ? `，下單會員方案已自動從${TIER_NAME[o.prevTier]}升級` : ""}）\n${orderText(o)}\n\n收件人：${o.form.name}\n電話：${o.form.phone}\n寄送：${o.form.ship}　${o.form.addr}` +
+        `${platOf(o) === "women" ? "👗 女裝官網新訂單！" : "🛒 日本批發新訂單！"}\n客人：${o.lineName}（${TIER_NAME[o.tier]}${o.memGranted && o.prevTier !== o.tier ? `，下單會員方案已自動從${TIER_NAME[o.prevTier]}升級` : ""}）\n${orderText(o)}\n\n收件人：${o.form.name}\n電話：${o.form.phone}\n寄送：${o.form.ship}　${o.form.addr}` +
         (o.form.note ? `\n備註：${o.form.note}` : "") }] });
     }
     const cardsMsg = orderCards(o, "訂購商品");
     await deps.lineApi(env, "/v2/bot/message/push", { to: o.uid, messages: [...(cardsMsg ? [cardsMsg] : []), { type: "text", text:
-      `謝謝您的訂購🙏 我們已收到訂單囉\n\n${orderText(o, false)}\n\n` +
+      `謝謝您的訂購🙏 我們已收到${platOf(o) === "women" ? "女裝" : ""}訂單囉\n\n${orderText(o, false)}\n\n` +
       (o.memGranted && o.prevTier !== o.tier ? `🎉 您已升級為${TIER_NAME[o.tier]}！這張訂單已套用會員價，之後下單也會自動用會員價（請在 3 天內完成付款，取消訂單會恢復原本等級）\n\n` : "") +
       (bank ? `💳 ${o.form.pay === "LINE Pay" ? "LINE Pay 付款資料" : "轉帳資料"}：\n${bank}\n\n${payHow(o.form.pay)}，系統會自動幫您對帳喔～` : "我們確認庫存後會再傳付款資料給您～") }] });
   } catch (e) { console.log("order notify failed", e); }
@@ -1773,7 +1783,7 @@ async function init(){
   {const cs=brands.filter(b=>b!=="全部"&&b!=="會員方案"&&b!=="其他");
    $("#cats").innerHTML=cs.map(b=>{const it=ALL.find(x=>!x.hid&&!x.mem&&x.img&&(x.c||[]).includes(b));return '<button class="cat" data-b="'+esc(b)+'"><span class="ci">'+(it?'<img loading="lazy" src="'+esc(it.img)+'" alt="">':'')+'</span><span class="cn">'+esc(b)+'</span></button>'}).join("")}
   $("#cats").onclick=$("#chips").onclick=async e=>{const t=e.target.closest("[data-b]"),b=t&&t.dataset.b;if(!b)return;if(b==="熱賣推薦"&&!HOT){try{HOT=await fetch("/shop/hot?v=__CV__").then(r=>r.json())}catch(_){HOT=[]}}brand=b;document.querySelectorAll(".chip,.cat").forEach(c=>c.classList.toggle("on",c.dataset.b===b));filter()};
-  for(const k in cart) if(!byK(k)) delete cart[k];
+  for(const k in cart) if(!byK(k)||/^韓系女裝/.test(k)) delete cart[k];
   if(T&&Object.keys(cart).length)save(); // 打開商城時就把手機裡原本的購物車同步上來
   buildFam();
   fetch(AIB+"index.json?h="+Math.floor(Date.now()/3e5)).then(r=>r.json()).then(r=>{AIX=r||{};const it=AIX.items||{};let n=0;for(const k in it){const x=byK(k);if(x){x.ai=AIB+it[k];n++;const v=byK(k+"|S");if(v)v.ai=x.ai}}
