@@ -175,6 +175,8 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .note2{font-size:12px;color:#5E6268;margin:8px 0 0;line-height:1.6}
 .fld{display:block;margin:12px 0 0;font-size:13px;color:#5E6268}.fld input,.fld select,.fld textarea{display:block;width:100%;margin-top:5px;height:46px;border:1px solid var(--line);border-radius:12px;padding:0 12px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit}.fld textarea{height:auto;padding:10px 12px}
 .tot{font-size:15px;margin:4px 0 2px}.bank{white-space:pre-wrap;background:#F3F4F5;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.7;margin:6px 0 4px}.err2{color:#9e1b1b;font-size:13px;white-space:pre-wrap;margin-top:8px;line-height:1.6}
+.pays{display:flex;gap:8px;margin-top:5px}.pay{flex:1}.pay input{position:absolute;opacity:0;pointer-events:none}.pay span{display:flex;align-items:center;justify-content:center;height:46px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:15px;color:var(--ink)}.pay input:checked+span{border-color:var(--ink);background:var(--ink);color:#fff}.pay input:focus-visible+span{outline:2px solid var(--ink);outline-offset:2px}
+.lpbtn{display:block;margin:10px 0;background:#06c755;color:#fff;text-decoration:none;font-weight:700;border-radius:99px;height:48px;line-height:48px;text-align:center;font-size:16px}.lpqr{display:block;width:180px;max-width:70%;margin:8px auto 0;border-radius:12px;background:#fff}
 </style></head>
 <body oncontextmenu="return false">
 <header class="top" id="top"><div class="wrap bar"><span class="wm" role="img" aria-label="ZOARÉ WOMEN"><img src="${LOGO}" alt=""><i class="gl"></i><small>WOMEN</small></span><button class="ask" id="askTop" type="button">我的清單 <b id="nTop">0</b></button></div></header>
@@ -316,12 +318,14 @@ async function buy(){const t=totals(),short=[...new Set(cart.filter(l=>!isM(l)&&
   try{const r=await fetch("/shop/guestcart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cart:c})}).then(r=>r.json());if(!r.ok)throw 0;location.href="/shop/login?g=WM"+encodeURIComponent(r.id)}catch(e){toast("暫時無法處理，請稍後再試");if(b){b.disabled=false;b.textContent="直接下單"}}return}
  checkout();
 }
+const QR="https://raw.githubusercontent.com/Gg86384577/zoare-images/main/img/linepay_qr.png";
+function payHTML(t,isLP){let h=esc(t).replace(/(https?:\\/\\/[^\\s<]+)/g,u=>/qrcodepay\\.line\\.me/.test(u)?'<a class="lpbtn" href="'+u+'">💚 開啟 LINE Pay 付款</a>':'<a href="'+u+'">'+u+'</a>');if(isLP&&/qrcodepay\\.line\\.me/.test(t))h+='<img class="lpqr" src="'+QR+'" alt="LINE Pay QR">';return h}
 function checkout(){const B=cart.filter(canBuy),sum=B.reduce((a,l)=>a+lp(l)*l.q,0),goods=B.some(l=>!isM(l));let F={};try{F=JSON.parse(localStorage.getItem("zo_form")||"{}")}catch(e){}
  const fld=(n,lab,ph,v,ty)=>'<label class="fld">'+lab+'<input name="'+n+'" '+(ty?'type="'+ty+'" ':'')+'placeholder="'+ph+'" value="'+esc(v||"")+'"'+(goods?' required':'')+'></label>';
  open('<div class="sh"><h3>結帳</h3><p>'+esc(ME.name)+'・'+({vip:"VIP 價",member:"一般會員價",none:"一般價"}[effTier()])+'</p></div><ul class="lst">'+B.map((l,i)=>row(l,i,false)).join("")+'</ul><form id="ck" style="padding:0 16px 8px">'+
  '<div class="tot">合計 <span class="num" style="font-size:20px">'+nt(sum)+'</span>'+(goods?'（運費另計）':'')+'</div>'+
  (goods?fld("name","收件人","真實姓名",F.name)+fld("phone","手機","09xxxxxxxx",F.phone,"tel")+fld("addr","7-11 取貨門市","門市名稱或店號",F.addr):'')+
- '<label class="fld">付款方式<select name="pay"><option'+(F.pay!=="LINE Pay"?' selected':'')+'>轉帳</option><option'+(F.pay==="LINE Pay"?' selected':'')+'>LINE Pay</option></select></label>'+
+ '<div class="fld">付款方式<div class="pays">'+["轉帳","LINE Pay"].map(p=>'<label class="pay"><input type="radio" name="pay" value="'+p+'"'+((F.pay||"轉帳")===p?" checked":"")+'><span>'+(p==="轉帳"?"🏦 銀行轉帳":"💚 LINE Pay")+'</span></label>').join("")+'</div></div>'+
  '<label class="fld">備註（選填）<textarea name="note" rows="2"></textarea></label><div class="err2" id="ckerr"></div>'+
  '<button class="go" id="ckgo" type="submit">送出訂單</button><button class="ghost" id="back" type="button">回清單</button></form>');
  $("#back").onclick=list;
@@ -330,8 +334,8 @@ function checkout(){const B=cart.filter(canBuy),sum=B.reduce((a,l)=>a+lp(l)*l.q,
   try{const r=await fetch("/shop/order",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:T,plat:"women",items:items(),form:Object.assign({ship:"7-11 賣貨便"},fd)})}).then(async r=>{const j=await r.json().catch(()=>({}));if(r.status===401){T="";ME=null;try{localStorage.removeItem("zo_t")}catch(_){}}return j});
    if(!r.ok){$("#ckerr").textContent=r.error||"送出失敗，請稍後再試";g.disabled=false;g.textContent="送出訂單";return}
    cart=cart.filter(l=>!canBuy(l));save();count();render();ME=null;
-   open('<div class="sh"><h3>訂單送出了</h3><p>訂單編號 <b>'+esc(r.id)+'</b>・合計 <span class="num" style="color:var(--ink)">'+nt(r.total)+'</span></p></div><div style="padding:0 16px 8px">'+(r.bank?'<div class="lbl">'+(fd.pay==="LINE Pay"?"LINE Pay 付款資料":"轉帳資料")+'</div><div class="bank">'+esc(r.bank)+'</div>':'<p class="note2">我們確認後會再傳付款資料給你。</p>')+
-   '<p class="note2" style="font-size:14px;color:var(--ink)">官方 LINE 已經傳訂單通知給你，付款後把後五碼或轉帳截圖傳到 LINE 就好。之後在 LINE 傳「訂單」就能查進度。</p><button class="go" id="okb" type="button">好</button></div>');$("#okb").onclick=close;
+   open('<div class="sh"><h3>訂單送出了</h3><p>訂單編號 <b>'+esc(r.id)+'</b>・合計 <span class="num" style="color:var(--ink)">'+nt(r.total)+'</span></p></div><div style="padding:0 16px 8px">'+(r.bank?'<div class="lbl">'+(fd.pay==="LINE Pay"?"💚 LINE Pay 付款資料":"🏦 轉帳資料")+'</div><div class="bank">'+payHTML(r.bank,fd.pay==="LINE Pay")+'</div>':'<p class="note2">我們確認庫存後，會在 LINE 傳付款資料給你。</p>')+
+   '<p class="note2" style="font-size:14px;color:var(--ink)">'+(fd.pay==="LINE Pay"?"付款後請回到 LINE 傳「付款截圖」":"轉帳後請回到 LINE 傳「後五碼」和「轉帳截圖」")+'，系統會自動對帳。官方 LINE 也傳了訂單通知給你，之後在 LINE 傳「訂單」就能查進度。</p><button class="go" id="okb" type="button">好</button></div>');$("#okb").onclick=close;
   }catch(err){$("#ckerr").textContent="網路不穩，請再按一次";g.disabled=false;g.textContent="送出訂單"}};
 }
 document.addEventListener("click",e=>{const b=e.target.closest("[data-buy]");if(!b)return;e.preventDefault();const k=b.dataset.buy;if(!cart.some(l=>l.k===k))cart.push({k,q:1});if(k==="MEMBER|VIP")cart=cart.filter(l=>l.k!=="MEMBER|GEN");if(k==="MEMBER|GEN")cart=cart.filter(l=>l.k!=="MEMBER|VIP");save();count();list()});
