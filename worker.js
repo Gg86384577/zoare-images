@@ -20,8 +20,8 @@ const PHOTO_MODEL = "claude-sonnet-5-5"; // 照片辨識（要讀目錄上的小
 const BUILD_TAG = "pack-vip-1";
 // AI 自由聊天回覆開關：false＝只回關鍵字/選單/指令/付款截圖/品番對到的照片，其他交給真人
 const AI_CHAT = false;
-const CATALOG_VERSION = "20261125-2245";
-const CATALOG_SHA = "7715c77a3f529b39d1c73b601e4b661f75a1afaa"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
+const CATALOG_VERSION = "20261126-0945";
+const CATALOG_SHA = "8d1959ffdab267ea0ba669a0056ac79a58551274"; // 每次 commit catalog.json 後填入那次 commit 的 SHA，商品才會立刻生效
 // 真人接手後，客人超過 15 分鐘沒再傳訊息，機器人才重新接手
 const HANDOFF_MINUTES = 15;
 // 報價後客人 30 分鐘沒動靜，自動傳一句「請問有興趣嗎～」（只傳一次）
