@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Morning Grain 晨穀咖啡｜示意官網</title>
+<meta property="og:title" content="Morning Grain 晨穀咖啡｜線上訂位">
+<meta property="og:image" content="https://images.unsplash.com/photo-1714328101501-3594de6cb80f?w=1200&q=80&auto=format&fit=crop">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root{--forest:#24352c;--forest2:#2f4539;--oat:#efe8dc;--paper:#f7f3ec;--terra:#c46a3f;--ink:#1f2a24;--muted:#6f7a70;--line:#ddd4c4;
+--en:"Fraunces",Georgia,serif;--sans:"Noto Sans TC","PingFang TC",sans-serif}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.75;-webkit-font-smoothing:antialiased}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.top{background:var(--forest);color:var(--oat);font-size:13px;text-align:center;padding:8px;letter-spacing:.1em}
+.top b{color:#9fd3a7}
+.nav{position:sticky;top:0;z-index:30;background:rgba(247,243,236,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;justify-content:space-between;align-items:center;height:64px}
+.logo{font-family:var(--en);font-weight:600;font-size:24px;display:flex;align-items:center;gap:10px}
+.logo i{width:30px;height:30px;border-radius:50%;background:var(--terra);display:inline-grid;place-items:center;color:#fff;font-style:normal;font-size:15px}
+.links{display:flex;gap:28px;font-size:14px;font-weight:500;align-items:center}
+.links .cta{background:var(--forest);color:var(--oat);padding:9px 20px;border-radius:8px}
+@media(max-width:760px){.links a:not(.cta){display:none}}
+/* hero */
+.hero{padding:70px 0 90px}
+.hero .wrap{display:grid;grid-template-columns:1fr 1.1fr;gap:50px;align-items:center}
+.hero .k{font-family:var(--en);font-style:italic;color:var(--terra);font-size:20px}
+.hero h1{font-weight:900;font-size:clamp(40px,6vw,76px);line-height:1.15;letter-spacing:.02em;margin:12px 0 22px}
+.hero h1 span{font-family:var(--en);font-weight:400;font-style:italic;color:var(--terra)}
+.hero p{color:var(--muted);font-size:17px;max-width:26em}
+.acts{display:flex;gap:12px;margin-top:32px;flex-wrap:wrap}
+.btn{display:inline-flex;gap:10px;align-items:center;background:var(--terra);color:#fff;padding:15px 30px;border-radius:10px;font-weight:700;letter-spacing:.08em;border:0;font-family:inherit;font-size:16px;cursor:pointer}
+.btn.o{background:transparent;color:var(--forest);border:1.5px solid var(--forest)}
+.collage{position:relative;height:560px}
+.collage img{position:absolute;object-fit:cover;border-radius:16px;box-shadow:0 24px 50px rgba(36,53,44,.22)}
+.collage .a{inset:0 18% 14% 0;width:82%;height:86%}
+.collage .b{right:0;bottom:0;width:44%;height:46%;border:8px solid var(--paper)}
+.collage .c{left:-26px;bottom:24px;width:150px;height:150px;border-radius:50%;border:8px solid var(--paper)}
+.open{position:absolute;top:22px;right:4%;background:var(--paper);border-radius:999px;padding:8px 16px;font-size:13px;font-weight:700;display:flex;gap:8px;align-items:center;box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.open i{width:9px;height:9px;border-radius:50%;background:#3aa35a;box-shadow:0 0 0 4px rgba(58,163,90,.2)}
+@media(max-width:860px){.hero{padding:30px 0 60px}.hero .wrap{grid-template-columns:1fr}.collage{height:400px;order:-1}.collage .c{left:6px;width:110px;height:110px}}
+section{padding:100px 0}
+.sh{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:44px;flex-wrap:wrap}
+.sh .k{font-family:var(--en);font-style:italic;color:var(--terra);font-size:20px}
+.sh h2{font-weight:900;font-size:clamp(28px,4vw,44px);letter-spacing:.04em;line-height:1.25}
+.sh p{color:var(--muted);max-width:26em}
+/* menu */
+.menu{background:var(--forest);color:var(--oat)}
+.menu .sh p{color:#a9b8ad}
+.mtabs{display:flex;gap:6px;background:var(--forest2);padding:6px;border-radius:12px;width:max-content;max-width:100%;margin-bottom:34px}
+.mtabs button{background:none;border:0;color:var(--oat);padding:10px 22px;border-radius:8px;font-family:inherit;font-size:15px;cursor:pointer}
+.mtabs button.on{background:var(--oat);color:var(--forest);font-weight:700}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:start}
+.mimg{border-radius:16px;overflow:hidden;aspect-ratio:4/5;position:sticky;top:90px}
+.mimg img{width:100%;height:100%;object-fit:cover;transition:opacity .4s}
+.item{display:flex;gap:12px;align-items:baseline;padding:16px 0;border-bottom:1px solid rgba(239,232,220,.14)}
+.item h4{font-size:18px;font-weight:700;white-space:nowrap}
+.item .dots{flex:1;border-bottom:1px dotted rgba(239,232,220,.35);transform:translateY(-5px)}
+.item .p{font-family:var(--en);font-size:20px}
+.item small{display:block;color:#a9b8ad;font-size:13px;font-weight:400}
+.item .tag{font-size:11px;background:var(--terra);color:#fff;padding:1px 8px;border-radius:4px;margin-left:6px;vertical-align:3px}
+@media(max-width:860px){.mgrid{grid-template-columns:1fr;gap:26px}.mimg{position:relative;top:0;aspect-ratio:16/10}}
+/* space */
+.space{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:220px;gap:14px}
+.space figure{position:relative;overflow:hidden;border-radius:14px}
+.space img{width:100%;height:100%;object-fit:cover;transition:transform 1s}
+.space figure:hover img{transform:scale(1.05)}
+.space figcaption{position:absolute;left:14px;bottom:12px;color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 8px rgba(0,0,0,.5)}
+.s1{grid-column:span 2;grid-row:span 2}.s4{grid-column:span 2}
+@media(max-width:760px){.space{grid-template-columns:1fr 1fr;grid-auto-rows:150px}.s4{grid-column:span 2}}
+/* reserve */
+.res{background:var(--oat)}
+.rbox{display:grid;grid-template-columns:1.1fr .9fr;background:var(--paper);border-radius:22px;overflow:hidden;box-shadow:0 24px 60px rgba(36,53,44,.12)}
+.rform{padding:40px}
+.rl{font-weight:700;font-size:14px;margin:22px 0 10px;display:flex;justify-content:space-between}
+.rl:first-child{margin-top:0}
+.ppl{display:flex;align-items:center;gap:16px}
+.ppl button{width:44px;height:44px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:20px;cursor:pointer;color:var(--ink)}
+.ppl b{font-family:var(--en);font-size:30px;min-width:40px;text-align:center}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips button{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:9px 14px;font-family:inherit;font-size:14px;cursor:pointer;color:var(--ink)}
+.chips button small{display:block;font-size:11px;color:var(--muted)}
+.chips button.on{background:var(--forest);color:var(--oat);border-color:var(--forest)}.chips button.on small{color:#a9b8ad}
+.chips button:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through}
+.days{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.days button{flex:0 0 62px}
+input{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-family:inherit;font-size:15px;margin-bottom:10px}
+.rform .btn{width:100%;justify-content:center;margin-top:12px}
+.rinfo{background:var(--forest);color:var(--oat);padding:40px;display:flex;flex-direction:column;gap:22px;position:relative;overflow:hidden}
+.rinfo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.28}
+.rinfo>*{position:relative}
+.rinfo h3{font-family:var(--en);font-weight:400;font-style:italic;font-size:30px}
+.rinfo dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;font-size:15px}
+.rinfo dt{color:#a9b8ad}
+.done{display:none;text-align:center;padding:40px 0}
+.done b{font-family:var(--en);font-style:italic;font-size:40px;color:var(--terra);font-weight:400}
+@media(max-width:860px){.rbox{grid-template-columns:1fr}.rform,.rinfo{padding:28px 22px}}
+footer{background:var(--ink);color:#a9b8ad;padding:50px 0;font-size:13px}
+footer .logo{color:var(--oat);margin-bottom:12px}
+footer small{display:block;margin-top:20px;opacity:.7}
+.reveal{opacity:0;transform:translateY(28px);transition:.9s}.reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div class="top">今日營業 08:00–17:00・<b>週末早午餐建議先訂位</b></div>
+<header class="nav"><div class="wrap"><a class="logo" href="#"><i>晨</i>Morning Grain</a><nav class="links"><a href="#menu">菜單</a><a href="#space">空間</a><a class="cta" href="#reserve">訂位</a></nav></div></header>
+
+<section class="hero"><div class="wrap">
+  <div>
+    <div class="k">Coffee & Brunch since 2015</div>
+    <h1>一杯好咖啡，<br>和一個<span>慢慢來</span>的早上。</h1>
+    <p>自家烘焙豆、每日現烤酸種麵包。窗邊的位置週末很快就滿，線上訂位 10 秒完成。</p>
+    <div class="acts"><a class="btn" href="#reserve">線上訂位 →</a><a class="btn o" href="#menu">看菜單</a></div>
+  </div>
+  <div class="collage">
+    <img class="a" src="https://images.unsplash.com/photo-1714328101501-3594de6cb80f?w=1100&q=80&auto=format&fit=crop" alt="">
+    <img class="b" src="https://images.unsplash.com/photo-1516213335993-159eca2981af?w=600&q=80&auto=format&fit=crop" alt="">
+    <img class="c" src="https://images.unsplash.com/photo-1619108977254-314da85774bd?w=400&q=80&auto=format&fit=crop" alt="">
+    <div class="open"><i></i><span id="openTxt">營業中・17:00 打烊</span></div>
+  </div>
+</div></section>
+
+<section class="menu" id="menu"><div class="wrap">
+  <div class="sh reveal"><div><div class="k">Menu</div><h2>今天想吃點什麼？</h2></div><p>點選分類切換，價格皆含服務費。</p></div>
+  <div class="mtabs" id="mtabs"><button class="on" data-t="0">咖啡</button><button data-t="1">早午餐</button><button data-t="2">甜點</button></div>
+  <div class="mgrid">
+    <div class="mimg"><img id="mimg" src="https://images.unsplash.com/photo-1560055932-927be486d086?w=900&q=80&auto=format&fit=crop" alt=""></div>
+    <div id="mlist"></div>
+  </div>
+</div></section>
+
+<section id="space"><div class="wrap">
+  <div class="sh reveal"><div><div class="k">The Space</div><h2>窗邊、吧台、沙發區</h2></div><p>訂位時可以選喜歡的座位，我們會盡量幫你安排。</p></div>
+  <div class="space reveal">
+    <figure class="s1"><img src="https://images.unsplash.com/photo-1728761390316-935ffeb3fbcc?w=1000&q=80&auto=format&fit=crop" alt=""><figcaption>窗邊座位・自然光</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1627743914480-5c0a391767f0?w=600&q=80&auto=format&fit=crop" alt=""><figcaption>沙發區</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1625936475862-a374a27ad693?w=600&q=80&auto=format&fit=crop" alt=""><figcaption>吧台</figcaption></figure>
+    <figure class="s4"><img src="https://images.unsplash.com/photo-1669654666973-e1cb0ae4d188?w=900&q=80&auto=format&fit=crop" alt=""><figcaption>植物角落</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1685439182295-600f6735d155?w=600&q=80&auto=format&fit=crop" alt=""><figcaption>週末早午餐</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1550247611-e651810312fe?w=600&q=80&auto=format&fit=crop" alt=""><figcaption>手沖單品</figcaption></figure>
+    <figure class="s4"><img src="https://images.unsplash.com/photo-1739723745132-97df9db49db2?w=900&q=80&auto=format&fit=crop" alt=""><figcaption>二樓包場空間</figcaption></figure>
+  </div>
+</div></section>
+
+<section class="res" id="reserve"><div class="wrap">
+  <div class="sh reveal"><div><div class="k">Reservation</div><h2>線上訂位</h2></div><p>訂位保留 10 分鐘，前一天會用 LINE 提醒你。</p></div>
+  <div class="rbox reveal">
+    <div class="rform">
+      <form id="f">
+        <div class="rl">人數</div>
+        <div class="ppl"><button type="button" id="mi">−</button><b id="pn">2</b><button type="button" id="pl">＋</button><span style="color:var(--muted);font-size:14px">位（6 位以上請來電）</span></div>
+        <div class="rl">日期</div><div class="chips days" id="days"></div>
+        <div class="rl">時間</div><div class="chips" id="times"></div>
+        <div class="rl">座位偏好</div><div class="chips" id="seat"><button type="button" class="on">不限</button><button type="button">窗邊</button><button type="button">吧台</button><button type="button">沙發</button></div>
+        <div class="rl">聯絡資料</div><input placeholder="姓名" required><input placeholder="手機" type="tel" required>
+        <button class="btn" type="submit">確認訂位</button>
+      </form>
+      <div class="done" id="done"><b>See you soon</b><p>訂位成功！確認訊息已傳到你的 LINE。</p></div>
+    </div>
+    <div class="rinfo"><img src="https://images.unsplash.com/photo-1691067987594-b1b7f84ba55a?w=800&q=80&auto=format&fit=crop" alt="">
+      <h3>Visit us</h3>
+      <dl><dt>地址</dt><dd>台北市中山區（示意地址）</dd><dt>平日</dt><dd>08:00–17:00</dd><dt>週末</dt><dd>08:00–18:00</dd><dt>公休</dt><dd>每週二</dd><dt>低消</dt><dd>每人一份餐點或飲品</dd><dt>插座</dt><dd>吧台、窗邊座位有</dd></dl>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap"><div class="logo"><i style="width:26px;height:26px;border-radius:50%;background:var(--terra);display:inline-grid;place-items:center;color:#fff;font-style:normal;font-size:13px">晨</i>Morning Grain</div>IG：@morninggrain（示意）・LINE 官方帳號訂位同步<small>此為示意網站，店名、菜單、價格與照片皆為範例，可依店家風格客製顏色與功能。</small></div></footer>
+
+<script>
+const M=[
+ {im:'https://images.unsplash.com/photo-1560055932-927be486d086?w=900&q=80&auto=format&fit=crop',it:[['招牌燕麥拿鐵',150,'自家烘焙中深焙・燕麥奶','人氣'],['手沖單品',180,'衣索比亞 / 哥倫比亞 每週輪替'],['黑糖肉桂拿鐵',160,'冬季限定','限定'],['冰滴咖啡',170,'12 小時慢滴'],['美式',110,'']]},
+ {im:'https://images.unsplash.com/photo-1611688370466-0e415a5c922e?w=900&q=80&auto=format&fit=crop',it:[['班尼迪克蛋盤',320,'酸種麵包・溫泉蛋・荷蘭醬','人氣'],['酪梨鮭魚開放吐司',340,'煙燻鮭魚・酪梨醬'],['晨穀大早餐',380,'香腸・炒蛋・沙拉・烤吐司'],['莎莎醬鐵鍋蛋',290,'番茄・甜椒・香料'],['季節沙拉碗',260,'藜麥・烤南瓜']]},
+ {im:'https://images.unsplash.com/photo-1621523132966-19f711d565d1?w=900&q=80&auto=format&fit=crop',it:[['肉桂捲',120,'每日 10 點出爐','人氣'],['巴斯克乳酪蛋糕',150,''],['可頌',85,'法國發酵奶油'],['季節水果塔',160,'']]}];
+const ml=document.getElementById('mlist'),mi=document.getElementById('mimg');
+function menu(t){mi.style.opacity=0;setTimeout(()=>{mi.src=M[t].im;mi.style.opacity=1},200);ml.innerHTML=M[t].it.map(x=>`<div class="item"><div><h4>${x[0]}${x[3]?`<span class="tag">${x[3]}</span>`:''}</h4><small>${x[2]}</small></div><span class="dots"></span><span class="p">$${x[1]}</span></div>`).join('')}
+menu(0);
+document.getElementById('mtabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('#mtabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');menu(+b.dataset.t)};
+let n=2;const pn=document.getElementById('pn');document.getElementById('mi').onclick=()=>{n=Math.max(1,n-1);pn.textContent=n};document.getElementById('pl').onclick=()=>{n=Math.min(6,n+1);pn.textContent=n};
+function grp(el){el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on')})}
+const W='日一二三四五六',days=document.getElementById('days');let f1=true;
+for(let i=0;i<10;i++){const d=new Date();d.setDate(d.getDate()+i);const b=document.createElement('button');b.type='button';b.innerHTML=(i==0?'今天':(d.getMonth()+1)+'/'+d.getDate())+'<small>週'+W[d.getDay()]+'</small>';if(d.getDay()==2)b.disabled=true;else if(f1){b.classList.add('on');f1=false}days.appendChild(b)}
+const times=document.getElementById('times');['08:30','10:00','11:30','13:00','14:30','16:00'].forEach((t,i)=>{const b=document.createElement('button');b.type='button';b.innerHTML=t+'<small>'+(i==2?'已滿':i==1?'剩 1 桌':'可訂')+'</small>';if(i==2)b.disabled=true;if(i==0)b.classList.add('on');times.appendChild(b)});
+[days,times,document.getElementById('seat')].forEach(grp);
+document.getElementById('f').onsubmit=e=>{e.preventDefault();e.target.style.display='none';document.getElementById('done').style.display='block'};
+const h=new Date().getHours();if(h<8||h>=17){document.getElementById('openTxt').textContent='已打烊・明早 08:00 見';document.querySelector('.open i').style.background='#c46a3f';document.querySelector('.open i').style.boxShadow='0 0 0 4px rgba(196,106,63,.2)'}
+const io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add('in')),{threshold:.1});document.querySelectorAll('.reveal').forEach(e=>io.observe(e));
+</script>
+</body>
+</html>

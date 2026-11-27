@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LUMI LASH 霧光睫藝｜示意官網</title>
+<meta property="og:title" content="LUMI LASH 霧光睫藝｜線上預約">
+<meta property="og:image" content="https://images.unsplash.com/photo-1792679430682-c8e456f10bca?w=1200&q=80&auto=format&fit=crop">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500&family=Italiana&display=swap">
+<style>
+:root{--ivory:#f7f3ee;--sand:#ece4d9;--esp:#2b2522;--gold:#b89b72;--muted:#7d726a;--line:#ded4c7;
+--serif:"Noto Serif TC",serif;--sans:"Noto Sans TC","PingFang TC",sans-serif;--disp:"Italiana",serif}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{background:var(--ivory);color:var(--esp);font-family:var(--sans);font-weight:300;line-height:1.8;-webkit-font-smoothing:antialiased}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+.wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+.nav{position:fixed;inset:0 0 auto;z-index:30;transition:.3s}
+.nav.solid{background:rgba(247,243,238,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;justify-content:space-between;align-items:center;height:70px}
+.logo{font-family:var(--disp);font-size:26px;letter-spacing:.28em}
+.logo span{font-family:var(--serif);font-size:11px;letter-spacing:.4em;display:block;margin-top:-6px;color:var(--muted)}
+.links{display:flex;gap:30px;font-size:13px;letter-spacing:.22em;align-items:center}
+.links .cta{border:1px solid var(--esp);padding:9px 22px}
+@media(max-width:760px){.links a:not(.cta){display:none}}
+/* hero */
+.hero{display:grid;grid-template-columns:1.05fr 1fr;min-height:100svh;padding-top:70px}
+.hero .txt{display:flex;flex-direction:column;justify-content:center;padding:60px 6vw 60px max(22px,calc((100vw - 1180px)/2 + 22px))}
+.eyebrow{font-family:var(--disp);letter-spacing:.5em;font-size:14px;color:var(--gold)}
+.hero h1{font-family:var(--serif);font-weight:600;font-size:clamp(38px,5.2vw,68px);line-height:1.32;margin:22px 0 26px;letter-spacing:.04em}
+.hero h1 i{font-style:normal;color:var(--gold)}
+.hero p{color:var(--muted);max-width:26em}
+.row{display:flex;gap:14px;margin-top:38px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:12px;background:var(--esp);color:var(--ivory);padding:17px 34px;font-size:14px;letter-spacing:.24em;border:0;font-family:inherit;cursor:pointer}
+.btn.line{background:transparent;color:var(--esp);border:1px solid var(--esp)}
+.stats{display:flex;gap:38px;margin-top:54px;padding-top:26px;border-top:1px solid var(--line)}
+.stats b{font-family:var(--disp);font-size:34px;font-weight:400;display:block;line-height:1}
+.stats small{font-size:12px;color:var(--muted);letter-spacing:.14em}
+.hero .pic{position:relative;overflow:hidden}
+.hero .pic img{width:100%;height:100%;object-fit:cover;animation:z 12s ease-out forwards;transform:scale(1.06)}
+@keyframes z{to{transform:none}}
+.hero .tag{position:absolute;left:26px;bottom:26px;background:rgba(247,243,238,.92);padding:16px 22px;font-size:13px;letter-spacing:.12em}
+.hero .tag b{font-family:var(--serif);font-weight:600;display:block;font-size:15px}
+@media(max-width:860px){.hero{grid-template-columns:1fr}.hero .pic{order:-1;height:62svh}.hero .txt{padding:40px 22px 60px}.stats{gap:26px}}
+section{padding:110px 0}
+.sh{margin-bottom:56px}.sh .eyebrow{display:block}
+.sh h2{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.6vw,42px);letter-spacing:.06em;margin-top:10px}
+.sh p{color:var(--muted);margin-top:10px}
+/* styles list */
+.style{display:grid;grid-template-columns:1fr 1fr;gap:0;align-items:stretch;border-top:1px solid var(--line)}
+.style:last-child{border-bottom:1px solid var(--line)}
+.style .im{overflow:hidden;aspect-ratio:4/3}
+.style .im img{width:100%;height:100%;object-fit:cover;transition:transform 1.2s}
+.style:hover .im img{transform:scale(1.05)}
+.style .tx{padding:44px 6%;display:flex;flex-direction:column;justify-content:center}
+.style:nth-child(even) .im{order:2}
+.no{font-family:var(--disp);font-size:64px;line-height:1;color:var(--gold)}
+.style h3{font-family:var(--serif);font-weight:600;font-size:26px;letter-spacing:.08em;margin:10px 0}
+.style .meta{display:flex;gap:18px;font-size:13px;color:var(--muted);letter-spacing:.1em;margin-top:16px}
+.style .price{font-family:var(--serif);font-size:22px;margin-top:18px}
+.style .price small{font-size:13px;color:var(--muted)}
+@media(max-width:760px){.style{grid-template-columns:1fr}.style:nth-child(even) .im{order:0}.style .tx{padding:30px 4px 44px}}
+/* flow */
+.flow{background:var(--esp);color:var(--ivory)}
+.flow .sh p{color:#b7aca2}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
+.step{padding:34px 26px;background:#342d29}
+.step b{font-family:var(--disp);font-size:40px;color:var(--gold);font-weight:400}
+.step h4{font-family:var(--serif);font-weight:600;font-size:18px;margin:8px 0;letter-spacing:.08em}
+.step p{font-size:14px;color:#b7aca2}
+@media(max-width:760px){.steps{grid-template-columns:1fr 1fr}}
+/* gallery carousel */
+.strip{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:0 22px 14px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.strip figure{flex:0 0 min(72vw,340px);scroll-snap-align:start}
+.strip img{aspect-ratio:3/4;object-fit:cover;width:100%}
+.strip figcaption{font-size:13px;letter-spacing:.14em;color:var(--muted);margin-top:10px}
+.hint{font-size:12px;letter-spacing:.3em;color:var(--gold);text-align:right;padding:0 22px;margin-bottom:12px}
+/* reviews */
+.quotes{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.q{background:#fff;padding:34px 28px;border:1px solid var(--line)}
+.q p{font-family:var(--serif);font-size:16px;line-height:1.9}
+.q small{display:block;margin-top:18px;color:var(--muted);letter-spacing:.14em;font-size:12px}
+.stars{color:var(--gold);letter-spacing:.2em;margin-bottom:12px}
+@media(max-width:860px){.quotes{grid-template-columns:1fr}}
+/* booking */
+.book{background:var(--sand)}
+.bk{display:grid;grid-template-columns:.9fr 1.1fr;gap:50px;align-items:start}
+.bk .side img{aspect-ratio:4/5;object-fit:cover;width:100%}
+.panel{background:var(--ivory);padding:38px 34px}
+.lab{font-size:12px;letter-spacing:.3em;color:var(--gold);margin:26px 0 12px;display:block}
+.lab:first-child{margin-top:0}
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.opt{border:1px solid var(--line);padding:14px 10px;text-align:center;cursor:pointer;background:#fff;font-family:inherit;font-size:14px;color:var(--esp)}
+.opt small{display:block;color:var(--muted);font-size:12px}
+.opt.on{background:var(--esp);color:var(--ivory);border-color:var(--esp)}
+.opt.on small{color:#cfc4b8}
+.opt:disabled{opacity:.35;text-decoration:line-through;cursor:not-allowed}
+.days{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.days .opt{flex:0 0 66px;padding:10px 4px}
+.times{grid-template-columns:repeat(4,1fr)}
+input,select{width:100%;padding:14px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:15px;margin-bottom:10px}
+.panel .btn{width:100%;justify-content:center;margin-top:16px}
+.ok{display:none;text-align:center;padding:40px 10px}
+.ok b{font-family:var(--disp);font-size:44px;color:var(--gold);font-weight:400}
+.ok h4{font-family:var(--serif);font-size:22px;margin:8px 0}
+@media(max-width:860px){.bk{grid-template-columns:1fr}.bk .side{display:none}.panel{padding:30px 20px}}
+footer{background:var(--esp);color:#b7aca2;padding:60px 0 40px;font-size:13px;letter-spacing:.1em}
+footer .logo{color:var(--ivory)}
+footer .cols{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;margin-top:22px}
+.demo{margin-top:34px;padding-top:18px;border-top:1px solid #443b36;font-size:12px}
+.reveal{opacity:0;transform:translateY(30px);transition:1s cubic-bezier(.2,.7,.2,1)}.reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<header class="nav" id="nav"><div class="wrap">
+  <a class="logo" href="#">LUMI<span>霧光睫藝</span></a>
+  <nav class="links"><a href="#styles">款式</a><a href="#flow">流程</a><a href="#works">作品</a><a class="cta" href="#book">預約</a></nav>
+</div></header>
+
+<section class="hero" style="padding-bottom:0">
+  <div class="txt">
+    <span class="eyebrow">LASH STUDIO · TAIPEI</span>
+    <h1>睜眼的那一刻，<br>就是<i>剛剛好</i>的妳。</h1>
+    <p>只做適合妳眼型的睫毛。開始前先量眼型、聊妝感，不推銷、不加價，讓每一次睜眼都很省事。</p>
+    <div class="row"><a class="btn" href="#book">線上預約 →</a><a class="btn line" href="#styles">看款式</a></div>
+    <div class="stats"><div><b>1,200+</b><small>位回頭客</small></div><div><b>4.9</b><small>Google 評價</small></div><div><b>21</b><small>天保固補睫</small></div></div>
+  </div>
+  <div class="pic"><img src="https://images.unsplash.com/photo-1792679430682-c8e456f10bca?w=1400&q=80&auto=format&fit=crop" alt=""><div class="tag"><b>本月推薦・霧感自然款</b>首次預約折 $200</div></div>
+</section>
+
+<section id="styles"><div class="wrap">
+  <div class="sh reveal"><span class="eyebrow">SIGNATURE STYLES</span><h2>三種款式，量眼型後再決定</h2><p>不知道選哪個沒關係，現場幫妳比對眼型與平常妝感。</p></div>
+  <div class="list">
+    <div class="style reveal"><div class="im"><img src="https://images.unsplash.com/photo-1735151226446-1d364b4adc2f?w=1000&q=80&auto=format&fit=crop" alt=""></div><div class="tx"><span class="no">01</span><h3>霧感自然款</h3><p>像天生睫毛濃一點，上班素顏也不突兀。適合第一次嫁接。</p><div class="meta"><span>約 90 分鐘</span><span>80–100 根</span></div><div class="price">$1,280 <small>起</small></div></div></div>
+    <div class="style reveal"><div class="im"><img src="https://images.unsplash.com/photo-1639629509821-c54cdd984227?w=1000&q=80&auto=format&fit=crop" alt=""></div><div class="tx"><span class="no">02</span><h3>空氣蓬鬆款</h3><p>輕盈的開花睫毛，眼神有精神但不厚重，拍照很上鏡。</p><div class="meta"><span>約 120 分鐘</span><span>3D–5D</span></div><div class="price">$1,680 <small>起</small></div></div></div>
+    <div class="style reveal"><div class="im"><img src="https://images.unsplash.com/photo-1561505445-3d89277edf4c?w=1000&q=80&auto=format&fit=crop" alt=""></div><div class="tx"><span class="no">03</span><h3>電眼濃密款</h3><p>派對、婚禮、拍攝都適用，眼尾拉長放大眼型。</p><div class="meta"><span>約 150 分鐘</span><span>6D–10D</span></div><div class="price">$2,080 <small>起</small></div></div></div>
+  </div>
+</div></section>
+
+<section class="flow" id="flow"><div class="wrap">
+  <div class="sh reveal"><span class="eyebrow">HOW IT WORKS</span><h2>從預約到睜眼，四個步驟</h2><p>全程躺著就好，可以聊天也可以睡覺。</p></div>
+  <div class="steps reveal">
+    <div class="step"><b>01</b><h4>線上選時段</h4><p>選款式、日期與時間，30 秒完成。</p></div>
+    <div class="step"><b>02</b><h4>LINE 提醒</h4><p>前一天晚上自動傳提醒，不怕忘記。</p></div>
+    <div class="step"><b>03</b><h4>量眼型・討論</h4><p>依眼型調整長度與捲度。</p></div>
+    <div class="step"><b>04</b><h4>21 天保固</h4><p>脫落過多免費補，安心回來。</p></div>
+  </div>
+</div></section>
+
+<section id="works" style="padding-bottom:80px">
+  <div class="wrap"><div class="sh reveal"><span class="eyebrow">RECENT WORKS</span><h2>最近的作品</h2></div></div>
+  <div class="hint">SWIPE →</div>
+  <div class="strip">
+    <figure><img src="https://images.unsplash.com/photo-1589710751893-f9a6770ad71b?w=700&q=80&auto=format&fit=crop" alt=""><figcaption>01 — 嫁接過程</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1683719312734-e31de63957ab?w=700&q=80&auto=format&fit=crop" alt=""><figcaption>02 — 濃密電眼</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1792679430507-70d169602db1?w=700&q=80&auto=format&fit=crop" alt=""><figcaption>03 — 精準分根</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1735151225764-eac694642dbf?w=700&q=80&auto=format&fit=crop" alt=""><figcaption>04 — 自然款</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1718720410649-7524fcb0f0a5?w=700&q=80&auto=format&fit=crop" alt=""><figcaption>05 — 一對一服務</figcaption></figure>
+    <figure><img src="https://images.unsplash.com/photo-1770999086860-143f54adf01b?w=700&q=80&auto=format&fit=crop" alt=""><figcaption>06 — 嚴選材料</figcaption></figure>
+  </div>
+</section>
+
+<section style="padding-top:20px"><div class="wrap">
+  <div class="sh reveal"><span class="eyebrow">REVIEWS</span><h2>客人怎麼說</h2></div>
+  <div class="quotes reveal">
+    <div class="q"><div class="stars">★★★★★</div><p>第一次嫁接很緊張，老師先幫我看眼型才建議款式，結果自然到同事以為是天生的。</p><small>— 小芸・霧感自然款</small></div>
+    <div class="q"><div class="stars">★★★★★</div><p>網站預約超方便，前一天 LINE 還會提醒我，不用再傳訊息來回問時間。</p><small>— Joanne・空氣蓬鬆款</small></div>
+    <div class="q"><div class="stars">★★★★★</div><p>婚禮前來做濃密款，拍照眼睛超有神，三週後回來補也很快。</p><small>— 佳佳・電眼濃密款</small></div>
+  </div>
+</div></section>
+
+<section class="book" id="book"><div class="wrap">
+  <div class="sh reveal"><span class="eyebrow">RESERVATION</span><h2>線上預約</h2><p>選好就送出，我們確認後會用 LINE 回覆妳。</p></div>
+  <div class="bk">
+    <div class="side reveal"><img src="https://images.unsplash.com/photo-1735151226446-1d364b4adc2f?w=900&q=80&auto=format&fit=crop" alt=""></div>
+    <div class="panel reveal">
+      <form id="f">
+        <span class="lab">STEP 1　選款式</span>
+        <div class="opts" id="sty"><button type="button" class="opt on">自然款<small>$1,280</small></button><button type="button" class="opt">蓬鬆款<small>$1,680</small></button><button type="button" class="opt">濃密款<small>$2,080</small></button></div>
+        <span class="lab">STEP 2　選日期</span>
+        <div class="days opts" id="days"></div>
+        <span class="lab">STEP 3　選時間</span>
+        <div class="opts times" id="times"></div>
+        <span class="lab">STEP 4　聯絡資料</span>
+        <input placeholder="稱呼" required><input placeholder="手機" type="tel" required>
+        <select><option>第一次嫁接</option><option>補睫（21 天內）</option><option>卸除後重接</option></select>
+        <button class="btn" type="submit">送出預約</button>
+      </form>
+      <div class="ok" id="ok"><b>Thank you</b><h4>預約已送出</h4><p>我們確認後會在 LINE 回覆妳，前一天也會提醒喔。</p></div>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="logo">LUMI<span>霧光睫藝</span></div>
+  <div class="cols"><div>營業時間｜11:00–20:00（週三公休）</div><div>台北市大安區（示意地址）</div><div>LINE／IG：@lumi.lash（示意）</div></div>
+  <div class="demo">此為示意網站，店名、價格與照片皆為範例，可依店家風格客製顏色與功能。</div>
+</div></footer>
+
+<script>
+const nav=document.getElementById('nav');addEventListener('scroll',()=>nav.classList.toggle('solid',scrollY>40));
+const io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add('in')),{threshold:.12});
+document.querySelectorAll('.reveal').forEach(e=>io.observe(e));
+function group(el){el.addEventListener('click',e=>{const b=e.target.closest('.opt');if(!b||b.disabled)return;el.querySelectorAll('.opt').forEach(x=>x.classList.remove('on'));b.classList.add('on')})}
+const W='日一二三四五六',days=document.getElementById('days');
+for(let i=1;i<=10;i++){const d=new Date();d.setDate(d.getDate()+i);const b=document.createElement('button');b.type='button';b.className='opt'+(i==1?' on':'');b.innerHTML=(d.getMonth()+1)+'/'+d.getDate()+'<small>週'+W[d.getDay()]+'</small>';if(d.getDay()==3)b.disabled=true;days.appendChild(b)}
+const times=document.getElementById('times');['11:00','13:30','16:00','18:30'].forEach((t,i)=>{const b=document.createElement('button');b.type='button';b.className='opt'+(i==0?' on':'');b.textContent=t;if(i==1)b.disabled=true;times.appendChild(b)});
+[document.getElementById('sty'),days,times].forEach(group);
+document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();e.target.style.display='none';document.getElementById('ok').style.display='block'});
+</script>
+</body>
+</html>
