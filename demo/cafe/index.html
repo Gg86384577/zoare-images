@@ -203,7 +203,7 @@ const secs=[...document.querySelectorAll('section, footer, .marq, .ribbon')];
 for(let i=1;i<secs.length;i++){const a=rgb(getComputedStyle(secs[i-1]).backgroundColor)||rgb(getComputedStyle(document.body).backgroundColor),s=secs[i],b=rgb(getComputedStyle(s).backgroundColor);
  if(a&&b&&a!==b&&!s.classList.contains('hero')){s.style.backgroundImage=`linear-gradient(180deg,${a} 0,${b} 160px)${getComputedStyle(s).backgroundImage!='none'?','+getComputedStyle(s).backgroundImage:''}`}}
 const sel='section img:not(.hero img):not(.hero>img), figure, .card, .q, .step, .plan, .oc, .item, .style, .hw>div, .proc>div, details, .c, .q, .panel, .box, .feat, .rbox, .bkg, .sh, .head';
-const els=[...document.querySelectorAll(sel)].filter(e=>!e.closest('.hero')&&!e.closest('.fx'));
+const all=new Set([...document.querySelectorAll(sel)].filter(e=>!e.closest('.hero')));const els=[...all].filter(e=>{let p=e.parentElement;while(p){if(all.has(p))return false;p=p.parentElement}return true});
 els.forEach(e=>{e.classList.add('fx');const sib=[...e.parentElement.children].filter(x=>els.includes(x));e.style.transitionDelay=Math.min(sib.indexOf(e),5)*90+'ms'});
 document.querySelectorAll('.reveal').forEach(e=>e.classList.add('in'));
 const io=new IntersectionObserver(es=>es.forEach(x=>{if(x.isIntersecting){x.target.classList.add('on');io.unobserve(x.target)}}),{threshold:.08,rootMargin:'0px 0px -6% 0px'});
