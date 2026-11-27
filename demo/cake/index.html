@@ -210,7 +210,7 @@ function run(){tick=false;const vh=innerHeight;
  for(const e of els){const r=e.getBoundingClientRect();
   if(r.bottom<-50||r.top>vh+50)continue;
   const fin=ease(cl((vh-r.top)/(vh*.28)));
-  const h=Math.min(r.height,vh*.6),fout=ease(cl((r.bottom-nav)/(h*.9+vh*.12)));
+  const fout=ease(cl((r.top+Math.min(r.height,vh*.7)*.5-nav)/(vh*.32)));
   const o=Math.min(fin,fout);
   e.style.opacity=o.toFixed(3);
   e.style.transform=`translateY(${((1-fin)*50-(1-fout)*30).toFixed(1)}px) scale(${(0.97+0.03*o).toFixed(3)})`;}
