@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fleur & Moss 苔與花｜示意官網</title>
+<meta property="og:title" content="Fleur & Moss 苔與花｜線上訂花">
+<meta property="og:image" content="https://images.unsplash.com/photo-1523694576729-dc99e9c0f9b4?w=1200&q=80&auto=format&fit=crop">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,600;1,400;1,500&family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@300;400;500&display=swap">
+<style>
+:root{--bg:#f4f1ea;--sage:#8a9a7b;--sage2:#5f6f55;--blush:#e8c8c0;--rose:#b86b62;--ink:#2e2f2a;--muted:#7b7a70;--line:#dcd6c8;
+--en:"Cormorant",Georgia,serif;--serif:"Noto Serif TC",serif;--sans:"Noto Sans TC",sans-serif}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:300;line-height:1.85;-webkit-font-smoothing:antialiased}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+.wrap{max-width:1200px;margin:0 auto;padding:0 22px}
+.nav{position:fixed;inset:0 0 auto;z-index:30;transition:.3s}
+.nav.solid{background:rgba(244,241,234,.94);backdrop-filter:blur(8px)}
+.nav .wrap{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:72px}
+.nav .l,.nav .r{display:flex;gap:26px;font-size:13px;letter-spacing:.2em}
+.nav .r{justify-content:end}
+.logo{font-family:var(--en);font-size:28px;letter-spacing:.06em;text-align:center;line-height:1}
+.logo small{display:block;font-family:var(--serif);font-size:10px;letter-spacing:.5em;color:var(--sage2);margin-top:4px}
+.nav .r a.cta{border-bottom:1px solid var(--ink)}
+@media(max-width:760px){.nav .l{display:none}.nav .wrap{grid-template-columns:1fr auto}.logo{text-align:left}.nav .r a:not(.cta){display:none}}
+/* hero: arch */
+.hero{padding:120px 0 80px}
+.hero .wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;align-items:end}
+.hero .arch{border-radius:999px 999px 0 0;overflow:hidden;aspect-ratio:3/4.6}
+.hero .arch img{width:100%;height:100%;object-fit:cover}
+.hero .mid{text-align:center;padding-bottom:30px}
+.hero .en{font-family:var(--en);font-style:italic;font-size:22px;color:var(--rose)}
+.hero h1{font-family:var(--serif);font-weight:600;font-size:clamp(34px,4.4vw,56px);line-height:1.4;letter-spacing:.12em;margin:18px 0}
+.hero p{color:var(--muted);font-size:15px}
+.btn{display:inline-flex;align-items:center;gap:12px;background:var(--ink);color:var(--bg);padding:16px 34px;font-size:14px;letter-spacing:.24em;margin-top:30px;border:0;font-family:inherit;cursor:pointer;border-radius:999px}
+.hero .side{aspect-ratio:3/4;border-radius:0 0 999px 999px;overflow:hidden;margin-bottom:60px}
+.hero .side img{width:100%;height:100%;object-fit:cover}
+@media(max-width:860px){.hero{padding:90px 0 50px}.hero .wrap{grid-template-columns:1fr 1fr;gap:14px}.hero .mid{grid-column:1/-1;order:-1;padding-bottom:20px}.hero .side{margin-bottom:0}}
+section{padding:110px 0}
+.sh{text-align:center;margin-bottom:56px}
+.sh .en{font-family:var(--en);font-style:italic;font-size:22px;color:var(--rose)}
+.sh h2{font-family:var(--serif);font-weight:600;font-size:clamp(26px,3.4vw,38px);letter-spacing:.14em}
+.sh p{color:var(--muted);margin-top:8px}
+/* occasion */
+.occ{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.oc{position:relative;aspect-ratio:3/4;overflow:hidden;border-radius:6px;color:#fff}
+.oc img{width:100%;height:100%;object-fit:cover;transition:transform 1.2s}
+.oc:hover img{transform:scale(1.06)}
+.oc::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(30,30,25,.6))}
+.oc div{position:absolute;z-index:2;left:20px;bottom:18px}
+.oc b{font-family:var(--serif);font-weight:600;font-size:20px;letter-spacing:.14em;display:block}
+.oc small{font-family:var(--en);font-style:italic;font-size:16px}
+@media(max-width:860px){.occ{grid-template-columns:1fr 1fr;gap:12px}}
+/* story */
+.story{background:var(--sage2);color:var(--bg)}
+.story .wrap{display:grid;grid-template-columns:1fr 1fr;gap:70px;align-items:center}
+.story img{aspect-ratio:1;object-fit:cover;border-radius:50%;width:100%}
+.story .en{font-family:var(--en);font-style:italic;font-size:22px;color:var(--blush)}
+.story h2{font-family:var(--serif);font-weight:600;font-size:clamp(26px,3.4vw,38px);letter-spacing:.1em;margin:10px 0 20px;line-height:1.5}
+.story p{color:#dfe3d6}
+.sig{font-family:var(--en);font-style:italic;font-size:30px;margin-top:26px}
+@media(max-width:860px){.story .wrap{grid-template-columns:1fr;gap:36px}.story img{max-width:320px;margin:0 auto}}
+/* builder */
+.build{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start}
+.preview{position:sticky;top:90px}
+.preview .ph{aspect-ratio:4/5;overflow:hidden;border-radius:300px 300px 6px 6px;position:relative}
+.preview img{width:100%;height:100%;object-fit:cover;transition:opacity .4s}
+.card{position:absolute;right:-10px;bottom:30px;background:#fffdf8;padding:18px 22px;width:220px;box-shadow:0 14px 30px rgba(0,0,0,.14);font-family:var(--serif);font-size:14px;transform:rotate(-3deg)}
+.card small{display:block;font-family:var(--en);font-style:italic;color:var(--rose);font-size:15px}
+.sum{margin-top:22px;display:flex;justify-content:space-between;font-family:var(--serif);font-size:15px;border-top:1px solid var(--line);padding-top:16px}
+.sum b{font-family:var(--en);font-size:30px;font-weight:600}
+.lab{display:block;font-size:12px;letter-spacing:.3em;color:var(--sage2);margin:30px 0 12px}
+.lab:first-child{margin-top:0}
+.sw{display:flex;gap:12px;flex-wrap:wrap}
+.sw button{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink)}
+.sw i{width:54px;height:54px;border-radius:50%;border:3px solid var(--bg);box-shadow:0 0 0 1px var(--line);display:block}
+.sw button.on i{box-shadow:0 0 0 2px var(--ink)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--ink);border-radius:999px;overflow:hidden}
+.seg button{background:none;border:0;padding:12px 0;font-family:inherit;font-size:14px;cursor:pointer;color:var(--ink)}
+.seg button+button{border-left:1px solid var(--ink)}
+.seg button.on{background:var(--ink);color:var(--bg)}
+.dates{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.dates button{flex:0 0 64px;border:1px solid var(--line);background:#fffdf8;padding:8px 0;font-family:inherit;font-size:14px;cursor:pointer;border-radius:999px;color:var(--ink)}
+.dates button small{display:block;font-size:11px;color:var(--muted)}
+.dates button.on{background:var(--rose);border-color:var(--rose);color:#fff}.dates button.on small{color:#fde}
+textarea,input{width:100%;padding:14px;border:1px solid var(--line);background:#fffdf8;font-family:inherit;font-size:15px;margin-bottom:10px;border-radius:4px}
+.build .btn{width:100%;justify-content:center}
+.done{display:none;text-align:center;padding:40px 0}
+.done b{font-family:var(--en);font-style:italic;font-size:44px;color:var(--rose);font-weight:400}
+@media(max-width:860px){.build{grid-template-columns:1fr;gap:34px}.preview{position:relative;top:0}.card{right:8px;width:190px}.preview .ph{aspect-ratio:1/1;border-radius:200px 200px 6px 6px}}
+/* insta */
+.ig{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.ig img{aspect-ratio:1;object-fit:cover;width:100%}
+@media(max-width:760px){.ig{grid-template-columns:repeat(3,1fr)}}
+footer{padding:60px 0;text-align:center;font-size:13px;color:var(--muted);letter-spacing:.1em;border-top:1px solid var(--line)}
+footer .logo{margin-bottom:14px;color:var(--ink)}
+.reveal{opacity:0;transform:translateY(26px);transition:1.1s}.reveal.in{opacity:1;transform:none}
+@media(max-width:700px){section{padding-top:72px;padding-bottom:72px}}
+.bk>*,.co>*,.rbox>*,.build>*,.bkg>*,.mgrid>*,form{min-width:0}
+</style>
+</head>
+<body>
+<header class="nav" id="nav"><div class="wrap">
+  <nav class="l"><a href="#occ">花禮</a><a href="#story">關於</a></nav>
+  <a class="logo" href="#">Fleur & Moss<small>苔與花</small></a>
+  <nav class="r"><a href="#ig">作品</a><a class="cta" href="#build">訂花</a></nav>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <div class="arch reveal"><img src="https://images.unsplash.com/photo-1523694576729-dc99e9c0f9b4?w=900&q=80&auto=format&fit=crop" alt=""></div>
+  <div class="mid reveal">
+    <div class="en">Floral atelier · Since 2018</div>
+    <h1>把說不出口的話，<br>交給花。</h1>
+    <p>生日、告白、開幕、謝師<br>依照心意與預算，為你配一束剛剛好的花。</p>
+    <a class="btn" href="#build">客製訂花 →</a>
+  </div>
+  <div class="side reveal"><img src="https://images.unsplash.com/photo-1623406795110-99f1c4325084?w=800&q=80&auto=format&fit=crop" alt=""></div>
+</div></section>
+
+<section id="occ" style="padding-top:40px"><div class="wrap">
+  <div class="sh reveal"><div class="en">Occasions</div><h2>為了什麼送花？</h2></div>
+  <div class="occ reveal">
+    <a class="oc" href="#build"><img src="https://images.unsplash.com/photo-1572454591674-2739f30d8c40?w=700&q=80&auto=format&fit=crop" alt=""><div><b>生日花束</b><small>Birthday</small></div></a>
+    <a class="oc" href="#build"><img src="https://images.unsplash.com/photo-1497276236755-0f85ba99a126?w=700&q=80&auto=format&fit=crop" alt=""><div><b>告白・紀念日</b><small>Love</small></div></a>
+    <a class="oc" href="#build"><img src="https://images.unsplash.com/photo-1487530811176-3780de880c2d?w=700&q=80&auto=format&fit=crop" alt=""><div><b>開幕盆花</b><small>Opening</small></div></a>
+    <a class="oc" href="#build"><img src="https://images.unsplash.com/photo-1557925923-6885735abfb1?w=700&q=80&auto=format&fit=crop" alt=""><div><b>畢業・謝師</b><small>Graduation</small></div></a>
+  </div>
+</div></section>
+
+<section class="story" id="story"><div class="wrap">
+  <img class="reveal" src="https://images.unsplash.com/photo-1567696153798-9111f9cd3d0d?w=900&q=80&auto=format&fit=crop" alt="">
+  <div class="reveal">
+    <div class="en">Our story</div>
+    <h2>每一束花，<br>都先從聽你說開始。</h2>
+    <p>我們不賣型錄上的固定款。你告訴我收花的人是誰、想說什麼、預算多少，我們挑當天最好的花材，綁成只屬於那一刻的樣子。完成後會先拍照給你確認，再出門送花。</p>
+    <div class="sig">— Moss</div>
+  </div>
+</div></section>
+
+<section id="build"><div class="wrap">
+  <div class="sh reveal"><div class="en">Make your bouquet</div><h2>三分鐘客製一束花</h2><p>選色系、尺寸、日期，左邊會即時預覽</p></div>
+  <div class="build">
+    <div class="preview reveal"><div class="ph"><img id="pv" src="https://images.unsplash.com/photo-1644248422980-8e0eb75a1557?w=900&q=80&auto=format&fit=crop" alt=""><div class="card"><small>Message card</small><span id="msg">生日快樂，願你每天都被溫柔對待。</span></div></div>
+      <div class="sum"><span id="desc">粉嫩系・中束・店取</span><b id="price">$1,600</b></div></div>
+    <div class="reveal">
+      <form id="f">
+        <span class="lab">01　色系</span>
+        <div class="sw" id="sw">
+          <button type="button" class="on" data-i="https://images.unsplash.com/photo-1644248422980-8e0eb75a1557?w=900&q=80&auto=format&fit=crop" data-n="粉嫩系"><i style="background:linear-gradient(135deg,#f6c1c7,#f9e1d8)"></i>粉嫩</button>
+          <button type="button" data-i="https://images.unsplash.com/photo-1494337095615-b5f370aad75f?w=900&q=80&auto=format&fit=crop" data-n="香檳白"><i style="background:linear-gradient(135deg,#fff,#e8dccb)"></i>香檳白</button>
+          <button type="button" data-i="https://images.unsplash.com/photo-1512056495345-913a0c261dc8?w=900&q=80&auto=format&fit=crop" data-n="莓果紅"><i style="background:linear-gradient(135deg,#9e2a3a,#e07b7b)"></i>莓果紅</button>
+          <button type="button" data-i="https://images.unsplash.com/photo-1586973699006-2a096c90f847?w=900&q=80&auto=format&fit=crop" data-n="陽光橘"><i style="background:linear-gradient(135deg,#f5a25d,#f7d488)"></i>陽光橘</button>
+          <button type="button" data-i="https://images.unsplash.com/photo-1557925923-6885735abfb1?w=900&q=80&auto=format&fit=crop" data-n="繽紛野花"><i style="background:conic-gradient(#e56,#fc6,#7c6,#69f,#e56)"></i>野花</button>
+        </div>
+        <span class="lab">02　尺寸</span>
+        <div class="seg" id="size"><button type="button" data-p="1000">小束 $1,000</button><button type="button" class="on" data-p="1600">中束 $1,600</button><button type="button" data-p="2600">大束 $2,600</button></div>
+        <span class="lab">03　取花方式</span>
+        <div class="seg" id="way"><button type="button" class="on" data-p="0">店取</button><button type="button" data-p="200">市區外送</button><button type="button" data-p="0">指定時間</button></div>
+        <span class="lab">04　日期</span>
+        <div class="dates" id="dates"></div>
+        <span class="lab">05　卡片想寫的話</span>
+        <textarea id="ta" rows="3" maxlength="40">生日快樂，願你每天都被溫柔對待。</textarea>
+        <input placeholder="訂購人姓名" required><input placeholder="手機" type="tel" required>
+        <button class="btn" type="submit">送出訂單</button>
+      </form>
+      <div class="done" id="done"><b>Thank you</b><p>訂單已送出！花綁好後會先拍照傳到你的 LINE 確認。</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="ig" style="padding-top:0"><div class="wrap">
+  <div class="sh reveal"><div class="en">@fleur.moss</div><h2>最近綁的花</h2></div>
+  <div class="ig reveal"><img src="https://images.unsplash.com/photo-1497276236755-0f85ba99a126?w=400&q=80&auto=format&fit=crop" alt=""><img src="https://images.unsplash.com/photo-1644248422980-8e0eb75a1557?w=400&q=80&auto=format&fit=crop" alt=""><img src="https://images.unsplash.com/photo-1494337095615-b5f370aad75f?w=400&q=80&auto=format&fit=crop" alt=""><img src="https://images.unsplash.com/photo-1487530811176-3780de880c2d?w=400&q=80&auto=format&fit=crop" alt=""><img src="https://images.unsplash.com/photo-1586973699006-2a096c90f847?w=400&q=80&auto=format&fit=crop" alt=""><img src="https://images.unsplash.com/photo-1567696153798-9111f9cd3d0d?w=400&q=80&auto=format&fit=crop" alt=""></div>
+</div></section>
+
+<footer><div class="logo">Fleur & Moss<small>苔與花</small></div>營業 10:00–19:00・週一公休・高雄市新興區（示意地址）<br><small>此為示意網站，店名、價格與照片皆為範例，可依店家風格客製顏色與功能。</small></footer>
+
+<script>
+const nav=document.getElementById('nav');addEventListener('scroll',()=>nav.classList.toggle('solid',scrollY>30));
+const io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add('in')),{threshold:.1});document.querySelectorAll('.reveal').forEach(e=>io.observe(e));
+const $=id=>document.getElementById(id);
+function grp(el,cb){el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');cb&&cb(b)})}
+function upd(){const c=$('sw').querySelector('.on'),s=$('size').querySelector('.on'),w=$('way').querySelector('.on');
+ $('price').textContent='$'+(+s.dataset.p + +w.dataset.p).toLocaleString();$('desc').textContent=c.dataset.n+'・'+s.textContent.split(' ')[0]+'・'+w.textContent}
+grp($('sw'),b=>{const pv=$('pv');pv.style.opacity=0;setTimeout(()=>{pv.src=b.dataset.i;pv.style.opacity=1},250);upd()});grp($('size'),upd);grp($('way'),upd);
+$('ta').oninput=e=>$('msg').textContent=e.target.value||'（寫下你想說的話）';
+const W='日一二三四五六',ds=$('dates');let f1=true;
+for(let i=1;i<=12;i++){const d=new Date();d.setDate(d.getDate()+i);const b=document.createElement('button');b.type='button';b.innerHTML=(d.getMonth()+1)+'/'+d.getDate()+'<small>週'+W[d.getDay()]+'</small>';if(d.getDay()==1)b.disabled=true,b.style.opacity=.35;else if(f1){b.classList.add('on');f1=false}ds.appendChild(b)}
+grp(ds);
+$('f').onsubmit=e=>{e.preventDefault();e.target.style.display='none';$('done').style.display='block'};
+</script>
+<!-- scroll fx: fade in / fade out while scrolling -->
+<style>
+.fx{will-change:opacity,transform}
+@media (prefers-reduced-motion:reduce){.fx{opacity:1!important;transform:none!important}}
+</style>
+<script>
+(()=>{
+const rgb=c=>{const m=c.match(/[\d.]+/g);return m&&(m.length<4||+m[3]>0.9)?c:null};
+const secs=[...document.querySelectorAll('section, footer, .marq, .ribbon')];
+for(let i=1;i<secs.length;i++){const a=secs[i-1].dataset.bg||rgb(getComputedStyle(secs[i-1]).backgroundColor)||rgb(getComputedStyle(document.body).backgroundColor),s=secs[i],b=rgb(getComputedStyle(s).backgroundColor)||rgb(getComputedStyle(document.body).backgroundColor);
+ s.dataset.bg=b;if(a&&b&&a!==b&&!s.classList.contains('hero')){s.style.backgroundImage=`linear-gradient(180deg,${a} 0,${b} 160px)${getComputedStyle(s).backgroundImage!='none'?','+getComputedStyle(s).backgroundImage:''}`}}
+document.querySelectorAll('.reveal').forEach(e=>{e.classList.add('in');e.style.transition='none'});
+const sel='section img:not(.hero img), figure, .card, .q, .step, .plan, .oc, .item, .style .im, .style .tx, .hw>div, .proc>div, details, .c, .panel, .box, .feat, .rbox, .bkg>div, .sh, .head, .pp, .cal, .strip, .stats, .opts, .about .pic, .about .txt';
+const all=new Set([...document.querySelectorAll(sel)].filter(e=>!e.closest('.hero')&&!e.closest('.nav')&&!e.closest('header')));
+const els=[...all].filter(e=>{let p=e.parentElement;while(p){if(all.has(p))return false;p=p.parentElement}return true});
+els.forEach(e=>e.classList.add('fx'));
+const nav=(document.querySelector('.nav,header')||{offsetHeight:60}).offsetHeight;
+const cl=x=>x<0?0:x>1?1:x,ease=t=>1-Math.pow(1-t,3);
+let tick=false;
+function run(){tick=false;const vh=innerHeight;
+ for(const e of els){const r=e.getBoundingClientRect();
+  if(r.bottom<-50||r.top>vh+50)continue;
+  const fin=ease(cl((vh-r.top)/(vh*.28)));
+  const fout=ease(cl((r.top+Math.min(r.height,vh*.7)*.5-nav)/(vh*.32)));
+  const o=Math.min(fin,fout);
+  e.style.opacity=o.toFixed(3);
+  e.style.transform=`translateY(${((1-fin)*50-(1-fout)*30).toFixed(1)}px) scale(${(0.97+0.03*o).toFixed(3)})`;}
+}
+addEventListener('scroll',()=>{if(!tick){tick=true;requestAnimationFrame(run)}},{passive:true});
+addEventListener('resize',run);run();setTimeout(run,600);
+const hero=document.querySelector('.hero');
+if(hero){const inner=hero.querySelector('.copy,.c,.txt,.mid')||hero;const img=hero.querySelector('img');
+ addEventListener('scroll',()=>{const p=Math.min(1,scrollY/hero.offsetHeight);
+  inner.style.opacity=Math.max(0,1-p*1.4);inner.style.transform=`translateY(${p*60}px)`;
+  if(img){img.style.opacity=1-p*.7}},{passive:true})}
+})();
+</script>
+</body>
+</html>
