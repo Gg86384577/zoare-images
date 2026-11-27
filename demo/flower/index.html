@@ -88,7 +88,7 @@ textarea,input{width:100%;padding:14px;border:1px solid var(--line);background:#
 .build .btn{width:100%;justify-content:center}
 .done{display:none;text-align:center;padding:40px 0}
 .done b{font-family:var(--en);font-style:italic;font-size:44px;color:var(--rose);font-weight:400}
-@media(max-width:860px){.build{grid-template-columns:1fr;gap:34px}.preview{position:relative;top:0}.card{right:8px;width:190px}}
+@media(max-width:860px){.build{grid-template-columns:1fr;gap:34px}.preview{position:relative;top:0}.card{right:8px;width:190px}.preview .ph{aspect-ratio:1/1;border-radius:200px 200px 6px 6px}}
 /* insta */
 .ig{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
 .ig img{aspect-ratio:1;object-fit:cover;width:100%}
@@ -141,15 +141,15 @@ footer .logo{margin-bottom:14px;color:var(--ink)}
 <section id="build"><div class="wrap">
   <div class="sh reveal"><div class="en">Make your bouquet</div><h2>三分鐘客製一束花</h2><p>選色系、尺寸、日期，左邊會即時預覽</p></div>
   <div class="build">
-    <div class="preview reveal"><div class="ph"><img id="pv" src="https://images.unsplash.com/photo-1572454591674-2739f30d8c40?w=900&q=80&auto=format&fit=crop" alt=""><div class="card"><small>Message card</small><span id="msg">生日快樂，願你每天都被溫柔對待。</span></div></div>
+    <div class="preview reveal"><div class="ph"><img id="pv" src="https://images.unsplash.com/photo-1644248422980-8e0eb75a1557?w=900&q=80&auto=format&fit=crop" alt=""><div class="card"><small>Message card</small><span id="msg">生日快樂，願你每天都被溫柔對待。</span></div></div>
       <div class="sum"><span id="desc">粉嫩系・中束・店取</span><b id="price">$1,600</b></div></div>
     <div class="reveal">
       <form id="f">
         <span class="lab">01　色系</span>
         <div class="sw" id="sw">
-          <button type="button" class="on" data-i="https://images.unsplash.com/photo-1572454591674-2739f30d8c40?w=900&q=80&auto=format&fit=crop" data-n="粉嫩系"><i style="background:linear-gradient(135deg,#f6c1c7,#f9e1d8)"></i>粉嫩</button>
+          <button type="button" class="on" data-i="https://images.unsplash.com/photo-1644248422980-8e0eb75a1557?w=900&q=80&auto=format&fit=crop" data-n="粉嫩系"><i style="background:linear-gradient(135deg,#f6c1c7,#f9e1d8)"></i>粉嫩</button>
           <button type="button" data-i="https://images.unsplash.com/photo-1494337095615-b5f370aad75f?w=900&q=80&auto=format&fit=crop" data-n="香檳白"><i style="background:linear-gradient(135deg,#fff,#e8dccb)"></i>香檳白</button>
-          <button type="button" data-i="https://images.unsplash.com/photo-1644248422980-8e0eb75a1557?w=900&q=80&auto=format&fit=crop" data-n="莓果紅"><i style="background:linear-gradient(135deg,#9e2a3a,#e07b7b)"></i>莓果紅</button>
+          <button type="button" data-i="https://images.unsplash.com/photo-1512056495345-913a0c261dc8?w=900&q=80&auto=format&fit=crop" data-n="莓果紅"><i style="background:linear-gradient(135deg,#9e2a3a,#e07b7b)"></i>莓果紅</button>
           <button type="button" data-i="https://images.unsplash.com/photo-1586973699006-2a096c90f847?w=900&q=80&auto=format&fit=crop" data-n="陽光橘"><i style="background:linear-gradient(135deg,#f5a25d,#f7d488)"></i>陽光橘</button>
           <button type="button" data-i="https://images.unsplash.com/photo-1557925923-6885735abfb1?w=900&q=80&auto=format&fit=crop" data-n="繽紛野花"><i style="background:conic-gradient(#e56,#fc6,#7c6,#69f,#e56)"></i>野花</button>
         </div>

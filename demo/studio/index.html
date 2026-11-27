@@ -83,7 +83,7 @@ section{padding:110px 0}
 .cal button.full{color:#5a544d;text-decoration:line-through;cursor:not-allowed}
 .cal button.few::after{content:"";position:absolute;bottom:5px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--amber)}
 .cal button.on{background:var(--amber);color:var(--bk);font-weight:700}
-.cal button:disabled:not(.full){visibility:hidden}
+
 .legend{font-size:12px;color:var(--muted);margin-top:10px}
 .slots{display:flex;gap:8px;flex-wrap:wrap}
 .slots button{background:var(--bk);border:1px solid var(--line);color:var(--wh);padding:10px 16px;font-family:inherit;cursor:pointer}
@@ -188,13 +188,12 @@ footer .logo{color:var(--wh);margin-bottom:14px;display:block}
 const io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add('in')),{threshold:.08});document.querySelectorAll('.reveal').forEach(e=>io.observe(e));
 function grp(el){el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on')})}
 grp(document.getElementById('pp'));grp(document.getElementById('slots'));
-let base=new Date();base.setDate(1);let off=0;const cal=document.getElementById('cal'),today=new Date();
-function draw(){const m=new Date(base.getFullYear(),base.getMonth()+off,1);document.getElementById('mt').textContent=m.toLocaleString('en',{month:'long'})+' '+m.getFullYear();
- cal.innerHTML='SMTWTFS'.split('').map(w=>`<div class="w">${w}</div>`).join('');
- for(let i=0;i<m.getDay();i++){const b=document.createElement('button');b.type='button';b.disabled=true;cal.appendChild(b)}
- const n=new Date(m.getFullYear(),m.getMonth()+1,0).getDate();let picked=false;
- for(let d=1;d<=n;d++){const dt=new Date(m.getFullYear(),m.getMonth(),d);const b=document.createElement('button');b.type='button';b.textContent=d;
-  if(dt<=today){b.disabled=true;b.style.visibility='hidden'}else if((d*7)%11==3){b.className='full';b.disabled=true}else{if((d*5)%9==2)b.className='few';if(!picked){b.classList.add('on');picked=true}}
+let off=0;const cal=document.getElementById('cal'),today=new Date();today.setHours(0,0,0,0);
+function draw(){const s=new Date(today);s.setDate(s.getDate()-s.getDay()+off*35);const mid=new Date(s);mid.setDate(mid.getDate()+17);
+ document.getElementById('mt').textContent=mid.toLocaleString('en',{month:'long'})+' '+mid.getFullYear();
+ cal.innerHTML='SMTWTFS'.split('').map(w=>`<div class="w">${w}</div>`).join('');let picked=false;
+ for(let i=0;i<35;i++){const dt=new Date(s);dt.setDate(s.getDate()+i);const d=dt.getDate();const b=document.createElement('button');b.type='button';b.textContent=(d==1?(dt.getMonth()+1)+'/':'')+d;
+  if(dt<=today){b.disabled=true;b.style.opacity=.25;b.style.cursor='default'}else if((d*7)%11==3){b.className='full';b.disabled=true}else{if((d*5)%9==2)b.className='few';if(!picked){b.classList.add('on');picked=true}}
   cal.appendChild(b)}}
 draw();cal.onclick=e=>{const b=e.target.closest('button');if(!b||b.disabled)return;cal.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on')};
 document.getElementById('pv').onclick=()=>{if(off>0){off--;draw()}};document.getElementById('nx').onclick=()=>{if(off<2){off++;draw()}};
